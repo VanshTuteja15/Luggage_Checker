@@ -1,4 +1,7 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import {
   BookmarkCheck,
   LayoutGrid,
@@ -16,11 +19,11 @@ import { useStore, useHydrated } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { to: "/search", label: "Search Products", icon: Search },
-  { to: "/tracked", label: "Tracked Products", icon: BookmarkCheck },
-  { to: "/history", label: "Price History", icon: TrendingUp },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/search", label: "Search Products", icon: Search },
+  { href: "/tracked", label: "Tracked Products", icon: BookmarkCheck },
+  { href: "/history", label: "Price History", icon: TrendingUp },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
 export function AppLayout({
@@ -36,15 +39,15 @@ export function AppLayout({
 }) {
   const { authed, email, signOut } = useStore();
   const hydrated = useHydrated();
-  const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   useEffect(() => setOpen(false), [pathname]);
 
   useEffect(() => {
-    if (hydrated && !authed) navigate({ to: "/" });
-  }, [hydrated, authed, navigate]);
+    if (hydrated && !authed) router.push("/");
+  }, [hydrated, authed, router]);
 
   if (!hydrated || !authed) {
     return <div className="min-h-screen bg-background" />;
@@ -62,11 +65,11 @@ export function AppLayout({
       </div>
       <nav className="flex-1 space-y-1 px-3 py-2">
         {NAV.map((item) => {
-          const active = pathname === item.to || pathname.startsWith(item.to + "/");
+          const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
-              key={item.to}
-              to={item.to}
+              key={item.href}
+              href={item.href}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                 active
@@ -93,7 +96,7 @@ export function AppLayout({
         <button
           onClick={() => {
             signOut();
-            navigate({ to: "/" });
+            router.push("/");
           }}
           className="mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
@@ -143,7 +146,7 @@ export function AppLayout({
           </div>
           {actions ?? (
             <Button asChild>
-              <Link to="/search">+ Add Product</Link>
+              <Link href="/search">+ Add Product</Link>
             </Button>
           )}
         </header>

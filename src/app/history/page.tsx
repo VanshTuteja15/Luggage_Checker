@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   LineChart,
@@ -25,17 +27,9 @@ import {
   lowestOnDate,
   priceChange,
   seriesDates,
-  type Product,
 } from "@/lib/data";
 import { usd, prettyDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
-
-export const Route = createFileRoute("/history")({
-  head: () => ({
-    meta: [{ title: "Price History — LuggageTracker" }],
-  }),
-  component: HistoryPage,
-});
 
 const CHART_COLORS = [
   "#5B6B4A",
@@ -50,7 +44,7 @@ const CHART_COLORS = [
   "#5A7F6A",
 ];
 
-function HistoryPage() {
+export default function HistoryPage() {
   const { tracked } = useStore();
   const [range, setRange] = useState<7 | 30>(30);
   const [brand, setBrand] = useState("all");
@@ -207,8 +201,7 @@ function HistoryPage() {
               <tr key={row.product.id} className="hover:bg-muted/40">
                 <td className="px-4 py-3">
                   <Link
-                    to="/products/$productId"
-                    params={{ productId: row.product.id }}
+                    href={`/products/${row.product.id}`}
                     className="font-medium hover:text-primary"
                   >
                     {row.product.name}

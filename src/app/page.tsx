@@ -1,4 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+"use client";
+
+import { useRouter } from "next/navigation";
 import { Luggage } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -8,35 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useHydrated, useStore } from "@/lib/store";
 
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Sign in — LuggageTracker" },
-      {
-        name: "description",
-        content:
-          "Sign in to LuggageTracker to monitor luggage prices across Amazon, Walmart, Target and more.",
-      },
-      { property: "og:title", content: "Sign in — LuggageTracker" },
-      {
-        property: "og:description",
-        content: "Admin access to the LuggageTracker price monitoring dashboard.",
-      },
-    ],
-  }),
-  component: LoginPage,
-});
-
-function LoginPage() {
+export default function LoginPage() {
   const { authed, signIn } = useStore();
   const hydrated = useHydrated();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [email, setEmail] = useState("admin@luggagetracker.app");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    if (hydrated && authed) navigate({ to: "/dashboard" });
-  }, [hydrated, authed, navigate]);
+    if (hydrated && authed) router.push("/dashboard");
+  }, [hydrated, authed, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -62,7 +45,7 @@ function LoginPage() {
               }
               signIn(email.trim());
               toast.success("Welcome back");
-              navigate({ to: "/dashboard" });
+              router.push("/dashboard");
             }}
           >
             <div className="space-y-1.5">

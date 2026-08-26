@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+"use client";
+
 import { useState, useMemo } from "react";
-import { Search as SearchIcon, X } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { EmptyState, RetailerTag, StockBadge } from "@/components/Bits";
@@ -24,14 +25,7 @@ import { lowestOffer, type Product } from "@/lib/data";
 import { usd } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
-export const Route = createFileRoute("/search")({
-  head: () => ({
-    meta: [{ title: "Search Products — LuggageTracker" }],
-  }),
-  component: SearchPage,
-});
-
-function SearchPage() {
+export default function SearchPage() {
   const { catalog, isTracked, track, recentSearches, addSearch } = useStore();
   const [query, setQuery] = useState("");
   const [searchType, setSearchType] = useState("all");
@@ -97,7 +91,7 @@ function SearchPage() {
           </Button>
         </form>
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          Search across Amazon, Walmart, Target, and more
+          Search across Amazon.ca, Costco.ca, Walmart.ca, and 12 more Canadian retailers
         </p>
       </div>
 
@@ -137,7 +131,6 @@ function SearchPage() {
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {results.map((p) => {
-              const low = lowestOffer(p);
               const prices = p.offers.map((o) => o.price);
               const tracked = isTracked(p.id);
               return (
@@ -150,11 +143,14 @@ function SearchPage() {
                   <div className="flex flex-1 flex-col gap-1.5 p-4">
                     <p className="line-clamp-2 text-sm font-medium">{p.name}</p>
                     <p className="text-xs text-muted-foreground">{p.brand}</p>
-                    <p className="mt-auto pt-2 text-base font-semibold">
-                      From {usd(Math.min(...prices))} — {usd(Math.max(...prices))}
-                    </p>
+                    <div className="mt-auto pt-2">
+                      <p className="text-xs font-medium uppercase tracking-wider text-success">Lowest online</p>
+                      <p className="text-lg font-bold">{usd(Math.min(...prices))}</p>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Found at {p.offers.length} retailer{p.offers.length > 1 ? "s" : ""}
+                      {prices.length > 1
+                        ? `${usd(Math.min(...prices))} – ${usd(Math.max(...prices))} across ${p.offers.length} stores`
+                        : `Found at ${p.offers.length} store`}
                     </p>
                     <Button
                       variant={tracked ? "outline" : "default"}

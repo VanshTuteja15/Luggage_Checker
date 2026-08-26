@@ -1,22 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { useState } from "react";
-import { BookmarkCheck, Clock, TrendingDown, TrendingUp } from "lucide-react";
+import { BookmarkCheck, Globe, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { ChangeBadge, RetailerTag, SectionTitle, StockBadge } from "@/components/Bits";
 import { ProductTable } from "@/components/ProductTable";
 import { ProductThumb } from "@/components/ProductThumb";
-import { lowestOffer, priceChange, type Product } from "@/lib/data";
+import { lowestOffer, priceChange, retailerCount, type Product } from "@/lib/data";
 import { usd } from "@/lib/format";
 import { useStore } from "@/lib/store";
-import { Link } from "@tanstack/react-router";
-
-export const Route = createFileRoute("/dashboard")({
-  head: () => ({
-    meta: [{ title: "Dashboard — LuggageTracker" }],
-  }),
-  component: DashboardPage,
-});
 
 function StatCard({
   label,
@@ -45,13 +39,12 @@ function StatCard({
   );
 }
 
-function ChangeRow({ product, onRemove }: { product: Product; onRemove: (id: string) => void }) {
+function ChangeRow({ product }: { product: Product }) {
   const low = lowestOffer(product);
   const change = priceChange(product);
   return (
     <Link
-      to="/products/$productId"
-      params={{ productId: product.id }}
+      href={`/products/${product.id}`}
       className="flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-muted/60"
     >
       <ProductThumb id={product.id} name={product.name} size={36} />
@@ -67,12 +60,15 @@ function ChangeRow({ product, onRemove }: { product: Product; onRemove: (id: str
       </div>
       <ChangeBadge change={change} />
       <RetailerTag retailer={low.retailer} />
+      <span className="hidden text-xs text-muted-foreground sm:inline">
+        {retailerCount(product)} stores
+      </span>
       <StockBadge inStock={low.inStock} />
     </Link>
   );
 }
 
-function DashboardPage() {
+export default function DashboardPage() {
   const { tracked, untrack } = useStore();
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -108,9 +104,9 @@ function DashboardPage() {
           color="#EF4444"
         />
         <StatCard
-          label="Last Price Check"
-          value="Today, 9:04 AM MT"
-          icon={Clock}
+          label="Retailers Monitored"
+          value="15"
+          icon={Globe}
           color="#6B7280"
         />
       </div>
@@ -124,7 +120,7 @@ function DashboardPage() {
           />
           <div className="card-surface divide-y divide-border overflow-hidden">
             {drops.map((p) => (
-              <ChangeRow key={p.id} product={p} onRemove={handleRemove} />
+              <ChangeRow key={p.id} product={p} />
             ))}
           </div>
         </div>
@@ -139,7 +135,7 @@ function DashboardPage() {
           />
           <div className="card-surface divide-y divide-border overflow-hidden">
             {rises.map((p) => (
-              <ChangeRow key={p.id} product={p} onRemove={handleRemove} />
+              <ChangeRow key={p.id} product={p} />
             ))}
           </div>
         </div>

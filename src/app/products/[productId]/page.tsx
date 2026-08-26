@@ -1,4 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
@@ -18,26 +21,20 @@ import { ProductThumb } from "@/components/ProductThumb";
 import { Button } from "@/components/ui/button";
 import {
   CATALOG,
-  RETAILER_COLOR,
+  retailerColor,
   lowestOffer,
   priceChange,
+  priceSpread,
+  retailerCount,
   stats,
   seriesDates,
-  type Product,
-  type Retailer,
 } from "@/lib/data";
 import { usd, prettyDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
-export const Route = createFileRoute("/products/$productId")({
-  head: ({ params }) => ({
-    meta: [{ title: `${params.productId} — LuggageTracker` }],
-  }),
-  component: ProductDetailPage,
-});
-
-function ProductDetailPage() {
-  const { productId } = Route.useParams();
+export default function ProductDetailPage() {
+  const params = useParams();
+  const productId = params.productId as string;
   const { isTracked, track, untrack } = useStore();
   const [range, setRange] = useState<7 | 30 | 90>(30);
 
@@ -47,9 +44,9 @@ function ProductDetailPage() {
     return (
       <AppLayout title="Product Not Found">
         <div className="flex flex-col items-center gap-4 py-20 text-center">
-          <p className="text-muted-foreground">This product doesn't exist in the catalog.</p>
+          <p className="text-muted-foreground">This product doesn&apos;t exist in the catalog.</p>
           <Button asChild variant="outline">
-            <Link to="/dashboard">Back to Dashboard</Link>
+            <Link href="/dashboard">Back to Dashboard</Link>
           </Button>
         </div>
       </AppLayout>
@@ -60,7 +57,7 @@ function ProductDetailPage() {
   const change = priceChange(product);
   const s = stats(product);
   const tracked = isTracked(product.id);
-  const retailers = Object.keys(product.history) as Retailer[];
+  const retailers = Object.keys(product.history);
 
   // Build chart data
   const dates = seriesDates(Math.min(range, 30)); // data only has 30 days
@@ -80,7 +77,7 @@ function ProductDetailPage() {
       actions={
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link to="/dashboard">
+            <Link href="/dashboard">
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
               Back
             </Link>
@@ -111,6 +108,28 @@ function ProductDetailPage() {
         </div>
       }
     >
+      {/* Lowest price banner */}
+      <div className="mb-6 rounded-lg border-2 border-success/40 bg-success-soft/30 px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-success">Lowest Price Found Online</p>
+            <p className="text-3xl font-bold tracking-tight text-success">{usd(low.price)}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              at <span className="font-medium text-foreground">{low.retailer}</span>
+              {" · "}Found across {retailerCount(product)} retailers · Save up to {usd(priceSpread(product))}
+            </p>
+          </div>
+          <a
+            href={low.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md bg-success px-4 py-2 text-sm font-medium text-success-foreground transition-colors hover:bg-success/90"
+          >
+            View Deal <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </div>
+
       {/* Product header */}
       <div className="card-surface mb-8 flex flex-col gap-6 p-6 md:flex-row">
         <ProductThumb id={product.id} name={product.name} className="h-48 w-full md:w-64" />
@@ -243,7 +262,7 @@ function ProductDetailPage() {
                     type="monotone"
                     dataKey={r}
                     name={r}
-                    stroke={RETAILER_COLOR[r] ?? "#6B7280"}
+                    stroke={retailerColor(r)}
                     strokeWidth={2}
                     dot={false}
                     connectNulls
@@ -256,9 +275,10 @@ function ProductDetailPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         {[
-          { label: "Current Price", value: usd(s.current) },
+          { label: "Current Lowest", value: usd(s.current) },
+          { label: "Retailers Found", value: String(retailerCount(product)), sub: `Save up to ${usd(priceSpread(product))}` },
           { label: "Lowest Ever", value: `${usd(s.lowest.price)}`, sub: prettyDate(s.lowest.date) },
           { label: "Highest Ever", value: `${usd(s.highest.price)}`, sub: prettyDate(s.highest.date) },
           { label: "Average Price", value: usd(s.average) },

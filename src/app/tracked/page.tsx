@@ -1,4 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { LayoutGrid, List } from "lucide-react";
 import { toast } from "sonner";
@@ -16,18 +18,10 @@ import {
 } from "@/components/ui/select";
 import { lowestOffer, priceChange } from "@/lib/data";
 import { useStore } from "@/lib/store";
-import { Link } from "@tanstack/react-router";
-
-export const Route = createFileRoute("/tracked")({
-  head: () => ({
-    meta: [{ title: "Tracked Products — LuggageTracker" }],
-  }),
-  component: TrackedPage,
-});
 
 type SortOption = "name" | "price-asc" | "price-desc" | "drop" | "recent";
 
-function TrackedPage() {
+export default function TrackedPage() {
   const { tracked, untrack } = useStore();
   const [view, setView] = useState<"grid" | "list">("grid");
   const [selected, setSelected] = useState<string[]>([]);
@@ -58,7 +52,7 @@ function TrackedPage() {
       if (sortBy === "price-asc") return lowestOffer(a).price - lowestOffer(b).price;
       if (sortBy === "price-desc") return lowestOffer(b).price - lowestOffer(a).price;
       if (sortBy === "drop") return priceChange(a) - priceChange(b);
-      return b.addedDaysAgo - a.addedDaysAgo; // recent = lower addedDaysAgo first... but data is "days ago" so recent = small
+      return b.addedDaysAgo - a.addedDaysAgo;
     });
     return list;
   }, [tracked, brand, stock, trend, sortBy]);
@@ -77,7 +71,7 @@ function TrackedPage() {
           description="Start by searching for luggage products and adding them to tracking."
           action={
             <Button asChild>
-              <Link to="/search">Search Products</Link>
+              <Link href="/search">Search Products</Link>
             </Button>
           }
         />

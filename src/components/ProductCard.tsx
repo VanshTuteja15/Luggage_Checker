@@ -1,4 +1,6 @@
-import { Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,15 +30,14 @@ export function TrackedProductCard({
 
   return (
     <div className="card-surface card-hover flex flex-col overflow-hidden">
-      <Link to="/products/$productId" params={{ productId: product.id }} className="block">
+      <Link href={`/products/${product.id}`} className="block">
         <ProductThumb id={product.id} name={product.name} className="h-36 w-full rounded-none" />
       </Link>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <Link
-              to="/products/$productId"
-              params={{ productId: product.id }}
+              href={`/products/${product.id}`}
               className="line-clamp-2 font-medium hover:text-primary"
             >
               {product.name}
@@ -51,7 +52,7 @@ export function TrackedProductCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link to="/products/$productId" params={{ productId: product.id }}>
+                <Link href={`/products/${product.id}`}>
                   View Details
                 </Link>
               </DropdownMenuItem>

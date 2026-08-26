@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+"use client";
+
 import { useState } from "react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
@@ -25,15 +26,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { RETAILERS } from "@/lib/data";
+import { RETAILER_INFO, RETAILER_NAMES, type RetailerCategory } from "@/lib/data";
 import { useStore } from "@/lib/store";
-
-export const Route = createFileRoute("/settings")({
-  head: () => ({
-    meta: [{ title: "Settings — LuggageTracker" }],
-  }),
-  component: SettingsPage,
-});
 
 function Section({
   title,
@@ -53,7 +47,7 @@ function Section({
   );
 }
 
-function SettingsPage() {
+export default function SettingsPage() {
   const { settings, updateSettings, clearHistory, untrack, trackedIds } = useStore();
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [testingApi, setTestingApi] = useState(false);
@@ -209,27 +203,41 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-4">
             <Label>Supported Retailers</Label>
-            <div className="space-y-2">
-              {RETAILERS.map((r) => (
-                <div key={r} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`retailer-${r}`}
-                    checked={settings.retailers.includes(r)}
-                    onCheckedChange={(v) => {
-                      const next = v
-                        ? [...settings.retailers, r]
-                        : settings.retailers.filter((x) => x !== r);
-                      updateSettings({ retailers: next });
-                    }}
-                  />
-                  <Label htmlFor={`retailer-${r}`} className="text-sm font-normal">
-                    {r}
-                  </Label>
+            {(["major", "specialty", "other"] as RetailerCategory[]).map((cat) => {
+              const label = cat === "major" ? "Major Canadian Retailers" : cat === "specialty" ? "Specialty / Brand Direct" : "Marketplace / Other";
+              const retailers = RETAILER_NAMES.filter((n) => RETAILER_INFO[n]?.category === cat);
+              return (
+                <div key={cat}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+                  <div className="space-y-2">
+                    {retailers.map((r) => (
+                      <div key={r} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`retailer-${r}`}
+                          checked={settings.retailers.includes(r)}
+                          onCheckedChange={(v) => {
+                            const next = v
+                              ? [...settings.retailers, r]
+                              : settings.retailers.filter((x) => x !== r);
+                            updateSettings({ retailers: next });
+                          }}
+                        />
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: RETAILER_INFO[r]?.color ?? "#6B7280" }}
+                        />
+                        <Label htmlFor={`retailer-${r}`} className="text-sm font-normal">
+                          {r}
+                        </Label>
+                        <span className="text-xs text-muted-foreground">{RETAILER_INFO[r]?.domain}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </Section>
 

@@ -1,7 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usd, relativeFromMinutes, fullDateFromMinutes } from "@/lib/format";
-import { RETAILER_COLOR, type Retailer } from "@/lib/data";
+import { retailerColor } from "@/lib/data";
 
 export function ChangeBadge({ change }: { change: number }) {
   if (Math.abs(change) < 0.005) {
@@ -39,12 +39,12 @@ export function StockBadge({ inStock }: { inStock: boolean }) {
   );
 }
 
-export function RetailerTag({ retailer }: { retailer: Retailer | string }) {
+export function RetailerTag({ retailer }: { retailer: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
       <span
         className="h-2 w-2 rounded-full"
-        style={{ backgroundColor: RETAILER_COLOR[retailer as Retailer] ?? "#6B7280" }}
+        style={{ backgroundColor: retailerColor(retailer) }}
       />
       {retailer}
     </span>

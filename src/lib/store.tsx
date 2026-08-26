@@ -1,3 +1,5 @@
+"use client";
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { CATALOG, DEFAULT_TRACKED_IDS, type Product } from "./data";
@@ -21,7 +23,7 @@ const DEFAULT_SETTINGS: Settings = {
   reportEmail: "admin@luggagetracker.app",
   include: { drops: true, increases: true, oos: true, summary: true },
   serpApiKey: "",
-  retailers: ["Amazon", "Walmart", "Target", "Samsonite.com", "Away.com"],
+  retailers: ["Amazon.ca", "Costco.ca", "Walmart.ca", "Hudson's Bay", "Canadian Tire", "Bentley", "Best Buy Canada", "London Drugs", "Samsonite.ca", "TUMI.ca", "Away", "Travelpro", "Monos", "Briggs & Riley", "eBay.ca"],
 };
 
 type State = {

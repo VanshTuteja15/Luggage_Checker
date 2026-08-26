@@ -1,4 +1,6 @@
-import { Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { ArrowUpDown, MoreHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -228,8 +230,7 @@ export function ProductTable({
                 </TableCell>
                 <TableCell>
                   <Link
-                    to="/products/$productId"
-                    params={{ productId: p.id }}
+                    href={`/products/${p.id}`}
                     className="block max-w-xs"
                   >
                     <span className="font-medium hover:text-primary">{p.name}</span>
@@ -259,7 +260,7 @@ export function ProductTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem asChild>
-                        <Link to="/products/$productId" params={{ productId: p.id }}>
+                        <Link href={`/products/${p.id}`}>
                           View Details
                         </Link>
                       </DropdownMenuItem>

@@ -1,34 +1,62 @@
-export type Retailer =
-  | "Amazon"
-  | "Walmart"
-  | "Target"
-  | "Samsonite.com"
-  | "Away.com"
-  | "TUMI.com"
-  | "Travelpro.com";
+/* ------------------------------------------------------------------ */
+/*  Retailer system — dynamic, Canada-focused                        */
+/* ------------------------------------------------------------------ */
 
-export const RETAILERS: Retailer[] = [
-  "Amazon",
-  "Walmart",
-  "Target",
-  "Samsonite.com",
-  "Away.com",
-  "TUMI.com",
-  "Travelpro.com",
-];
+export type RetailerCategory = "major" | "specialty" | "other";
 
-export const RETAILER_COLOR: Record<Retailer, string> = {
-  Amazon: "#F59E0B",
-  Walmart: "#2563EB",
-  Target: "#EF4444",
-  "Samsonite.com": "#5B6B4A",
-  "Away.com": "#0F766E",
-  "TUMI.com": "#111827",
-  "Travelpro.com": "#7C3AED",
+export type RetailerInfo = {
+  name: string;
+  color: string;
+  category: RetailerCategory;
+  domain: string;
 };
 
+/** All known retailers with metadata. Keyed by display name. */
+export const RETAILER_INFO: Record<string, RetailerInfo> = {
+  // ── Major Canadian retailers ──
+  "Amazon.ca":       { name: "Amazon.ca",       color: "#FF9900", category: "major",     domain: "amazon.ca" },
+  "Costco.ca":       { name: "Costco.ca",       color: "#E31837", category: "major",     domain: "costco.ca" },
+  "Walmart.ca":      { name: "Walmart.ca",      color: "#0071CE", category: "major",     domain: "walmart.ca" },
+  "Hudson's Bay":    { name: "Hudson's Bay",    color: "#004990", category: "major",     domain: "thebay.com" },
+  "Canadian Tire":   { name: "Canadian Tire",   color: "#D52B1E", category: "major",     domain: "canadiantire.ca" },
+  "Bentley":         { name: "Bentley",         color: "#1A1A1A", category: "major",     domain: "bentley.ca" },
+  "Best Buy Canada": { name: "Best Buy Canada", color: "#0046BE", category: "major",     domain: "bestbuy.ca" },
+  "London Drugs":    { name: "London Drugs",    color: "#ED1C24", category: "major",     domain: "londondrugs.com" },
+  // ── Specialty / brand direct ──
+  "Samsonite.ca":    { name: "Samsonite.ca",    color: "#5B6B4A", category: "specialty",  domain: "samsonite.ca" },
+  "TUMI.ca":         { name: "TUMI.ca",         color: "#111827", category: "specialty",  domain: "tumi.ca" },
+  "Away":            { name: "Away",            color: "#0F766E", category: "specialty",  domain: "awaytravel.com" },
+  "Travelpro":       { name: "Travelpro",       color: "#7C3AED", category: "specialty",  domain: "travelpro.com" },
+  "Monos":           { name: "Monos",           color: "#C4A882", category: "specialty",  domain: "monos.com" },
+  "Briggs & Riley":  { name: "Briggs & Riley",  color: "#2D3748", category: "specialty",  domain: "brigsandriley.com" },
+  // ── Marketplace / other ──
+  "eBay.ca":         { name: "eBay.ca",         color: "#E53238", category: "other",      domain: "ebay.ca" },
+};
+
+/** Ordered retailer names — majors first, then specialty, then other. */
+export const RETAILER_NAMES: string[] = Object.entries(RETAILER_INFO)
+  .sort((a, b) => {
+    const order: Record<RetailerCategory, number> = { major: 0, specialty: 1, other: 2 };
+    return order[a[1].category] - order[b[1].category];
+  })
+  .map(([name]) => name);
+
+/** Get a retailer's brand color, with fallback for unknown retailers. */
+export function retailerColor(name: string): string {
+  return RETAILER_INFO[name]?.color ?? "#6B7280";
+}
+
+/** Get retailer category. Unknown retailers default to "other". */
+export function retailerCategory(name: string): RetailerCategory {
+  return RETAILER_INFO[name]?.category ?? "other";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Product types                                                     */
+/* ------------------------------------------------------------------ */
+
 export type RetailerOffer = {
-  retailer: Retailer;
+  retailer: string;
   price: number;
   inStock: boolean;
   url: string;
@@ -50,6 +78,10 @@ export type Product = {
   addedDaysAgo: number;
 };
 
+/* ------------------------------------------------------------------ */
+/*  Sample data — 10 tracked products + 4 catalog-only                */
+/* ------------------------------------------------------------------ */
+
 type Seed = {
   id: string;
   name: string;
@@ -58,9 +90,9 @@ type Seed = {
   color: string;
   upc: string;
   price: number;
-  retailer: Retailer;
-  change: number; // negative = drop today
-  others: [Retailer, number, boolean][];
+  retailer: string;
+  change: number;
+  others: [string, number, boolean][];
   addedDaysAgo: number;
 };
 
@@ -72,13 +104,16 @@ const SEEDS: Seed[] = [
     model: "Freeform 28",
     color: "Midnight Black",
     upc: "042810178423",
-    price: 169.99,
-    retailer: "Walmart",
-    change: -10,
+    price: 189.99,
+    retailer: "Amazon.ca",
+    change: -15,
     others: [
-      ["Amazon", 179.99, true],
-      ["Target", 184.99, false],
-      ["Samsonite.com", 189.99, true],
+      ["Costco.ca", 194.99, true],
+      ["Walmart.ca", 199.99, true],
+      ["Hudson's Bay", 209.99, true],
+      ["Samsonite.ca", 219.99, true],
+      ["Bentley", 204.99, true],
+      ["Canadian Tire", 214.99, false],
     ],
     addedDaysAgo: 62,
   },
@@ -89,12 +124,14 @@ const SEEDS: Seed[] = [
     model: "Maxlite 5",
     color: "Slate Green",
     upc: "051243098231",
-    price: 149.99,
-    retailer: "Amazon",
+    price: 159.99,
+    retailer: "Amazon.ca",
     change: 0,
     others: [
-      ["Walmart", 154.99, true],
-      ["Travelpro.com", 159.99, true],
+      ["Walmart.ca", 169.99, true],
+      ["Canadian Tire", 174.99, true],
+      ["Travelpro", 179.99, true],
+      ["eBay.ca", 164.99, true],
     ],
     addedDaysAgo: 40,
   },
@@ -105,12 +142,14 @@ const SEEDS: Seed[] = [
     model: "Stratum XLT",
     color: "Jet Black",
     upc: "049845721039",
-    price: 109.99,
-    retailer: "Walmart",
+    price: 119.99,
+    retailer: "Walmart.ca",
     change: -15,
     others: [
-      ["Amazon", 119.99, true],
-      ["Target", 124.99, true],
+      ["Amazon.ca", 129.99, true],
+      ["Canadian Tire", 134.99, true],
+      ["Best Buy Canada", 139.99, true],
+      ["Costco.ca", 124.99, true],
     ],
     addedDaysAgo: 28,
   },
@@ -121,12 +160,14 @@ const SEEDS: Seed[] = [
     model: "Alpha 3",
     color: "Anthracite",
     upc: "742315410238",
-    price: 795,
-    retailer: "Amazon",
+    price: 879,
+    retailer: "Hudson's Bay",
     change: 45,
     others: [
-      ["TUMI.com", 825, true],
-      ["Walmart", 839.99, false],
+      ["Amazon.ca", 895, true],
+      ["TUMI.ca", 925, true],
+      ["Bentley", 899.99, true],
+      ["eBay.ca", 859, false],
     ],
     addedDaysAgo: 90,
   },
@@ -137,10 +178,14 @@ const SEEDS: Seed[] = [
     model: "The Large",
     color: "Coast Blue",
     upc: "860002391045",
-    price: 345,
-    retailer: "Away.com",
+    price: 389,
+    retailer: "Hudson's Bay",
     change: 0,
-    others: [["Amazon", 365, true]],
+    others: [
+      ["Away", 395, true],
+      ["Amazon.ca", 415, true],
+      ["Bentley", 409, true],
+    ],
     addedDaysAgo: 51,
   },
   {
@@ -150,12 +195,14 @@ const SEEDS: Seed[] = [
     model: "Baseline",
     color: "Olive",
     upc: "764862112094",
-    price: 679,
-    retailer: "Amazon",
+    price: 749,
+    retailer: "Amazon.ca",
     change: -20,
     others: [
-      ["Walmart", 699, true],
-      ["Target", 729, false],
+      ["Hudson's Bay", 779, true],
+      ["Bentley", 769, true],
+      ["Briggs & Riley", 799, true],
+      ["eBay.ca", 729, false],
     ],
     addedDaysAgo: 75,
   },
@@ -166,12 +213,14 @@ const SEEDS: Seed[] = [
     model: "Chatelet Air 2.0",
     color: "Angora",
     upc: "098376154829",
-    price: 249.99,
-    retailer: "Target",
+    price: 259.99,
+    retailer: "Costco.ca",
     change: 0,
     others: [
-      ["Amazon", 259.99, true],
-      ["Walmart", 269.99, true],
+      ["Amazon.ca", 269.99, true],
+      ["Walmart.ca", 279.99, true],
+      ["London Drugs", 289.99, true],
+      ["Hudson's Bay", 299.99, true],
     ],
     addedDaysAgo: 19,
   },
@@ -182,12 +231,14 @@ const SEEDS: Seed[] = [
     model: "Platinum Elite",
     color: "Bordeaux",
     upc: "051243104112",
-    price: 329.99,
-    retailer: "Amazon",
+    price: 349.99,
+    retailer: "Costco.ca",
     change: 10,
     others: [
-      ["Travelpro.com", 349.99, true],
-      ["Walmart", 359.99, true],
+      ["Amazon.ca", 369.99, true],
+      ["Travelpro", 399.99, true],
+      ["Bentley", 379.99, true],
+      ["Walmart.ca", 389.99, true],
     ],
     addedDaysAgo: 33,
   },
@@ -198,13 +249,15 @@ const SEEDS: Seed[] = [
     model: "Omni 2",
     color: "Radiant Silver",
     upc: "042810192884",
-    price: 139.99,
-    retailer: "Walmart",
+    price: 149.99,
+    retailer: "Walmart.ca",
     change: -20,
     others: [
-      ["Amazon", 149.99, true],
-      ["Samsonite.com", 159.99, true],
-      ["Target", 164.99, false],
+      ["Amazon.ca", 159.99, true],
+      ["Costco.ca", 154.99, true],
+      ["Samsonite.ca", 169.99, true],
+      ["Canadian Tire", 164.99, false],
+      ["London Drugs", 174.99, true],
     ],
     addedDaysAgo: 12,
   },
@@ -215,18 +268,23 @@ const SEEDS: Seed[] = [
     model: "Spectra 3.0",
     color: "Deep Lake",
     upc: "601210398214",
-    price: 449.99,
-    retailer: "Amazon",
+    price: 499.99,
+    retailer: "Amazon.ca",
     change: 0,
     others: [
-      ["Walmart", 469.99, true],
-      ["Target", 479.99, true],
+      ["Hudson's Bay", 519.99, true],
+      ["Bentley", 509.99, true],
+      ["Best Buy Canada", 529.99, true],
+      ["eBay.ca", 489.99, true],
     ],
     addedDaysAgo: 7,
   },
 ];
 
-// Deterministic pseudo-random so SSR and client agree.
+/* ------------------------------------------------------------------ */
+/*  Deterministic price-history builder                               */
+/* ------------------------------------------------------------------ */
+
 function rng(seed: number) {
   let s = seed % 2147483647;
   if (s <= 0) s += 2147483646;
@@ -254,7 +312,6 @@ function isoDaysAgo(n: number) {
 function buildHistory(key: string, endPrice: number, todayChange: number): PricePoint[] {
   const rand = rng(hash(key));
   const points: PricePoint[] = [];
-  // walk backwards from yesterday's price
   const yesterday = Math.round((endPrice - todayChange) * 100) / 100;
   let p = yesterday;
   const back: number[] = [yesterday];
@@ -266,7 +323,7 @@ function buildHistory(key: string, endPrice: number, todayChange: number): Price
     p = Math.max(endPrice * 0.75, Math.min(endPrice * 1.25, p + delta));
     back.push(Math.round(p * 100) / 100);
   }
-  back.reverse(); // oldest -> yesterday
+  back.reverse();
   for (let i = 0; i < back.length; i++) {
     points.push({ date: isoDaysAgo(DAYS - i), price: back[i] });
   }
@@ -274,20 +331,24 @@ function buildHistory(key: string, endPrice: number, todayChange: number): Price
   return points;
 }
 
-export const PRODUCTS: Product[] = SEEDS.map((s) => {
+/* ------------------------------------------------------------------ */
+/*  Build product arrays                                              */
+/* ------------------------------------------------------------------ */
+
+function buildProduct(s: Seed): Product {
   const offers: RetailerOffer[] = [
     {
       retailer: s.retailer,
       price: s.price,
       inStock: true,
-      url: `https://www.google.com/search?q=${encodeURIComponent(s.name + " " + s.retailer)}`,
+      url: `https://${RETAILER_INFO[s.retailer]?.domain ?? "google.ca"}/s?k=${encodeURIComponent(s.name)}`,
       lastCheckedMinutesAgo: 122,
     },
     ...s.others.map(([r, price, inStock], i) => ({
       retailer: r,
       price,
       inStock,
-      url: `https://www.google.com/search?q=${encodeURIComponent(s.name + " " + r)}`,
+      url: `https://${RETAILER_INFO[r]?.domain ?? "google.ca"}/s?k=${encodeURIComponent(s.name)}`,
       lastCheckedMinutesAgo: 122 + i * 3,
     })),
   ];
@@ -310,9 +371,11 @@ export const PRODUCTS: Product[] = SEEDS.map((s) => {
     history,
     addedDaysAgo: s.addedDaysAgo,
   };
-});
+}
 
-/** Extra catalog entries that are searchable but not tracked by default. */
+export const PRODUCTS: Product[] = SEEDS.map(buildProduct);
+
+/** Extra catalog entries — searchable but not tracked by default. */
 export const CATALOG: Product[] = [
   ...PRODUCTS,
   ...(
@@ -324,10 +387,13 @@ export const CATALOG: Product[] = [
         model: "Essential",
         color: "Matte Black",
         upc: "409821004112",
-        price: 1075,
-        retailer: "Amazon" as Retailer,
+        price: 1129,
+        retailer: "Hudson's Bay",
         change: 0,
-        others: [["Walmart", 1129, true]] as [Retailer, number, boolean][],
+        others: [
+          ["Amazon.ca", 1175, true],
+          ["Bentley", 1149, true],
+        ],
         addedDaysAgo: 0,
       },
       {
@@ -337,10 +403,13 @@ export const CATALOG: Product[] = [
         model: "Check-In",
         color: "Sand",
         upc: "628110483012",
-        price: 355,
-        retailer: "Amazon" as Retailer,
+        price: 395,
+        retailer: "Monos",
         change: 0,
-        others: [["Target", 379, true]] as [Retailer, number, boolean][],
+        others: [
+          ["Amazon.ca", 415, true],
+          ["Hudson's Bay", 409, true],
+        ],
         addedDaysAgo: 0,
       },
       {
@@ -350,10 +419,14 @@ export const CATALOG: Product[] = [
         model: "Winfield 3 DLX",
         color: "Silver",
         upc: "042810145533",
-        price: 199.99,
-        retailer: "Walmart" as Retailer,
+        price: 219.99,
+        retailer: "Walmart.ca",
         change: 0,
-        others: [["Samsonite.com", 219.99, true]] as [Retailer, number, boolean][],
+        others: [
+          ["Costco.ca", 224.99, true],
+          ["Samsonite.ca", 239.99, true],
+          ["Amazon.ca", 229.99, true],
+        ],
         addedDaysAgo: 0,
       },
       {
@@ -363,51 +436,46 @@ export const CATALOG: Product[] = [
         model: "Hue",
         color: "Lavender",
         upc: "810019121043",
-        price: 265,
-        retailer: "Target" as Retailer,
+        price: 289.99,
+        retailer: "Best Buy Canada",
         change: 0,
-        others: [["Amazon", 275, false]] as [Retailer, number, boolean][],
+        others: [
+          ["Amazon.ca", 295, false],
+          ["Hudson's Bay", 309, true],
+        ],
         addedDaysAgo: 0,
       },
     ] as Seed[]
-  ).map((s) => {
-    const offers: RetailerOffer[] = [
-      {
-        retailer: s.retailer,
-        price: s.price,
-        inStock: true,
-        url: `https://www.google.com/search?q=${encodeURIComponent(s.name)}`,
-        lastCheckedMinutesAgo: 122,
-      },
-      ...s.others.map(([r, price, inStock]) => ({
-        retailer: r,
-        price,
-        inStock,
-        url: `https://www.google.com/search?q=${encodeURIComponent(s.name + " " + r)}`,
-        lastCheckedMinutesAgo: 130,
-      })),
-    ];
-    const history: Record<string, PricePoint[]> = {};
-    for (const o of offers) history[o.retailer] = buildHistory(s.id + o.retailer, o.price, 0);
-    return {
-      id: s.id,
-      name: s.name,
-      brand: s.brand,
-      model: s.model,
-      color: s.color,
-      upc: s.upc,
-      offers,
-      previousLowest: s.price,
-      history,
-      addedDaysAgo: 0,
-    };
-  }),
+  ).map(buildProduct),
 ];
 
 export const DEFAULT_TRACKED_IDS = PRODUCTS.map((p) => p.id);
 
+/* ------------------------------------------------------------------ */
+/*  Utility functions                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Lowest-priced offer across all retailers. */
 export function lowestOffer(p: Product): RetailerOffer {
   return [...p.offers].sort((a, b) => a.price - b.price)[0];
+}
+
+/** Lowest in-stock offer. Falls back to lowest overall if none in stock. */
+export function lowestInStockOffer(p: Product): RetailerOffer {
+  const inStock = p.offers.filter((o) => o.inStock);
+  if (inStock.length === 0) return lowestOffer(p);
+  return [...inStock].sort((a, b) => a.price - b.price)[0];
+}
+
+/** Number of retailers carrying this product. */
+export function retailerCount(p: Product): number {
+  return p.offers.length;
+}
+
+/** Price spread: highest minus lowest. */
+export function priceSpread(p: Product): number {
+  const prices = p.offers.map((o) => o.price);
+  return Math.round((Math.max(...prices) - Math.min(...prices)) * 100) / 100;
 }
 
 export function priceChange(p: Product) {
