@@ -1,0 +1,51 @@
+Redesign the login/signup page at src/app/page.tsx for LuggageTracker. Here's what I need:
+
+FUNCTIONALITY
+
+1. Two tabs/modes: "Sign In" and "Create Account" - user can toggle between them
+2. Sign Up flow: email + password + confirm password - calls supabase.auth.signUp() - shows "Check your email to verify" message
+3. Sign In flow: email + password - calls supabase.auth.signInWithPassword() - redirects to /dashboard
+4. Forgot Password: a "Forgot password?" link that shows an email input and calls supabase.auth.resetPasswordForEmail()
+5. Validation rules:
+   - Email: must be valid format (use HTML type="email" + regex check)
+   - Password: minimum 8 characters, must contain at least 1 special character (!@#$%^&* etc.)
+   - Show real-time validation feedback below each field (red text when invalid, green check when valid)
+   - Confirm password must match password
+   - Disable submit button until all validation passes
+6. Error handling: show toast errors from Supabase (wrong password, user not found, email already registered, etc.)
+
+DESIGN
+
+The current page looks too plain. Make it look premium and modern:
+
+- Split layout on desktop: left side = branding panel (olive green #5B6B4A background with white text, app name "LuggageTracker", tagline "Monitor luggage prices across 15+ Canadian retailers", maybe a few feature bullets with icons). Right side = the form. On mobile, stack vertically (branding on top, form below).
+- Form card: subtle shadow, rounded corners, clean spacing
+- Input fields: taller inputs (h-12), rounded-lg, with icons inside (Mail icon for email, Lock icon for password)
+- Password strength indicator: a small bar below the password field that fills up (red to yellow to green) as the password gets stronger
+- Sign In / Create Account toggle: use clean tabs or segmented control at the top of the form, not a link
+- "Sign in" button: full-width, olive green (#5B6B4A), white text, hover darkens slightly
+- Smooth transitions: animate between sign in and sign up forms (simple fade or slide)
+- Footer text: "Powered by Supabase" in small muted text at the bottom
+
+TECH CONTEXT
+
+- Framework: Next.js App Router, React 19, TypeScript
+- Styling: Tailwind CSS v4 (use @utility and CSS variables from globals.css)
+- Auth: @supabase/supabase-js - the browser client is at src/lib/supabase/client.ts, use getSupabaseBrowser() which returns a Supabase client (or null in demo mode)
+- State: useStore() from src/lib/store.tsx provides signIn(email), authed, signOut()
+- isLiveMode from src/lib/supabase/client.ts - when false, skip Supabase and accept any credentials (demo mode)
+- Components available: Button, Input, Label, Checkbox from @/components/ui/*, toast from sonner, icons from lucide-react
+- Colors: primary olive green #5B6B4A, use existing CSS variables (--primary, --muted-foreground, etc.)
+- The file must start with "use client";
+- Wrap anything using useSearchParams() in a Suspense boundary
+
+PASSWORD VALIDATION FUNCTION
+
+function validatePassword(pw: string) {
+  const minLength = pw.length >= 8;
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw);
+  const strength = [minLength, hasSpecial, pw.length >= 12].filter(Boolean).length;
+  return { minLength, hasSpecial, valid: minLength && hasSpecial, strength };
+}
+
+Keep the existing redirect logic (useSearchParams for ?redirect= param). Don't change any other files - only modify src/app/page.tsx.

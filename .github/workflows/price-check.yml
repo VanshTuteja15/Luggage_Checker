@@ -1,0 +1,24 @@
+# Fetch latest prices for all tracked products every 6 hours.
+# This is a backup for Vercel Cron — use whichever works best for your setup.
+name: Price Check
+
+on:
+  schedule:
+    # Every 6 hours: midnight, 6 AM, noon, 6 PM UTC
+    - cron: "0 */6 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  fetch-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger price fetch
+        run: |
+          curl -X POST "${{ secrets.APP_URL }}/api/cron/fetch-prices" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            --fail-with-body \
+            --max-time 300
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

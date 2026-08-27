@@ -1,0 +1,25 @@
+# Send daily price report email at 9 AM Mountain Time.
+# Mountain Time = UTC-7 (MST) or UTC-6 (MDT).
+# 9 AM MDT = 15:00 UTC, 9 AM MST = 16:00 UTC.
+# Using 15:00 UTC (summer) — adjust if needed.
+name: Daily Report
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger daily report
+        run: |
+          curl -X POST "${{ secrets.APP_URL }}/api/cron/daily-report" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            --fail-with-body \
+            --max-time 120
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
