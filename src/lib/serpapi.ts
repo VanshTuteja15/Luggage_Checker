@@ -27,20 +27,30 @@ export type PriceFetchResult = {
   thumbnail?: string;
 };
 
+/** A live web search result — any retailer, not just our known 15. */
+export type WebSearchResult = {
+  title: string;
+  source: string;
+  price: number;
+  url: string;
+  thumbnail?: string;
+  rating?: number;
+  reviews?: number;
+  snippet?: string;
+  /** If this source maps to one of our 15 known retailers. */
+  knownRetailer: string | null;
+};
+
 /**
  * Map SerpAPI "source" field to our retailer names.
- * Google Shopping returns things like "Amazon.ca", "Walmart Canada",
- * "Costco Canada", etc. — we normalise these to our retailer keys.
  */
 const SOURCE_MAP: Record<string, string> = {
-  // Exact matches
   "Amazon.ca": "Amazon.ca",
   "Costco.ca": "Costco.ca",
   "Walmart.ca": "Walmart.ca",
   "eBay.ca": "eBay.ca",
   "Samsonite.ca": "Samsonite.ca",
   "TUMI.ca": "TUMI.ca",
-  // Common variations Google uses
   "Amazon Canada": "Amazon.ca",
   "Amazon - Canada": "Amazon.ca",
   "Walmart Canada": "Walmart.ca",
@@ -76,19 +86,16 @@ const SOURCE_MAP: Record<string, string> = {
 
 /**
  * Try to map a Google Shopping "source" to one of our known retailers.
- * First checks the explicit map, then does a domain-based fuzzy match.
+ * Returns null if no match found.
  */
-function matchRetailer(source: string, url: string): string | null {
-  // Exact/known mapping
+export function matchRetailer(source: string, url: string): string | null {
   if (SOURCE_MAP[source]) return SOURCE_MAP[source];
 
-  // Try case-insensitive
   const lower = source.toLowerCase();
   for (const [key, value] of Object.entries(SOURCE_MAP)) {
     if (key.toLowerCase() === lower) return value;
   }
 
-  // Domain-based matching: check if the URL contains a known retailer domain
   if (url) {
     const urlLower = url.toLowerCase();
     for (const [name, info] of Object.entries(RETAILER_INFO)) {
@@ -100,23 +107,24 @@ function matchRetailer(source: string, url: string): string | null {
 }
 
 /**
- * Fetch current prices for a product from Google Shopping Canada.
- * Returns matched retailer prices sorted lowest-first.
+ * Fetch ALL shopping results for a query from Google Shopping Canada.
+ * Returns every result (not just known retailers) so the search
+ * works like a proper search engine.
  */
-export async function fetchPrices(
+export async function searchWeb(
   query: string,
   apiKey?: string,
-): Promise<PriceFetchResult[]> {
+): Promise<WebSearchResult[]> {
   const key = apiKey || process.env.SERPAPI_KEY;
   if (!key) throw new Error("SERPAPI_KEY is not configured");
 
   const params = new URLSearchParams({
     engine: "google_shopping",
     q: query,
-    gl: "ca",       // Canada
+    gl: "ca",
     hl: "en",
     google_domain: "google.ca",
-    num: "40",       // Get more results for better retailer coverage
+    num: "40",
     api_key: key,
   });
 
@@ -132,22 +140,44 @@ export async function fetchPrices(
   const data = await res.json();
   const results: ShoppingResult[] = data.shopping_results ?? [];
 
-  // Match results to known retailers, de-duplicate (keep cheapest per retailer)
+  return results
+    .filter((r) => r.extracted_price && r.extracted_price > 0)
+    .map((r) => ({
+      title: r.title,
+      source: r.source,
+      price: r.extracted_price,
+      url: r.link,
+      thumbnail: r.thumbnail,
+      rating: r.rating,
+      reviews: r.reviews,
+      snippet: r.snippet,
+      knownRetailer: matchRetailer(r.source, r.link),
+    }));
+}
+
+/**
+ * Fetch current prices for a product — filtered to known retailers only.
+ * Used by the cron job for tracked products.
+ */
+export async function fetchPrices(
+  query: string,
+  apiKey?: string,
+): Promise<PriceFetchResult[]> {
+  const allResults = await searchWeb(query, apiKey);
+
+  // Filter to known retailers only, de-duplicate (keep cheapest per retailer)
   const byRetailer = new Map<string, PriceFetchResult>();
 
-  for (const r of results) {
-    if (!r.extracted_price || r.extracted_price <= 0) continue;
+  for (const r of allResults) {
+    if (!r.knownRetailer) continue;
 
-    const retailer = matchRetailer(r.source, r.link);
-    if (!retailer) continue; // Skip unknown retailers
-
-    const existing = byRetailer.get(retailer);
-    if (!existing || r.extracted_price < existing.price) {
-      byRetailer.set(retailer, {
-        retailer,
-        price: r.extracted_price,
-        url: r.link,
-        inStock: true, // Google Shopping generally only shows in-stock items
+    const existing = byRetailer.get(r.knownRetailer);
+    if (!existing || r.price < existing.price) {
+      byRetailer.set(r.knownRetailer, {
+        retailer: r.knownRetailer,
+        price: r.price,
+        url: r.url,
+        inStock: true,
         title: r.title,
         thumbnail: r.thumbnail,
       });
@@ -159,14 +189,11 @@ export async function fetchPrices(
 
 /**
  * Build a search query optimised for finding a specific product.
- * Combines name + brand + UPC for best matching.
  */
 export function buildSearchQuery(product: {
   name: string;
   brand: string;
   upc?: string | null;
 }): string {
-  // For luggage, name + brand usually gets good results.
-  // Append "Canada" to bias towards Canadian retailers.
   return `${product.brand} ${product.name} luggage Canada`;
 }
