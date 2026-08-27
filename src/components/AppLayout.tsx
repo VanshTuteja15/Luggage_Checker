@@ -17,6 +17,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useStore, useHydrated } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { AiChat } from "@/components/AiChat";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -152,6 +153,7 @@ export function AppLayout({
         </header>
         <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-8 lg:px-8">{children}</main>
       </div>
+      <AiChat />
     </div>
   );
 }
