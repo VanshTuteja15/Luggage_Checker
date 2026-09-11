@@ -1,78 +1,119 @@
 "use client";
 
 import Link from "next/link";
-import { MoreHorizontal } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ExternalLink, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
+import { ChangeBadge, Freshness, RetailerTag, StockBadge, TargetBadge } from "@/components/Bits";
+import { ProductThumb } from "@/components/ProductThumb";
+import { Sparkline } from "@/components/Sparkline";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChangeBadge, RetailerTag, StockBadge } from "@/components/Bits";
-import { ProductThumb } from "@/components/ProductThumb";
-import { Sparkline } from "@/components/Sparkline";
-import { lowestOffer, lowestOnDate, priceChange, seriesDates, type Product } from "@/lib/data";
 import { usd } from "@/lib/format";
+import type { TrackedProduct } from "@/lib/types";
 
 export function TrackedProductCard({
   product,
   onRemove,
+  onRefresh,
+  refreshing,
 }: {
-  product: Product;
+  product: TrackedProduct;
   onRemove: (id: string) => void;
+  onRefresh?: (id: string) => void;
+  refreshing?: boolean;
 }) {
-  const low = lowestOffer(product);
-  const spark = seriesDates(6)
-    .map((d) => lowestOnDate(product, d))
-    .filter((v): v is number => v !== null);
-  const change = priceChange(product);
+  const spark = product.history.slice(-14).map((p) => p.price);
 
   return (
-    <div className="card-surface card-hover flex flex-col overflow-hidden">
-      <Link href={`/products/${product.id}`} className="block">
-        <ProductThumb id={product.id} name={product.name} className="h-36 w-full rounded-none" />
-      </Link>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <Link
-              href={`/products/${product.id}`}
-              className="line-clamp-2 font-medium hover:text-primary"
-            >
-              {product.name}
-            </Link>
-            <p className="text-sm text-muted-foreground">{product.brand}</p>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Actions">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+    <div className="card-surface flex flex-col gap-3 p-4">
+      <div className="flex items-start gap-3">
+        <ProductThumb
+          id={product.id}
+          name={product.name}
+          imageUrl={product.imageUrl}
+          size={48}
+        />
+        <div className="min-w-0 flex-1">
+          <Link
+            href={`/products/${product.id}`}
+            className="line-clamp-2 text-sm font-medium leading-snug hover:text-primary"
+          >
+            {product.name}
+          </Link>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {product.brand}
+            {product.color ? ` · ${product.color}` : ""}
+          </p>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={`Actions for ${product.name}`}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link href={`/products/${product.id}`}>View details</Link>
+            </DropdownMenuItem>
+            {onRefresh && (
+              <DropdownMenuItem onClick={() => onRefresh(product.id)} disabled={refreshing}>
+                <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                Refresh price
+              </DropdownMenuItem>
+            )}
+            {product.offers[0]?.url && (
               <DropdownMenuItem asChild>
-                <Link href={`/products/${product.id}`}>
-                  View Details
-                </Link>
+                <a href={product.offers[0].url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  Open best offer
+                </a>
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-danger" onClick={() => onRemove(product.id)}>
-                Remove from Tracking
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+            <DropdownMenuItem
+              onClick={() => onRemove(product.id)}
+              className="text-danger focus:text-danger"
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Stop tracking
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="flex items-end justify-between gap-2">
+        <div>
+          <p className="text-xl font-semibold tabular-nums">
+            {product.lowestPrice === null ? "—" : usd(product.lowestPrice)}
+          </p>
+          {product.lowestRetailer && <RetailerTag retailer={product.lowestRetailer} />}
         </div>
-        <p className="text-2xl font-semibold tracking-tight">{usd(low.price)}</p>
-        <RetailerTag retailer={low.retailer} />
-        <div className="flex items-center gap-2">
-          <ChangeBadge change={change} />
-          <StockBadge inStock={low.inStock} />
-        </div>
-        <div className="mt-auto pt-2">
-          <Sparkline data={spark} color={change > 0 ? "#EF4444" : change < 0 ? "#10B981" : "#5B6B4A"} />
-          <p className="text-xs text-muted-foreground">7-day trend</p>
+        <div className="flex flex-col items-end gap-1">
+          <ChangeBadge change={product.change} />
+          <TargetBadge target={product.targetPrice} current={product.lowestPrice} />
         </div>
       </div>
+
+      {spark.length > 1 && (
+        <Sparkline
+          data={spark}
+          color={product.change < 0 ? "#10B981" : product.change > 0 ? "#EF4444" : "#5B6B4A"}
+        />
+      )}
+
+      <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+        <span className="text-xs text-muted-foreground">
+          {product.retailerCount} retailer{product.retailerCount === 1 ? "" : "s"}
+          {product.spread > 0 && ` · spread ${usd(product.spread)}`}
+        </span>
+        <StockBadge inStock={product.inStock} />
+      </div>
+
+      <Freshness isoDate={product.lastCheckedAt} />
     </div>
   );
 }

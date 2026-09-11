@@ -1,47 +1,118 @@
 # LuggageTracker — Setup Guide
 
-## Quick Start (Demo Mode)
-
-```bash
-npm install
-npm run dev
-```
-
-Open http://localhost:3000. In demo mode (no env vars), the app runs with mock data and any password works on login.
+Live luggage price monitoring across Canadian retailers.
 
 ---
 
-## Production Setup
+## 1. Database
 
-### 1. Supabase
-
-1. Create a project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor** → paste and run `supabase/migrations/001_initial_schema.sql`
-3. Go to **Settings → API** and copy:
+1. Create a project at [supabase.com](https://supabase.com).
+2. **SQL Editor** → run **`supabase/migrations/000_complete_setup.sql`**,
+   then **`supabase/migrations/003_search_cache_and_quota.sql`**.
+   Between them these create everything: tables, indexes, row-level
+   security, triggers, the search cache and the provider usage counter.
+   Both are idempotent, so re-running is always safe.
+   (`001_` and `002_` are kept for history — you do not need to run them.)
+   Each ends with a verification query: **5 rows** for the first,
+   **4 rows** for the second. Fewer means it didn't finish — scroll up
+   for the error.
+3. **Settings → API**, copy:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon` public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` secret key → `SUPABASE_SERVICE_ROLE_KEY`
-4. Go to **Authentication → Users** → create your admin user (email + password)
+   - `anon` / publishable key → `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - a **secret key** (`sb_secret_…`) → `SUPABASE_SERVICE_ROLE_KEY` *(cron jobs only)*
+     Supabase's newer key system replaces the legacy `service_role` JWT;
+     either works in that variable, but legacy keys are being retired at the
+     end of 2026, so create a secret key.
+4. **Authentication → Users** → create your login.
 
-### 2. SerpAPI
+> Setup also creates a `user_settings` row automatically for every new user,
+> and backfills any that already exist.
 
-1. Sign up at [serpapi.com](https://serpapi.com) (free: 100 searches/month)
-2. Copy your API key → `SERPAPI_KEY`
+---
 
-### 3. Resend (email reports)
+## 2. Price source (pick one — both free)
 
-1. Sign up at [resend.com](https://resend.com) (free: 100 emails/day)
-2. Add and verify your domain (or use the sandbox `onboarding@resend.dev` for testing)
-3. Copy your API key → `RESEND_API_KEY`
-4. Set `REPORT_FROM_EMAIL` and `REPORT_TO_EMAIL`
+The app fetches real listings from a **price provider** and auto-selects
+whichever key is present, preferring the one with the larger allowance.
 
-### 4. Environment Variables
+| Provider | Free allowance | Card? | Get a key |
+| --- | --- | --- | --- |
+| **Serper.dev** | **2,500 searches, one-time** | No | [serper.dev](https://serper.dev) |
+| **SerpAPI** | **250/month, renews** | No | [serpapi.com](https://serpapi.com) |
 
-Copy `.env.example` to `.env.local` and fill in all values:
+Set `SERPER_API_KEY` and/or `SERPAPI_KEY`. Configuring both is the best
+free setup: Serper's large one-time pot gets spent first, leaving SerpAPI's
+recurring 250/month as the permanent source once it runs out.
+
+### Making a free allowance last
+
+Two mechanisms, both automatic:
+
+- **Caching.** A repeated search costs nothing. Results are cached for
+  `SEARCH_CACHE_TTL_MINUTES` (default 6 hours), and price refreshes reuse a
+  recent search rather than paying twice. Cached results keep their original
+  fetch time and are labelled in the UI — a cached price never pretends to
+  be live, and there's a one-click re-check.
+- **Budget guard.** Every call is counted. Settings shows
+  "173 / 250 used this month". When the allowance is gone the app says so
+  plainly instead of failing with an opaque 429, and the cron job stops
+  early, keeping a small reserve so manual searches still work.
+
+Rough budget at 250/month: ~6 tracked products on a daily cron (180/month)
+leaves ~70 for searching and manual refreshes.
+
+### Option C — Gemini with Google Search grounding
+
+A fallback if you have neither key.
+
+> **Requires billing.** Google Search grounding is **not** part of the Gemini
+> API free tier. It needs a billing-enabled Google AI Studio project, which
+> then includes 5,000 grounded searches/month free, then $14 per 1,000.
+> A plain free-tier key fails with a clear message in the app.
+
+Guardrails, because an LLM reporting prices needs them:
+
+- A result is discarded unless its URL is on a **recognised retailer domain**.
+- Prices outside $15–$6,000 CAD are discarded as implausible.
+- The UI labels these results and says to confirm on the retailer's page.
+
+> Whichever provider runs, **the LLM never produces a price.** It interprets
+> the query and groups listings into products; every price and URL comes from
+> the fetched listing.
+
+---
+
+## 3. Email reports (optional)
+
+1. Sign up at [resend.com](https://resend.com) (free: 100 emails/day).
+2. Verify your domain, or use `onboarding@resend.dev` for testing.
+3. Set `RESEND_API_KEY`, `REPORT_FROM_EMAIL`, `REPORT_TO_EMAIL`.
+
+Without a key the cron still runs and records prices; it just doesn't send.
+
+---
+
+## 4. Environment
 
 ```bash
 cp .env.example .env.local
 ```
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Database + auth |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | Browser + user-scoped API access |
+| `SUPABASE_SERVICE_ROLE_KEY` | cron only | Bypasses RLS — never sent to the browser |
+| `SERPER_API_KEY` | one of | Google Shopping — 2,500 free, one-time |
+| `SERPAPI_KEY` | one of | Google Shopping — 250 free per month |
+| `GEMINI_API_KEY` | yes | Query parsing, product clustering, chat. Never produces a price. |
+| `GEMINI_MODEL` | no | Optional override. Leave unset — the app tries current Flash models in order and caches the first that works, so a Google retirement can't break it. |
+| `RESEND_API_KEY` | no | Daily report delivery |
+| `REPORT_FROM_EMAIL` / `REPORT_TO_EMAIL` | no | Report addresses |
+| `CRON_SECRET` | cron only | Protects the cron endpoints |
+| `NEXT_PUBLIC_APP_URL` | no | Link target in report emails |
+| `SERPER_CREDIT_LIMIT` / `SERPAPI_MONTHLY_LIMIT` | no | Raise when you leave a free plan |
+| `SEARCH_CACHE_TTL_MINUTES` | no | Cache lifetime, default 360 (6h) |
 
 Generate a cron secret:
 
@@ -49,25 +120,32 @@ Generate a cron secret:
 openssl rand -hex 32
 ```
 
-### 5. Deploy to Vercel
+Then:
+
+```bash
+npm install
+npm run dev
+```
+
+---
+
+## 5. Deploy
 
 ```bash
 npm i -g vercel
 vercel
 ```
 
-Add all env vars in the Vercel dashboard under **Settings → Environment Variables**.
+Add every variable above in **Settings → Environment Variables**.
 
-Vercel Cron runs the price checker every 6 hours and the daily report at 9 AM MT. Note: Vercel Cron requires the Pro plan ($20/month). For the free tier, use the GitHub Actions workflows instead.
+Vercel Cron runs the price check every 6 hours and the report at 15:00 UTC.
+Vercel sends `Authorization: Bearer $CRON_SECRET` automatically when that
+variable is set. Vercel Cron needs the Pro plan; on the free tier use the
+GitHub Actions workflows in `.github/workflows/` instead, with repo secrets
+`APP_URL` and `CRON_SECRET`.
 
-### 6. GitHub Actions (alternative to Vercel Cron)
-
-Add these secrets to your GitHub repo (**Settings → Secrets → Actions**):
-
-- `APP_URL` — your Vercel deployment URL (e.g., `https://luggage-tracker.vercel.app`)
-- `CRON_SECRET` — same value as your `CRON_SECRET` env var
-
-The workflows in `.github/workflows/` will trigger automatically.
+> **Note on the report time:** `0 15 * * *` is 9 AM during MDT and 8 AM during
+> MST. Adjust seasonally if the exact hour matters to the client.
 
 ---
 
@@ -77,29 +155,44 @@ The workflows in `.github/workflows/` will trigger automatically.
 src/
 ├── app/
 │   ├── api/
-│   │   ├── cron/
-│   │   │   ├── fetch-prices/   ← SerpAPI price fetcher (called by cron)
-│   │   │   └── daily-report/   ← Email report sender (called by cron)
-│   │   ├── products/           ← Product CRUD
-│   │   ├── search/             ← SerpAPI search endpoint
-│   │   ├── settings/           ← User settings
-│   │   └── track/              ← Track/untrack products
-│   ├── dashboard/              ← Main dashboard
-│   ├── products/[productId]/   ← Product detail with price comparison
-│   ├── search/                 ← Product search
-│   ├── settings/               ← Settings page
-│   └── page.tsx                ← Login (Supabase Auth or demo)
-├── lib/
-│   ├── supabase/               ← Supabase clients + types
-│   ├── data.ts                 ← Retailer config + mock data (demo mode)
-│   ├── email.ts                ← Resend email templates
-│   ├── serpapi.ts              ← SerpAPI Google Shopping integration
-│   └── store.tsx               ← React context store (localStorage + Supabase)
-└── middleware.ts               ← Auth middleware (bypassed in demo mode)
+│   │   ├── search/     ← natural-language search across retailers
+│   │   ├── track/      ← POST/DELETE/PATCH tracking + price alerts
+│   │   ├── products/   ← tracked products with offers + history
+│   │   ├── refresh/    ← on-demand price re-check
+│   │   ├── settings/   ← per-user settings
+│   │   ├── chat/       ← AI assistant, grounded in real tracked data
+│   │   └── cron/       ← scheduled price check + daily report
+│   ├── dashboard/  search/  tracked/  history/  settings/
+│   └── products/[productId]/
+└── lib/
+    ├── search/
+    │   ├── index.ts        ← pipeline orchestrator
+    │   ├── parse.ts        ← LLM query understanding
+    │   ├── cluster.ts      ← LLM groups listings into products
+    │   └── providers/      ← serpapi | gemini-grounded
+    ├── db/                 ← persistence + refresh
+    ├── retailers.ts        ← canonical retailer registry
+    ├── queries.ts          ← TanStack Query hooks
+    └── supabase/server.ts  ← requireUser() / service-role client
 ```
 
-## Data Flow
+### Search pipeline
 
-1. **Cron** (every 6h) → `/api/cron/fetch-prices` → SerpAPI Google Shopping → Supabase
-2. **Cron** (daily 9 AM MT) → `/api/cron/daily-report` → compare prices → Resend email
-3. **Frontend** → reads from Supabase (live) or mock data (demo)
+```
+"hardside carry-on under $300"
+  → cache lookup      (free — a repeat search costs nothing)
+  → parse intent      (Gemini, structured JSON)
+  → fetch listings    (Serper → SerpAPI → grounded Gemini)
+                      ← the only source of prices, metered against quota
+  → cluster listings  (Gemini groups them into distinct products)
+  → filter + rank     (retailer settings, price ceiling, majors first)
+  → top 10 products, each with every offer we found
+```
+
+### Security
+
+Every API route calls `requireUser()`, which validates the caller's Supabase
+access token and builds a client scoped to that user, so **row-level security
+decides what they can read and write**. No route takes a `userId` from the
+request body. The service-role key is used in exactly one place — the cron
+jobs, which have no user context.

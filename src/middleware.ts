@@ -2,14 +2,20 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Middleware: lightweight pass-through.
+ * Middleware: pass-through.
  *
- * Auth is handled client-side by the store (useStore → authed).
- * Supabase JS stores sessions in localStorage, not cookies,
- * so server-side cookie checks don't work without @supabase/ssr.
+ * The Supabase browser client stores its session in localStorage, not
+ * cookies, so middleware genuinely cannot see it. Adding @supabase/ssr would
+ * enable cookie-based sessions and real edge redirects — worth doing, but it
+ * is not what protects the data.
  *
- * The AppLayout component handles redirecting unauthenticated
- * users to the login page on the client side.
+ * The security boundary is the API layer: every route calls requireUser(),
+ * which validates the caller's access token and builds a Supabase client
+ * scoped to that user, so row-level security decides what they can read and
+ * write. Reaching /dashboard without a session shows an empty shell whose
+ * requests all return 401.
+ *
+ * AppLayout handles the client-side redirect to the login page.
  */
 export async function middleware(_req: NextRequest) {
   return NextResponse.next();

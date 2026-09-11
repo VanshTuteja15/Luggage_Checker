@@ -1,85 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { errorResponse } from "@/lib/api/respond";
+import { getTrackedProducts } from "@/lib/db/products";
+import { requireUser } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 /**
- * GET /api/products
- * List all products with current offers.
+ * GET /api/products?days=30
+ *
+ * Every product the signed-in user tracks, with current offers and price
+ * history. RLS scopes this to the caller — there is no userId parameter to
+ * tamper with.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = getSupabaseAdmin();
+    const { supabase, userId } = await requireUser(req);
 
-    const { data: products, error } = await supabase
-      .from("products")
-      .select(`
-        *,
-        retailer_offers (*)
-      `)
-      .order("created_at", { ascending: false });
+    const daysParam = Number(req.nextUrl.searchParams.get("days") ?? 30);
+    const days = Number.isFinite(daysParam) ? Math.min(Math.max(daysParam, 1), 365) : 30;
 
-    if (error) throw error;
+    const products = await getTrackedProducts(supabase, userId, { days });
 
-    return NextResponse.json(products ?? []);
+    return NextResponse.json({ products, count: products.length });
   } catch (err) {
-    console.error("GET /api/products error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 },
-    );
-  }
-}
-
-/**
- * POST /api/products
- * Add a product to the database.
- * Body: { name, brand, model, color, upc?, slug? }
- */
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { name, brand, model, color, upc, slug: rawSlug } = body;
-
-    if (!name || !brand || !model) {
-      return NextResponse.json(
-        { error: "name, brand, and model are required" },
-        { status: 400 },
-      );
-    }
-
-    const slug =
-      rawSlug ||
-      `${brand}-${model}`
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
-
-    const supabase = getSupabaseAdmin();
-
-    // Check if product already exists by slug or UPC
-    const { data: existing } = await supabase
-      .from("products")
-      .select("id, slug")
-      .or(`slug.eq.${slug}${upc ? `,upc.eq.${upc}` : ""}`)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json(existing);
-    }
-
-    const { data: product, error } = await supabase
-      .from("products")
-      .insert({ name, brand, model, color: color ?? "", upc, slug })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return NextResponse.json(product, { status: 201 });
-  } catch (err) {
-    console.error("POST /api/products error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 },
-    );
+    return errorResponse(err, "GET /api/products");
   }
 }

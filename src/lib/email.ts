@@ -4,7 +4,15 @@
 
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+export function emailConfigured(): boolean {
+  return !!process.env.RESEND_API_KEY;
+}
+
+function client(): Resend {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error("RESEND_API_KEY is not configured");
+  return new Resend(key);
+}
 
 export type PriceChangeItem = {
   productName: string;
@@ -15,6 +23,15 @@ export type PriceChangeItem = {
   url: string;
 };
 
+export type TargetAlertItem = {
+  productName: string;
+  brand: string;
+  retailer: string;
+  price: number;
+  targetPrice: number;
+  url: string;
+};
+
 export type ReportData = {
   date: string;
   totalTracked: number;
@@ -22,174 +39,221 @@ export type ReportData = {
   increases: PriceChangeItem[];
   outOfStock: { productName: string; retailer: string }[];
   lowestFinds: { productName: string; retailer: string; price: number; url: string }[];
+  /** Products that reached the user's target price. The headline of the email. */
+  targetAlerts: TargetAlertItem[];
 };
 
-function cad(n: number) {
+export type ReportOptions = {
+  to: string;
+  include?: { drops: boolean; increases: boolean; oos: boolean; summary: boolean };
+  appUrl?: string;
+};
+
+const BRAND = "#5B6B4A";
+const SUCCESS = "#10B981";
+const DANGER = "#EF4444";
+
+function cad(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-function changeArrow(oldP: number, newP: number) {
+function changeLabel(oldP: number, newP: number): string {
   const diff = newP - oldP;
-  const pct = ((diff / oldP) * 100).toFixed(1);
-  return diff < 0 ? `↓ ${cad(Math.abs(diff))} (${Math.abs(Number(pct))}%)` : `↑ ${cad(diff)} (${pct}%)`;
+  const pct = oldP === 0 ? 0 : (diff / oldP) * 100;
+  const arrow = diff < 0 ? "&darr;" : "&uarr;";
+  return `${arrow} ${cad(Math.abs(diff))} (${Math.abs(pct).toFixed(1)}%)`;
 }
 
-/**
- * Build the HTML email body for the daily report.
- */
-function buildReportHtml(data: ReportData): string {
-  const { date, totalTracked, drops, increases, outOfStock, lowestFinds } = data;
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-  const dropRows = drops
-    .map(
-      (d) => `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">
-          <strong>${d.productName}</strong><br/>
-          <span style="color:#6b7280;font-size:13px">${d.brand}</span>
-        </td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;text-decoration:line-through;color:#9ca3af">${cad(d.oldPrice)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;color:#10b981;font-weight:600">${cad(d.newPrice)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;color:#10b981">${changeArrow(d.oldPrice, d.newPrice)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">${d.retailer}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">
-          <a href="${d.url}" style="color:#5B6B4A;text-decoration:underline">View</a>
-        </td>
-      </tr>`,
-    )
-    .join("");
+const td = "padding:8px 12px;border-bottom:1px solid #e5e5e5;font-size:14px";
 
-  const increaseRows = increases
-    .map(
-      (d) => `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">${d.productName}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">${cad(d.oldPrice)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;color:#ef4444;font-weight:600">${cad(d.newPrice)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;color:#ef4444">${changeArrow(d.oldPrice, d.newPrice)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">${d.retailer}</td>
-      </tr>`,
-    )
-    .join("");
-
-  const oosRows = outOfStock
-    .map(
-      (o) => `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">${o.productName}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e5e5">${o.retailer}</td>
-      </tr>`,
-    )
-    .join("");
-
+function section(title: string, body: string): string {
+  if (!body) return "";
   return `
-<!DOCTYPE html>
+    <h2 style="margin:28px 0 10px;font-size:16px;font-weight:600;color:#111">${title}</h2>
+    ${body}`;
+}
+
+function table(headers: string[], rows: string): string {
+  if (!rows) return "";
+  return `
+    <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden">
+      <thead>
+        <tr style="background:#fafafa">
+          ${headers.map((h) => `<th style="${td};text-align:left;color:#6b7280;font-weight:600">${h}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ------------------------------------------------------------------ */
+
+function buildReportHtml(data: ReportData, opts: ReportOptions): string {
+  const include = opts.include ?? { drops: true, increases: true, oos: true, summary: true };
+  const appUrl = opts.appUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+  const alertRows = data.targetAlerts
+    .map(
+      (a) => `
+      <tr>
+        <td style="${td}"><strong>${esc(a.productName)}</strong><br/><span style="color:#6b7280;font-size:13px">${esc(a.brand)}</span></td>
+        <td style="${td};color:${SUCCESS};font-weight:700">${cad(a.price)}</td>
+        <td style="${td};color:#6b7280">target ${cad(a.targetPrice)}</td>
+        <td style="${td}">${esc(a.retailer)}</td>
+        <td style="${td}">${a.url ? `<a href="${esc(a.url)}" style="color:${BRAND}">Buy</a>` : ""}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const dropRows = include.drops
+    ? data.drops
+        .map(
+          (d) => `
+      <tr>
+        <td style="${td}"><strong>${esc(d.productName)}</strong><br/><span style="color:#6b7280;font-size:13px">${esc(d.brand)}</span></td>
+        <td style="${td};text-decoration:line-through;color:#9ca3af">${cad(d.oldPrice)}</td>
+        <td style="${td};color:${SUCCESS};font-weight:600">${cad(d.newPrice)}</td>
+        <td style="${td};color:${SUCCESS}">${changeLabel(d.oldPrice, d.newPrice)}</td>
+        <td style="${td}">${esc(d.retailer)}</td>
+        <td style="${td}">${d.url ? `<a href="${esc(d.url)}" style="color:${BRAND}">View</a>` : ""}</td>
+      </tr>`,
+        )
+        .join("")
+    : "";
+
+  const increaseRows = include.increases
+    ? data.increases
+        .map(
+          (d) => `
+      <tr>
+        <td style="${td}"><strong>${esc(d.productName)}</strong><br/><span style="color:#6b7280;font-size:13px">${esc(d.brand)}</span></td>
+        <td style="${td};text-decoration:line-through;color:#9ca3af">${cad(d.oldPrice)}</td>
+        <td style="${td};color:${DANGER};font-weight:600">${cad(d.newPrice)}</td>
+        <td style="${td};color:${DANGER}">${changeLabel(d.oldPrice, d.newPrice)}</td>
+        <td style="${td}">${esc(d.retailer)}</td>
+        <td style="${td}">${d.url ? `<a href="${esc(d.url)}" style="color:${BRAND}">View</a>` : ""}</td>
+      </tr>`,
+        )
+        .join("")
+    : "";
+
+  const oosRows = include.oos
+    ? data.outOfStock
+        .map(
+          (o) => `
+      <tr>
+        <td style="${td}"><strong>${esc(o.productName)}</strong></td>
+        <td style="${td};color:${DANGER}">Out of stock at ${esc(o.retailer)}</td>
+      </tr>`,
+        )
+        .join("")
+    : "";
+
+  const bestRows = include.summary
+    ? data.lowestFinds
+        .map(
+          (b) => `
+      <tr>
+        <td style="${td}"><strong>${esc(b.productName)}</strong></td>
+        <td style="${td};font-weight:600">${cad(b.price)}</td>
+        <td style="${td}">${esc(b.retailer)}</td>
+        <td style="${td}">${b.url ? `<a href="${esc(b.url)}" style="color:${BRAND}">View</a>` : ""}</td>
+      </tr>`,
+        )
+        .join("")
+    : "";
+
+  const nothingHappened =
+    !alertRows && !dropRows && !increaseRows && !oosRows && !bestRows;
+
+  return `<!doctype html>
 <html>
-<head><meta charset="utf-8"/></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;padding:20px;color:#1a1a1a">
+<body style="margin:0;padding:0;background:#f5f5f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+  <div style="max-width:720px;margin:0 auto;padding:24px">
 
-  <div style="background:#5B6B4A;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
-    <h1 style="margin:0;font-size:20px">LuggageTracker Daily Report</h1>
-    <p style="margin:4px 0 0;opacity:0.85;font-size:14px">${date} · ${totalTracked} products monitored</p>
-  </div>
-
-  <div style="border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;padding:24px">
-
-    ${drops.length > 0 ? `
-    <h2 style="color:#10b981;font-size:16px;margin:0 0 12px">Price Drops (${drops.length})</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
-      <thead>
-        <tr style="background:#f9fafb">
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Product</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Was</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Now</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Change</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Retailer</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5"></th>
-        </tr>
-      </thead>
-      <tbody>${dropRows}</tbody>
-    </table>
-    ` : '<p style="color:#6b7280;margin-bottom:24px">No price drops today.</p>'}
-
-    ${increases.length > 0 ? `
-    <h2 style="color:#ef4444;font-size:16px;margin:0 0 12px">Price Increases (${increases.length})</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
-      <thead>
-        <tr style="background:#f9fafb">
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Product</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Was</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Now</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Change</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Retailer</th>
-        </tr>
-      </thead>
-      <tbody>${increaseRows}</tbody>
-    </table>
-    ` : ""}
-
-    ${outOfStock.length > 0 ? `
-    <h2 style="color:#f59e0b;font-size:16px;margin:0 0 12px">Out of Stock Alerts (${outOfStock.length})</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
-      <thead>
-        <tr style="background:#f9fafb">
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Product</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e5e5">Retailer</th>
-        </tr>
-      </thead>
-      <tbody>${oosRows}</tbody>
-    </table>
-    ` : ""}
-
-    ${lowestFinds.length > 0 ? `
-    <h2 style="color:#5B6B4A;font-size:16px;margin:0 0 12px">Best Deals Right Now</h2>
-    <div style="margin-bottom:24px">
-      ${lowestFinds.map((l) => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #f3f4f6">
-          <div>
-            <strong>${l.productName}</strong>
-            <span style="color:#6b7280;font-size:13px"> at ${l.retailer}</span>
-          </div>
-          <div>
-            <span style="font-weight:700;color:#5B6B4A;font-size:16px">${cad(l.price)}</span>
-            <a href="${l.url}" style="margin-left:8px;color:#5B6B4A;text-decoration:underline;font-size:13px">View</a>
-          </div>
-        </div>
-      `).join("")}
+    <div style="background:${BRAND};color:#fff;padding:20px 24px;border-radius:10px 10px 0 0">
+      <h1 style="margin:0;font-size:20px;font-weight:600">LuggageTracker — Daily Report</h1>
+      <p style="margin:4px 0 0;opacity:.85;font-size:14px">${esc(data.date)} · ${data.totalTracked} product(s) tracked</p>
     </div>
-    ` : ""}
 
-    <hr style="border:none;border-top:1px solid #e5e5e5;margin:20px 0"/>
-    <p style="color:#9ca3af;font-size:12px;margin:0">
-      Sent by LuggageTracker · Prices in CAD · Data from Google Shopping Canada via SerpAPI
+    <div style="background:#fff;padding:20px 24px;border-radius:0 0 10px 10px">
+
+      ${
+        data.targetAlerts.length > 0
+          ? `<div style="background:#ecfdf5;border:1px solid ${SUCCESS};border-radius:8px;padding:12px 16px;margin-bottom:8px">
+               <strong style="color:${SUCCESS}">${data.targetAlerts.length} product(s) hit your target price</strong>
+             </div>
+             ${table(["Product", "Price", "Target", "Retailer", ""], alertRows)}`
+          : ""
+      }
+
+      ${section(`Price drops (${data.drops.length})`, table(["Product", "Was", "Now", "Change", "Retailer", ""], dropRows))}
+      ${section(`Price increases (${data.increases.length})`, table(["Product", "Was", "Now", "Change", "Retailer", ""], increaseRows))}
+      ${section(`Out of stock (${data.outOfStock.length})`, table(["Product", "Status"], oosRows))}
+      ${section("Best prices right now", table(["Product", "Price", "Retailer", ""], bestRows))}
+
+      ${
+        nothingHappened
+          ? `<p style="color:#6b7280;font-size:14px;margin:20px 0">No price movement since the last check. Everything you track is holding steady.</p>`
+          : ""
+      }
+
+      ${
+        appUrl
+          ? `<p style="margin:28px 0 0"><a href="${esc(appUrl)}/dashboard" style="display:inline-block;background:${BRAND};color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500">Open dashboard</a></p>`
+          : ""
+      }
+    </div>
+
+    <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:16px">
+      All prices in CAD, captured at the time of the last check. Confirm on the retailer's site before purchasing.
     </p>
   </div>
 </body>
 </html>`;
 }
 
-/**
- * Send the daily price report email via Resend.
- */
-export async function sendDailyReport(data: ReportData) {
-  if (!process.env.RESEND_API_KEY) {
-    throw new Error("RESEND_API_KEY is not configured");
+function buildSubject(data: ReportData): string {
+  if (data.targetAlerts.length > 0) {
+    return `${data.targetAlerts.length} target price${data.targetAlerts.length === 1 ? "" : "s"} reached — LuggageTracker`;
   }
+  if (data.drops.length > 0) {
+    return `${data.drops.length} price drop${data.drops.length === 1 ? "" : "s"} today — LuggageTracker`;
+  }
+  return `Daily luggage price report — ${data.date}`;
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * Send the daily report. Returns the Resend message id, or null when email
+ * isn't configured (which is not an error — the cron job still ran).
+ */
+export async function sendDailyReport(
+  data: ReportData,
+  opts: ReportOptions,
+): Promise<{ id: string } | null> {
+  if (!emailConfigured()) return null;
 
   const from = process.env.REPORT_FROM_EMAIL ?? "LuggageTracker <onboarding@resend.dev>";
-  const to = process.env.REPORT_TO_EMAIL ?? "yycluggagedepot@gmail.com";
+  const to = opts.to || process.env.REPORT_TO_EMAIL || "";
+  if (!to) return null;
 
-  const subject = data.drops.length > 0
-    ? `LuggageTracker: ${data.drops.length} price drop${data.drops.length > 1 ? "s" : ""} found!`
-    : `LuggageTracker: Daily Report — ${data.date}`;
-
-  const { data: result, error } = await resend.emails.send({
+  const { data: sent, error } = await client().emails.send({
     from,
     to,
-    subject,
-    html: buildReportHtml(data),
+    subject: buildSubject(data),
+    html: buildReportHtml(data, opts),
   });
 
-  if (error) throw new Error(`Resend error: ${JSON.stringify(error)}`);
-  return result;
+  if (error) throw new Error(`Resend: ${error.message}`);
+  return sent ? { id: sent.id } : null;
 }

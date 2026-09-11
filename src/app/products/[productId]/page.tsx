@@ -2,235 +2,367 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
-import { ArrowLeft, Copy, ExternalLink } from "lucide-react";
-import { toast } from "sonner";
+import { useMemo, useState } from "react";
 import {
-  LineChart,
+  ArrowLeft,
+  Bell,
+  BellOff,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import {
+  CartesianGrid,
+  Legend,
   Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
 } from "recharts";
 import { AppLayout } from "@/components/AppLayout";
-import { ChangeBadge, RetailerTag, StockBadge } from "@/components/Bits";
+import {
+  ChangeBadge,
+  ErrorState,
+  Freshness,
+  SectionTitle,
+  StockBadge,
+  TableSkeleton,
+} from "@/components/Bits";
 import { ProductThumb } from "@/components/ProductThumb";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { prettyDate, percentChange, usd } from "@/lib/format";
 import {
-  CATALOG,
-  retailerColor,
-  lowestOffer,
-  priceChange,
-  priceSpread,
-  retailerCount,
-  stats,
-  seriesDates,
-} from "@/lib/data";
-import { usd, prettyDate } from "@/lib/format";
+  errorMessage,
+  useRefreshPrices,
+  useSetPriceAlert,
+  useTrackedProduct,
+  useUntrackProducts,
+} from "@/lib/queries";
+import { retailerColor } from "@/lib/retailers";
 import { useStore } from "@/lib/store";
+import { priceStats } from "@/lib/types";
 
 export default function ProductDetailPage() {
-  const params = useParams();
-  const productId = params.productId as string;
-  const { isTracked, track, untrack } = useStore();
+  const params = useParams<{ productId: string }>();
+  const productId = params?.productId ?? "";
+  const { authed, ready } = useStore();
   const [range, setRange] = useState<7 | 30 | 90>(30);
 
-  const product = CATALOG.find((p) => p.id === productId);
+  const { data: product, isLoading, isError, error, refetch } = useTrackedProduct(
+    productId,
+    range,
+    ready && authed,
+  );
 
-  if (!product) {
+  const refresh = useRefreshPrices();
+  const untrack = useUntrackProducts();
+  const setAlert = useSetPriceAlert();
+
+  const [targetInput, setTargetInput] = useState("");
+  const [editingAlert, setEditingAlert] = useState(false);
+
+  const stats = useMemo(() => priceStats(product?.history ?? []), [product?.history]);
+
+  const chartData = useMemo(() => {
+    if (!product) return [];
+    const retailers = Object.keys(product.historyByRetailer);
+    const dates = new Set<string>();
+    for (const series of Object.values(product.historyByRetailer)) {
+      for (const point of series) dates.add(point.date);
+    }
+    return [...dates].sort().map((date) => {
+      const row: Record<string, string | number> = { date: prettyDate(date) };
+      for (const r of retailers) {
+        const point = product.historyByRetailer[r].find((p) => p.date === date);
+        if (point) row[r] = point.price;
+      }
+      return row;
+    });
+  }, [product]);
+
+  if (isLoading) {
     return (
-      <AppLayout title="Product Not Found">
-        <div className="flex flex-col items-center gap-4 py-20 text-center">
-          <p className="text-muted-foreground">This product doesn&apos;t exist in the catalog.</p>
+      <AppLayout title="Product" subtitle="Loading…">
+        <TableSkeleton rows={6} />
+      </AppLayout>
+    );
+  }
+
+  if (isError || !product) {
+    return (
+      <AppLayout title="Product" subtitle="">
+        <ErrorState
+          message={errorMessage(error, "This product isn't in your tracked list.")}
+          onRetry={refetch}
+        />
+        <div className="mt-4 text-center">
           <Button asChild variant="outline">
-            <Link href="/dashboard">Back to Dashboard</Link>
+            <Link href="/tracked">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to tracked products
+            </Link>
           </Button>
         </div>
       </AppLayout>
     );
   }
 
-  const low = lowestOffer(product);
-  const change = priceChange(product);
-  const s = stats(product);
-  const tracked = isTracked(product.id);
-  const retailers = Object.keys(product.history);
+  const isRefreshing = refresh.isPending && refresh.variables === product.id;
 
-  // Build chart data
-  const dates = seriesDates(Math.min(range, 30)); // data only has 30 days
-  const chartData = dates.map((date) => {
-    const row: Record<string, string | number> = { date: prettyDate(date) };
-    for (const r of retailers) {
-      const pt = product.history[r]?.find((p) => p.date === date);
-      if (pt) row[r] = pt.price;
+  function saveAlert() {
+    const value = targetInput.trim();
+    if (!value) {
+      setAlert.mutate({ productId: product!.id, targetPrice: null });
+    } else {
+      const n = Number(value.replace(/[^0-9.]/g, ""));
+      if (!Number.isFinite(n) || n <= 0) return;
+      setAlert.mutate({ productId: product!.id, targetPrice: Math.round(n * 100) / 100 });
     }
-    return row;
-  });
+    setEditingAlert(false);
+  }
 
   return (
     <AppLayout
       title={product.name}
-      subtitle={`${product.brand} · ${product.model}`}
+      subtitle={`${product.brand}${product.color ? ` · ${product.color}` : ""}${product.upc ? ` · UPC ${product.upc}` : ""}`}
       actions={
-        <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/dashboard">
-              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-              Back
-            </Link>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => refresh.mutate(product.id)}
+            disabled={isRefreshing}
+            className="gap-2"
+          >
+            {isRefreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Refresh price
           </Button>
-          {tracked ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-danger text-danger hover:bg-danger-soft"
-              onClick={() => {
-                untrack(product.id);
-                toast.success("Removed from tracking");
-              }}
-            >
-              Remove from Tracking
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => {
-                track(product.id);
-                toast.success("Now tracking this product");
-              }}
-            >
-              Track This Product
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            onClick={() => untrack.mutate([product.id])}
+            disabled={untrack.isPending}
+            className="gap-2 text-danger"
+          >
+            <Trash2 className="h-4 w-4" />
+            Stop tracking
+          </Button>
         </div>
       }
     >
-      {/* Lowest price banner */}
-      <div className="mb-6 rounded-lg border-2 border-success/40 bg-success-soft/30 px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-success">Lowest Price Found Online</p>
-            <p className="text-3xl font-bold tracking-tight text-success">{usd(low.price)}</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              at <span className="font-medium text-foreground">{low.retailer}</span>
-              {" · "}Found across {retailerCount(product)} retailers · Save up to {usd(priceSpread(product))}
-            </p>
-          </div>
-          <a
-            href={low.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md bg-success px-4 py-2 text-sm font-medium text-success-foreground transition-colors hover:bg-success/90"
-          >
-            View Deal <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        </div>
-      </div>
+      <Button asChild variant="ghost" size="sm" className="mb-4 -ml-2 gap-2">
+        <Link href="/tracked">
+          <ArrowLeft className="h-4 w-4" />
+          All tracked products
+        </Link>
+      </Button>
 
-      {/* Product header */}
-      <div className="card-surface mb-8 flex flex-col gap-6 p-6 md:flex-row">
-        <ProductThumb id={product.id} name={product.name} className="h-48 w-full md:w-64" />
-        <div className="flex-1 space-y-3">
-          <h2 className="text-2xl font-semibold">{product.name}</h2>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
-            <span>Brand: <span className="text-foreground">{product.brand}</span></span>
-            <span>Model: <span className="text-foreground">{product.model}</span></span>
-            <span>Color: <span className="text-foreground">{product.color}</span></span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">UPC:</span>
-            <code className="rounded bg-muted px-2 py-0.5 text-xs">{product.upc}</code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(product.upc);
-                toast.success("UPC copied");
-              }}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="flex items-center gap-3 pt-2">
-            <span className="text-3xl font-bold tracking-tight" style={{ color: "#5B6B4A" }}>
-              {usd(low.price)}
+      {/* ── Header ──────────────────────────────────────────── */}
+      <div className="card-surface mb-6 flex flex-wrap items-start gap-6 p-6">
+        <ProductThumb
+          id={product.id}
+          name={product.name}
+          imageUrl={product.imageUrl}
+          className="h-28 w-28"
+        />
+
+        <div className="min-w-[200px] flex-1">
+          <p className="text-sm text-muted-foreground">Best price right now</p>
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <span className="text-3xl font-semibold tabular-nums">
+              {product.lowestPrice === null ? "—" : usd(product.lowestPrice)}
             </span>
-            <RetailerTag retailer={low.retailer} />
-            <ChangeBadge change={change} />
+            <ChangeBadge change={product.change} />
+            <StockBadge inStock={product.inStock} />
           </div>
+          {product.lowestRetailer && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              at <span className="font-medium text-foreground">{product.lowestRetailer}</span>
+              {product.previousLowest !== null && product.change !== 0 && (
+                <>
+                  {" · was "}
+                  {usd(product.previousLowest)} ({percentChange(product.previousLowest, product.lowestPrice ?? 0)})
+                </>
+              )}
+            </p>
+          )}
+          <div className="mt-2">
+            <Freshness isoDate={product.lastCheckedAt} />
+          </div>
+        </div>
+
+        {/* Price alert */}
+        <div className="min-w-[220px] rounded-lg border border-border p-4">
+          <p className="mb-2 flex items-center gap-2 text-sm font-medium">
+            {product.targetPrice !== null ? (
+              <Bell className="h-4 w-4 text-primary" />
+            ) : (
+              <BellOff className="h-4 w-4 text-muted-foreground" />
+            )}
+            Price alert
+          </p>
+
+          {editingAlert ? (
+            <div className="flex items-center gap-2">
+              <Input
+                autoFocus
+                value={targetInput}
+                onChange={(e) => setTargetInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveAlert()}
+                placeholder="e.g. 249.99"
+                className="h-8 text-sm"
+                inputMode="decimal"
+              />
+              <Button size="sm" className="h-8" onClick={saveAlert} disabled={setAlert.isPending}>
+                Save
+              </Button>
+            </div>
+          ) : product.targetPrice !== null ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Email me when it drops below{" "}
+                <span className="font-semibold text-foreground">{usd(product.targetPrice)}</span>
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => {
+                    setTargetInput(String(product.targetPrice));
+                    setEditingAlert(true);
+                  }}
+                >
+                  Change
+                </button>
+                <button
+                  className="text-xs text-muted-foreground hover:underline"
+                  onClick={() => setAlert.mutate({ productId: product.id, targetPrice: null })}
+                >
+                  Remove
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Get an email when this drops below a price you set.
+              </p>
+              <button
+                className="mt-2 text-xs text-primary hover:underline"
+                onClick={() => {
+                  setTargetInput(
+                    product.lowestPrice ? String(Math.floor(product.lowestPrice * 0.9)) : "",
+                  );
+                  setEditingAlert(true);
+                }}
+              >
+                Set an alert
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Retailer comparison */}
-      <div className="mb-8">
-        <h3 className="mb-3 text-lg font-semibold">Retailer Price Comparison</h3>
-        <div className="card-surface overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-4 py-3 font-medium text-muted-foreground">Retailer</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground">Price</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground">Stock</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground">Last Checked</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {product.offers
-                .sort((a, b) => a.price - b.price)
-                .map((o, i) => (
-                  <tr
-                    key={o.retailer}
-                    className={i === 0 ? "bg-success-soft/40" : "hover:bg-muted/40"}
-                  >
-                    <td className="px-4 py-3">
-                      <RetailerTag retailer={o.retailer} />
-                    </td>
-                    <td className="px-4 py-3 font-semibold">{usd(o.price)}</td>
-                    <td className="px-4 py-3">
-                      <StockBadge inStock={o.inStock} />
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {o.lastCheckedMinutesAgo < 60
-                        ? `${o.lastCheckedMinutesAgo}m ago`
-                        : `${Math.round(o.lastCheckedMinutesAgo / 60)}h ago`}
-                    </td>
-                    <td className="px-4 py-3">
+      {/* ── Retailer comparison ─────────────────────────────── */}
+      <SectionTitle
+        title="Retailer Prices"
+        description={`${product.retailerCount} retailer${product.retailerCount === 1 ? "" : "s"}${
+          product.spread > 0 ? ` · ${usd(product.spread)} between cheapest and dearest` : ""
+        }`}
+      />
+      <div className="card-surface mb-8 overflow-x-auto">
+        <table className="w-full min-w-[620px] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th className="px-4 py-3 font-medium text-muted-foreground">Retailer</th>
+              <th className="px-4 py-3 font-medium text-muted-foreground">Price</th>
+              <th className="px-4 py-3 font-medium text-muted-foreground">vs best</th>
+              <th className="px-4 py-3 font-medium text-muted-foreground">Stock</th>
+              <th className="px-4 py-3 font-medium text-muted-foreground">Checked</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {product.offers.map((offer, i) => {
+              const diff = product.lowestPrice !== null ? offer.price - product.lowestPrice : 0;
+              return (
+                <tr key={`${offer.retailer}-${i}`} className="hover:bg-muted/40">
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: retailerColor(offer.retailer) }}
+                      />
+                      {offer.retailer}
+                      {i === 0 && (
+                        <span className="rounded bg-success-soft px-1.5 py-0.5 text-xs font-medium text-success">
+                          Best
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-semibold tabular-nums">{usd(offer.price)}</td>
+                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                    {diff <= 0 ? "—" : `+${usd(diff)}`}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StockBadge inStock={offer.inStock} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Freshness isoDate={offer.lastCheckedAt} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {offer.url && (
                       <a
-                        href={o.url}
+                        href={offer.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
                       >
                         Visit <ExternalLink className="h-3 w-3" />
                       </a>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {/* Price history chart */}
-      <div className="mb-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Price History</h3>
+      {/* ── History ─────────────────────────────────────────── */}
+      <SectionTitle
+        title="Price History"
+        description="One line per retailer"
+        right={
           <div className="flex rounded-md border border-border text-sm">
-            {([7, 30] as const).map((d) => (
+            {([7, 30, 90] as const).map((d) => (
               <button
                 key={d}
                 onClick={() => setRange(d)}
-                className={`px-3 py-1.5 ${range === d ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"}`}
+                className={`px-3 py-1.5 ${
+                  range === d ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
+                }`}
               >
                 {d}d
               </button>
             ))}
           </div>
-        </div>
-        <div className="card-surface p-4">
+        }
+      />
+
+      <div className="card-surface mb-8 p-4">
+        {chartData.length < 2 ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">
+            Not enough history yet — prices are recorded on each refresh, so this fills in over the
+            next few days.
+          </p>
+        ) : (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
@@ -245,6 +377,7 @@ export default function ProductDetailPage() {
                   tickFormatter={(v: number) => `$${v}`}
                   tickLine={false}
                   width={60}
+                  domain={["auto", "auto"]}
                 />
                 <Tooltip
                   contentStyle={{
@@ -253,16 +386,15 @@ export default function ProductDetailPage() {
                     borderRadius: 8,
                     fontSize: 12,
                   }}
-                  formatter={(value: number) => [usd(value), undefined]}
+                  formatter={(value: number, name: string) => [usd(value), name]}
                 />
                 <Legend />
-                {retailers.map((r) => (
+                {Object.keys(product.historyByRetailer).map((retailer) => (
                   <Line
-                    key={r}
+                    key={retailer}
                     type="monotone"
-                    dataKey={r}
-                    name={r}
-                    stroke={retailerColor(r)}
+                    dataKey={retailer}
+                    stroke={retailerColor(retailer)}
                     strokeWidth={2}
                     dot={false}
                     connectNulls
@@ -271,28 +403,39 @@ export default function ProductDetailPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-        {[
-          { label: "Current Lowest", value: usd(s.current) },
-          { label: "Retailers Found", value: String(retailerCount(product)), sub: `Save up to ${usd(priceSpread(product))}` },
-          { label: "Lowest Ever", value: `${usd(s.lowest.price)}`, sub: prettyDate(s.lowest.date) },
-          { label: "Highest Ever", value: `${usd(s.highest.price)}`, sub: prettyDate(s.highest.date) },
-          { label: "Average Price", value: usd(s.average) },
-          { label: "Price Checks", value: String(s.checks) },
-        ].map((stat) => (
-          <div key={stat.label} className="card-surface p-4">
-            <p className="text-xs text-muted-foreground">{stat.label}</p>
-            <p className="text-lg font-semibold">{stat.value}</p>
-            {"sub" in stat && stat.sub && (
-              <p className="text-xs text-muted-foreground">{stat.sub}</p>
-            )}
-          </div>
-        ))}
+      {/* ── Stats ───────────────────────────────────────────── */}
+      <SectionTitle title="Statistics" description={`Based on ${stats.days} day(s) of recorded history`} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatBox
+          label={`Lowest (${range}d)`}
+          value={stats.lowest ? usd(stats.lowest.price) : "—"}
+          hint={stats.lowest ? prettyDate(stats.lowest.date) : undefined}
+        />
+        <StatBox
+          label={`Highest (${range}d)`}
+          value={stats.highest ? usd(stats.highest.price) : "—"}
+          hint={stats.highest ? prettyDate(stats.highest.date) : undefined}
+        />
+        <StatBox label={`Average (${range}d)`} value={stats.average ? usd(stats.average) : "—"} />
+        <StatBox
+          label="Retailer spread"
+          value={product.spread > 0 ? usd(product.spread) : "—"}
+          hint={product.spread > 0 ? "cheapest vs dearest" : undefined}
+        />
       </div>
     </AppLayout>
+  );
+}
+
+function StatBox({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="card-surface p-5">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
   );
 }

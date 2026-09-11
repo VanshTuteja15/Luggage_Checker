@@ -27,6 +27,26 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
+
+/** Initials from an email local-part, e.g. "vansh.tuteja@x.com" -> "VT". */
+function initials(email: string): string {
+  const local = (email.split("@")[0] ?? "").replace(/[^a-zA-Z0-9]+/g, " ").trim();
+  if (!local) return "?";
+  const parts = local.split(/\s+/);
+  const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : local.slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/** A readable name from an email, until we store a display name. */
+function displayName(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  if (!local) return "Account";
+  return local
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
 export function AppLayout({
   title,
   subtitle,
@@ -38,7 +58,7 @@ export function AppLayout({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const { authed, email, signOut } = useStore();
+  const { authed, email, signOut, ready } = useStore();
   const hydrated = useHydrated();
   const router = useRouter();
   const pathname = usePathname();
@@ -46,11 +66,13 @@ export function AppLayout({
 
   useEffect(() => setOpen(false), [pathname]);
 
+  // Wait for the Supabase session to resolve before deciding someone is
+  // signed out, otherwise a refresh bounces an authenticated user to login.
   useEffect(() => {
-    if (hydrated && !authed) router.push("/");
-  }, [hydrated, authed, router]);
+    if (hydrated && ready && !authed) router.push("/");
+  }, [hydrated, ready, authed, router]);
 
-  if (!hydrated || !authed) {
+  if (!hydrated || !ready || !authed) {
     return <div className="min-h-screen bg-background" />;
   }
 
@@ -87,10 +109,12 @@ export function AppLayout({
       <div className="border-t border-sidebar-border px-3 py-4">
         <div className="flex items-center gap-3 px-2 py-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
-            AD
+            {initials(email)}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-sidebar-accent-foreground">Admin</p>
+            <p className="truncate text-sm font-medium text-sidebar-accent-foreground">
+              {displayName(email)}
+            </p>
             <p className="truncate text-xs text-sidebar-foreground">{email}</p>
           </div>
         </div>
@@ -147,7 +171,7 @@ export function AppLayout({
           </div>
           {actions ?? (
             <Button asChild>
-              <Link href="/search">+ Add Product</Link>
+              <Link href="/tracked">+ Add Product</Link>
             </Button>
           )}
         </header>

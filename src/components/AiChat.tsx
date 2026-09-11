@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Loader2, MessageCircle, Send, X, Sparkles } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
+import { errorMessage } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 type Message = {
@@ -115,14 +117,14 @@ export function AiChat() {
           (m) => ({ role: m.role, content: m.content }),
         );
 
-        const res = await fetch("/api/chat", {
+        // apiFetch attaches the Supabase access token — the chat endpoint
+        // builds its context from THIS user's tracked products.
+        const data = await apiFetch<{ reply?: string }>("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: history }),
+          json: { messages: history },
         });
 
-        const data = await res.json();
-        const reply = data.reply ?? data.error ?? "Sorry, something went wrong.";
+        const reply = data.reply ?? "Sorry, something went wrong.";
 
         const assistantMsg: Message = {
           id: `a-${Date.now()}`,
@@ -132,13 +134,13 @@ export function AiChat() {
         };
 
         setMessages((prev) => [...prev, assistantMsg]);
-      } catch {
+      } catch (err) {
         setMessages((prev) => [
           ...prev,
           {
             id: `e-${Date.now()}`,
             role: "assistant",
-            content: "Oops — couldn't reach the AI service. Try again in a moment.",
+            content: errorMessage(err, "Couldn't reach the AI service. Try again in a moment."),
             timestamp: new Date(),
           },
         ]);

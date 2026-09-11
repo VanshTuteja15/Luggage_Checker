@@ -1,212 +1,208 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { CATALOG, DEFAULT_TRACKED_IDS, type Product } from "./data";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { getSupabaseBrowser, isLiveMode } from "./supabase/client";
 
 /* ------------------------------------------------------------------ */
-/*  Settings type                                                     */
+/*  Session store                                                     */
+/*                                                                     */
+/*  This holds the auth session and a few per-device conveniences.     */
+/*                                                                     */
+/*  It deliberately does NOT hold tracked products or settings any     */
+/*  more. Those used to live in localStorage, which meant your tracked */
+/*  list didn't follow you to another device, and a second person      */
+/*  signing in on the same browser inherited the first person's list.  */
+/*  They now live in Supabase, scoped to the user by RLS.              */
 /* ------------------------------------------------------------------ */
 
-export type Settings = {
-  adminEmail: string;
-  timezone: string;
-  refreshInterval: string;
-  dailyReport: boolean;
-  reportEmail: string;
-  include: { drops: boolean; increases: boolean; oos: boolean; summary: boolean };
-  serpApiKey: string;
-  retailers: string[];
+const STORAGE_KEY = "luggagetracker.session.v2";
+const LEGACY_KEY = "luggagetracker.state.v1";
+
+type Persisted = {
+  recentSearches: string[];
 };
-
-const DEFAULT_SETTINGS: Settings = {
-  adminEmail: "admin@luggagetracker.app",
-  timezone: "America/Edmonton",
-  refreshInterval: "24h",
-  dailyReport: true,
-  reportEmail: "admin@luggagetracker.app",
-  include: { drops: true, increases: true, oos: true, summary: true },
-  serpApiKey: "",
-  retailers: [
-    "Amazon.ca", "Costco.ca", "Walmart.ca", "Hudson's Bay",
-    "Canadian Tire", "Bentley", "Best Buy Canada", "London Drugs",
-    "Samsonite.ca", "TUMI.ca", "Away", "Travelpro",
-    "Monos", "Briggs & Riley", "eBay.ca",
-  ],
-};
-
-/* ------------------------------------------------------------------ */
-/*  State type                                                        */
-/* ------------------------------------------------------------------ */
 
 type State = {
+  /** True once the session has been resolved — render nothing before this. */
+  ready: boolean;
   authed: boolean;
-  signIn: (email: string) => void;
-  signOut: () => void;
   email: string;
   userId: string | null;
-  catalog: Product[];
-  trackedIds: string[];
-  tracked: Product[];
-  isTracked: (id: string) => boolean;
-  track: (id: string) => void;
-  untrack: (id: string | string[]) => void;
-  clearHistoryFlag: boolean;
-  clearHistory: () => void;
-  recentSearches: string[];
-  addSearch: (q: string) => void;
-  settings: Settings;
-  updateSettings: (patch: Partial<Settings>) => void;
-  /** True when Supabase is configured and connected. */
+  /** True when Supabase is configured. */
   liveMode: boolean;
+
+  signIn: (email: string, userId?: string) => void;
+  signOut: () => Promise<void>;
+
+  recentSearches: string[];
+  addSearch: (query: string) => void;
+  clearSearches: () => void;
 };
 
 const Ctx = createContext<State | null>(null);
-const KEY = "luggagetracker.state.v1";
 
-type Persisted = {
-  authed: boolean;
-  email: string;
-  userId: string | null;
-  trackedIds: string[];
-  recentSearches: string[];
-  settings: Settings;
-  clearHistoryFlag: boolean;
-};
-
-/* ------------------------------------------------------------------ */
-/*  Provider                                                          */
-/* ------------------------------------------------------------------ */
+function readPersisted(): Persisted {
+  if (typeof window === "undefined") return { recentSearches: [] };
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { recentSearches: [] };
+    const parsed = JSON.parse(raw) as Partial<Persisted>;
+    return {
+      recentSearches: Array.isArray(parsed.recentSearches)
+        ? parsed.recentSearches.filter((s): s is string => typeof s === "string").slice(0, 8)
+        : [],
+    };
+  } catch {
+    return { recentSearches: [] };
+  }
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Persisted>({
-    authed: false,
-    email: DEFAULT_SETTINGS.adminEmail,
-    userId: null,
-    trackedIds: DEFAULT_TRACKED_IDS,
-    recentSearches: ["samsonite 28 inch", "tumi alpha", "042810178423", "travelpro", "away large"],
-    settings: DEFAULT_SETTINGS,
-    clearHistoryFlag: false,
-  });
-  const [hydrated, setHydrated] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [authed, setAuthed] = useState(false);
+  const [email, setEmail] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
-  // Hydrate from localStorage
+  // ── Hydrate per-device state ───────────────────────────────
   useEffect(() => {
+    setRecentSearches(readPersisted().recentSearches);
+    // The v1 store kept tracked products and settings client-side. That data
+    // is now server-owned, so drop the stale copy rather than leaving a
+    // previous user's tracked list sitting in the browser.
     try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setState((s) => ({ ...s, ...(JSON.parse(raw) as Persisted) }));
+      window.localStorage.removeItem(LEGACY_KEY);
     } catch {
       /* ignore */
     }
-    setHydrated(true);
   }, []);
 
-  // Persist to localStorage
   useEffect(() => {
-    if (!hydrated) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify(state));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ recentSearches }));
     } catch {
       /* ignore */
     }
-  }, [state, hydrated]);
+  }, [recentSearches]);
 
-  // Check Supabase auth session on mount (live mode only)
+  // ── Resolve the Supabase session ───────────────────────────
   useEffect(() => {
-    if (!isLiveMode) return;
-    const supabase = getSupabaseBrowser();
-    if (!supabase) return;
+    if (!isLiveMode) {
+      setReady(true);
+      return;
+    }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setReady(true);
+      return;
+    }
+
+    let active = true;
+
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        const session = data.session;
+        if (session?.user) {
+          setAuthed(true);
+          setEmail(session.user.email ?? "");
+          setUserId(session.user.id);
+        }
+      })
+      .finally(() => {
+        if (active) setReady(true);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
       if (session?.user) {
-        setState((s) => ({
-          ...s,
-          authed: true,
-          email: session.user.email ?? s.email,
-          userId: session.user.id,
-        }));
+        setAuthed(true);
+        setEmail(session.user.email ?? "");
+        setUserId(session.user.id);
+      } else {
+        setAuthed(false);
+        setUserId(null);
       }
+      setReady(true);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (session?.user) {
-          setState((s) => ({
-            ...s,
-            authed: true,
-            email: session.user.email ?? s.email,
-            userId: session.user.id,
-          }));
-        } else {
-          setState((s) => ({ ...s, authed: false, userId: null }));
-        }
-      },
-    );
-
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const patch = useCallback((p: Partial<Persisted>) => setState((s) => ({ ...s, ...p })), []);
+  const signIn = useCallback((nextEmail: string, nextUserId?: string) => {
+    setAuthed(true);
+    setEmail(nextEmail);
+    if (nextUserId) setUserId(nextUserId);
+  }, []);
 
-  const value = useMemo<State>(() => {
-    const trackedIds = state.trackedIds;
-    return {
-      authed: state.authed,
-      email: state.email,
-      userId: state.userId,
+  const signOut = useCallback(async () => {
+    if (isLiveMode) {
+      const supabase = getSupabaseBrowser();
+      await supabase?.auth.signOut();
+    }
+    setAuthed(false);
+    setUserId(null);
+    setEmail("");
+    // Signing out should leave nothing of this person behind on the device.
+    setRecentSearches([]);
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const addSearch = useCallback((query: string) => {
+    const q = query.trim();
+    if (!q) return;
+    setRecentSearches((prev) => [q, ...prev.filter((x) => x !== q)].slice(0, 6));
+  }, []);
+
+  const clearSearches = useCallback(() => setRecentSearches([]), []);
+
+  const value = useMemo<State>(
+    () => ({
+      ready,
+      authed,
+      email,
+      userId,
       liveMode: isLiveMode,
-      signIn: (email: string) => patch({ authed: true, email }),
-      signOut: async () => {
-        if (isLiveMode) {
-          const supabase = getSupabaseBrowser();
-          await supabase?.auth.signOut();
-        }
-        patch({ authed: false, userId: null });
-      },
-      catalog: CATALOG,
-      trackedIds,
-      tracked: CATALOG.filter((p) => trackedIds.includes(p.id)),
-      isTracked: (id: string) => trackedIds.includes(id),
-      track: (id: string) =>
-        setState((s) =>
-          s.trackedIds.includes(id) ? s : { ...s, trackedIds: [...s.trackedIds, id] },
-        ),
-      untrack: (id: string | string[]) =>
-        setState((s) => {
-          const ids = Array.isArray(id) ? id : [id];
-          return { ...s, trackedIds: s.trackedIds.filter((x) => !ids.includes(x)) };
-        }),
-      clearHistoryFlag: state.clearHistoryFlag,
-      clearHistory: () => patch({ clearHistoryFlag: true }),
-      recentSearches: state.recentSearches,
-      addSearch: (q: string) =>
-        setState((s) => ({
-          ...s,
-          recentSearches: [q, ...s.recentSearches.filter((x) => x !== q)].slice(0, 5),
-        })),
-      settings: state.settings,
-      updateSettings: (p: Partial<Settings>) =>
-        setState((s) => ({ ...s, settings: { ...s.settings, ...p } })),
-    };
-  }, [state, patch]);
+      signIn,
+      signOut,
+      recentSearches,
+      addSearch,
+      clearSearches,
+    }),
+    [ready, authed, email, userId, recentSearches, signIn, signOut, addSearch, clearSearches],
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Hooks                                                             */
-/* ------------------------------------------------------------------ */
-
-export function useStore() {
+export function useStore(): State {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error("useStore must be used inside StoreProvider");
   return ctx;
 }
 
-export function useHydrated() {
-  const [h, setH] = useState(false);
-  useEffect(() => setH(true), []);
-  return h;
+/** True after the first client render — for suppressing hydration mismatch. */
+export function useHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  return hydrated;
 }

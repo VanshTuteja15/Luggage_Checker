@@ -1,144 +1,102 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchWeb, type WebSearchResult } from "@/lib/serpapi";
-import { getGemini } from "@/lib/gemini";
-import { CATALOG, lowestOffer } from "@/lib/data";
+import { badRequest, errorResponse } from "@/lib/api/respond";
+import {
+  activeProvider,
+  configuredProviders,
+  getAllBudgets,
+  providerLabel,
+  search,
+} from "@/lib/search";
+import { requireUser } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * POST /api/search
- * Search for luggage across the web.
  *
- * Priority:
- *  1. SerpAPI (Google Shopping Canada) — real-time, best results
- *  2. Gemini AI search — uses the model's knowledge + product context
- *  3. Local catalog fallback — filters hardcoded data
+ * Natural-language luggage search across Canadian retailers.
+ *
+ * Every price returned came from a real listing that a price provider
+ * fetched, and carries the URL it came from. The LLM interprets the query
+ * and groups listings into products; it never supplies a price.
+ *
+ * Results are cached, so a repeated search costs no provider quota.
  */
 export async function POST(req: NextRequest) {
   try {
-    const { query } = await req.json();
-    if (!query || typeof query !== "string") {
-      return NextResponse.json(
-        { error: "query string is required" },
-        { status: 400 },
-      );
+    const { supabase, userId } = await requireUser(req);
+
+    const body = (await req.json().catch(() => ({}))) as {
+      query?: unknown;
+      limit?: unknown;
+      allRetailers?: unknown;
+      refresh?: unknown;
+      mode?: unknown;
+    };
+
+    const query = typeof body.query === "string" ? body.query.trim() : "";
+    if (!query) return badRequest("A search query is required.");
+    if (query.length > 200) return badRequest("That search query is too long.");
+
+    const mode = body.mode === "catalog" ? "catalog" : "compare";
+
+    const limit =
+      typeof body.limit === "number" && body.limit > 0 && body.limit <= 25
+        ? Math.floor(body.limit)
+        : mode === "catalog"
+          ? 20
+          : 10;
+
+    // Catalog lookups need the full retailer set so variants aren't hidden.
+    // Compare still respects Settings, then unions in Amazon/Walmart/Samsonite.
+    let allowedRetailers: string[] = [];
+    if (body.allRetailers !== true && mode !== "catalog") {
+      const { data } = await supabase
+        .from("user_settings")
+        .select("retailers")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (Array.isArray(data?.retailers)) allowedRetailers = data.retailers as string[];
     }
 
-    // ─── Try SerpAPI first ───────────────────────────────────
-    if (process.env.SERPAPI_KEY) {
-      try {
-        const results = await searchWeb(`${query} luggage`);
-        return NextResponse.json({
-          source: "serpapi",
-          results,
-          query,
-        });
-      } catch (err) {
-        console.warn("SerpAPI search failed, falling back:", err);
-      }
-    }
+    const result = await search(query, {
+      allowedRetailers,
+      limit,
+      db: supabase,
+      bypassCache: body.refresh === true,
+      mode,
+    });
 
-    // ─── Gemini AI search fallback ──────────────────────────
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const results = await geminiSearch(query);
-        return NextResponse.json({
-          source: "gemini",
-          results,
-          query,
-        });
-      } catch (err) {
-        console.warn("Gemini search failed, falling back:", err);
-      }
-    }
-
-    // ─── Local catalog fallback ─────────────────────────────
-    const needle = query.toLowerCase();
-    const localResults: WebSearchResult[] = CATALOG
-      .filter((p) => {
-        const haystack = `${p.name} ${p.brand} ${p.model} ${p.color} ${p.upc}`.toLowerCase();
-        return haystack.includes(needle);
-      })
-      .flatMap((p) =>
-        p.offers.map((o) => ({
-          title: p.name,
-          source: o.retailer,
-          price: o.price,
-          url: o.url,
-          thumbnail: undefined,
-          rating: undefined,
-          reviews: undefined,
-          snippet: `${p.brand} ${p.model} — ${p.color}`,
-          knownRetailer: o.retailer,
-        })),
-      )
-      .sort((a, b) => a.price - b.price);
+    const budgets = await getAllBudgets(supabase, configuredProviders());
 
     return NextResponse.json({
-      source: "local",
-      results: localResults,
-      query,
+      ...result,
+      providerLabel: providerLabel(result.provider),
+      budgets,
     });
   } catch (err) {
-    console.error("POST /api/search error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 },
-    );
+    return errorResponse(err, "POST /api/search");
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Gemini-powered search                                             */
-/* ------------------------------------------------------------------ */
-
-async function geminiSearch(query: string): Promise<WebSearchResult[]> {
-  const genAI = getGemini();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-  // Give Gemini our product data + the user's query
-  const productContext = CATALOG.map((p) => {
-    const low = lowestOffer(p);
-    return `${p.name} | ${p.brand} | Lowest: $${low.price} at ${low.retailer} | Offers at ${p.offers.length} retailers`;
-  }).join("\n");
-
-  const prompt = `You are a luggage search engine. The user searched for: "${query}"
-
-Here are the products in our database:
-${productContext}
-
-Return a JSON array of matching products. Each item should have:
-- "title": product name
-- "source": retailer name with best price
-- "price": lowest price as a number
-- "url": a Google Shopping search URL for that product (format: https://www.google.ca/search?tbm=shop&q=ENCODED_PRODUCT_NAME)
-- "snippet": brief description (brand, size, material, color)
-- "rating": estimated rating out of 5 (number or null)
-- "reviews": estimated number of reviews (number or null)
-
-Also include 3-5 additional real luggage products that match the query but are NOT in the database. Use your knowledge of real luggage products, brands, and typical Canadian retail prices (in CAD). For these, set source to the most likely Canadian retailer.
-
-Return ONLY the JSON array, no other text. Sort by relevance to the query, then by price ascending.`;
-
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-
-  // Extract JSON from the response
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return [];
-
+/** GET /api/search — which price source is configured, and what's left of it. */
+export async function GET(req: NextRequest) {
   try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    return parsed.map((item: Record<string, unknown>) => ({
-      title: String(item.title ?? ""),
-      source: String(item.source ?? ""),
-      price: Number(item.price) || 0,
-      url: String(item.url ?? ""),
-      thumbnail: undefined,
-      rating: item.rating ? Number(item.rating) : undefined,
-      reviews: item.reviews ? Number(item.reviews) : undefined,
-      snippet: String(item.snippet ?? ""),
-      knownRetailer: null, // Gemini results aren't mapped to known retailers
-    }));
-  } catch {
-    return [];
+    const { supabase } = await requireUser(req);
+
+    const provider = activeProvider();
+    const providers = configuredProviders();
+    const budgets = await getAllBudgets(supabase, providers);
+
+    return NextResponse.json({
+      provider,
+      providerLabel: provider ? providerLabel(provider) : null,
+      configured: provider !== null,
+      providers,
+      budgets,
+    });
+  } catch (err) {
+    return errorResponse(err, "GET /api/search");
   }
 }
