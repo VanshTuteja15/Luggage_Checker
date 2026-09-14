@@ -72,6 +72,16 @@ const NOISE_WORDS = new Set([
   "black", "blue", "silver", "grey", "gray", "navy", "red", "green",
 ]);
 
+/** Pull a size out of a listing title: 21", 28 inch, Carry-On, Check-In. */
+export function extractSize(title: string): string {
+  const inches = title.match(/\b(\d{2}(?:\.\d)?)\s*(?:"|''|inch|inches|in\b)/i);
+  if (inches) return `${inches[1]} inch`;
+  if (/\bcarry[-\s]?on\b/i.test(title)) return "Carry-On";
+  if (/\bcheck(?:ed)?[-\s]?in\b/i.test(title)) return "Check-In";
+  if (/\bunderseat\b/i.test(title)) return "Underseat";
+  return "";
+}
+
 /** A rough identity signature for a listing title, used as an LLM fallback. */
 function titleSignature(title: string): string {
   const tokens = title
@@ -104,7 +114,7 @@ function stripRetailerNames(title: string): string {
 /** Build a SearchProduct from a set of offers plus descriptive fields. */
 function buildProduct(
   offers: Offer[],
-  meta: { name: string; brand: string; model: string; color: string; productType: string | null; upc: string | null },
+  meta: { name: string; brand: string; model: string; color: string; size: string; productType: string | null; upc: string | null },
 ): SearchProduct | null {
   if (offers.length === 0) return null;
 
@@ -130,6 +140,7 @@ function buildProduct(
     brand: meta.brand,
     model: meta.model,
     color: meta.color,
+    size: meta.size,
     upc: meta.upc,
     productType: meta.productType,
     imageUrl: thumbnail,
@@ -171,6 +182,7 @@ export function clusterHeuristic(offers: Offer[]): SearchProduct[] {
       brand,
       model,
       color: "",
+      size: extractSize(group[0].title),
       productType: null,
       upc: null,
     });
@@ -261,6 +273,7 @@ Rules:
         brand,
         model: model || size || name,
         color: cleanStr(c.color),
+        size: size || extractSize(group[0].title),
         productType: cleanStr(c.productType) || null,
         upc,
       });

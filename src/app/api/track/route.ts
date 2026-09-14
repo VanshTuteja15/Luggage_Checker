@@ -63,7 +63,7 @@ function parseProduct(raw: unknown): SearchProduct | null {
     brand: typeof p.brand === "string" ? p.brand.trim().slice(0, 100) : "Unknown",
     model: typeof p.model === "string" ? p.model.trim().slice(0, 120) : "",
     color: typeof p.color === "string" ? p.color.trim().slice(0, 60) : "",
-    size: typeof p.size === "string" ? p.size.trim().slice(0, 40) : "",
+    size: typeof p.size === "string" ? p.size.trim().slice(0, 60) : "",
     upc: upcRaw.length >= 12 && upcRaw.length <= 14 ? upcRaw : null,
     productType: typeof p.productType === "string" ? p.productType.slice(0, 60) : null,
     imageUrl: typeof p.imageUrl === "string" ? p.imageUrl : null,

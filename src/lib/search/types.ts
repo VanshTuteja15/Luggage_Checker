@@ -9,12 +9,6 @@
 
 export type ProviderName = "serper" | "serpapi" | "gemini-grounded";
 
-/**
- * compare — Search Products: cheapest live listings across retailers.
- * catalog — Tracked Products: discover variants (type / size / colour) to add.
- */
-export type SearchMode = "compare" | "catalog";
-
 /** A single retailer listing for a product, as fetched from a provider. */
 export type Offer = {
   /** Canonical retailer name when known, otherwise the raw source label. */
@@ -38,7 +32,7 @@ export type Offer = {
 
 /** A distinct physical product with every offer we found for it. */
 export type SearchProduct = {
-  /** Stable slug derived from brand + model + size + colour. */
+  /** Stable slug derived from brand + model (+ colour). */
   key: string;
   name: string;
   brand: string;

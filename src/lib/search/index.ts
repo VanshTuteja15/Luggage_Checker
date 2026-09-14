@@ -180,7 +180,11 @@ function applyRetailerFilter(products: SearchProduct[], allowed: string[]): Sear
 
   return products
     .map((p) => {
-      const offers = p.offers.filter((o) => o.retailerKey !== null && set.has(o.retailerKey));
+      // Keep offers from retailers outside our registry: the user disabled
+      // named retailers, not ones we can't identify. Filtering those out too
+      // turned "38 listings found" into "no products" whenever a search hit
+      // mostly independent Canadian sellers.
+      const offers = p.offers.filter((o) => o.retailerKey === null || set.has(o.retailerKey));
       if (offers.length === 0) return null;
       const prices = offers.map((o) => o.price);
       const lowest = Math.min(...prices);

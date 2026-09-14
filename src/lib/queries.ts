@@ -199,7 +199,8 @@ export function useSearch() {
       query: string;
       allRetailers?: boolean;
       refresh?: boolean;
-      mode?: "compare" | "catalog";
+      /** UI hint; the API ignores it. Kept so callers can tag their intent. */
+      mode?: string;
     }) =>
       apiFetch<SearchApiResponse>("/api/search", {
         method: "POST",
