@@ -19,10 +19,12 @@ import { parseQuery } from "./parse";
 import * as geminiProvider from "./providers/gemini-grounded";
 import * as serpProvider from "./providers/serpapi";
 import * as serperProvider from "./providers/serper";
+import { ProviderError } from "./errors";
 import {
   QuotaExhaustedError,
   cacheKey,
   readCache,
+  refundCall,
   reserveCall,
   writeCache,
 } from "./quota";
@@ -70,7 +72,14 @@ export function providerConfigured(provider: ProviderName): boolean {
     case "serpapi":
       return serpProvider.serpApiConfigured();
     case "gemini-grounded":
-      return geminiProvider.geminiGroundedConfigured();
+      // Opt-in only. Grounding needs a billing-enabled Google project, so on
+      // a free key it fails every single time. Leaving it in the chain by
+      // default meant every transient SerpAPI blip produced a compound error
+      // ending in a paragraph about Google billing the user doesn't need.
+      return (
+        process.env.ENABLE_GEMINI_GROUNDED_SEARCH === "true" &&
+        geminiProvider.geminiGroundedConfigured()
+      );
     default:
       return false;
   }
@@ -259,8 +268,17 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
       usedProvider = provider;
       break;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Provider failed";
-      failures.push(`${providerLabel(provider)}: ${message}`);
+      // A call that never reached the provider must not cost the user a
+      // search. ProviderError knows which failures are billable; anything
+      // unclassified is assumed billable, so we don't undercount.
+      if (err instanceof ProviderError) {
+        if (!err.consumedQuota) await refundCall(opts.db, provider);
+        failures.push(err.userMessage);
+      } else {
+        failures.push(
+          `${providerLabel(provider)}: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
       // Try the next provider rather than failing the whole search.
     }
   }
@@ -285,9 +303,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
       );
     }
 
-    throw new NoProviderError(
-      failures.length > 0 ? failures.join(" · ") : "Every configured price source failed.",
-    );
+    // One clear sentence, not a concatenation of every provider's failure.
+    throw new NoProviderError(failures[0] ?? "The price service couldn't be reached.");
   }
 
   // Mention any provider we had to skip past, so a silent downgrade

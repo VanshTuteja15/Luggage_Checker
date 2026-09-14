@@ -63,7 +63,7 @@ leaves ~70 for searching and manual refreshes.
 
 ### Option C — Gemini with Google Search grounding
 
-A fallback if you have neither key.
+**Disabled by default.** Set `ENABLE_GEMINI_GROUNDED_SEARCH=true` to opt in.
 
 > **Requires billing.** Google Search grounding is **not** part of the Gemini
 > API free tier. It needs a billing-enabled Google AI Studio project, which
@@ -113,6 +113,8 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_APP_URL` | no | Link target in report emails |
 | `SERPER_CREDIT_LIMIT` / `SERPAPI_MONTHLY_LIMIT` | no | Raise when you leave a free plan |
 | `SEARCH_CACHE_TTL_MINUTES` | no | Cache lifetime, default 360 (6h) |
+| `SERPAPI_TIMEOUT_MS` | no | SerpAPI patience, default 25000. Raise on timeouts. |
+| `ENABLE_GEMINI_GROUNDED_SEARCH` | no | Opt into grounded Gemini. Needs Google billing. |
 
 Generate a cron secret:
 

@@ -1,15 +1,25 @@
 /* ------------------------------------------------------------------ */
 /*  Provider: SerpAPI Google Shopping (Canada)                        */
 /*                                                                     */
-/*  Highest-quality source. Every result is a real merchant listing    */
-/*  with a link and an extracted numeric price.                        */
+/*  Real merchant listings with a link and an extracted numeric price. */
 /* ------------------------------------------------------------------ */
 
 import { displayRetailer, matchRetailer } from "@/lib/retailers";
+import { ProviderError, classifyHttp } from "../errors";
 import type { Offer, SearchIntent } from "../types";
 
 const SERPAPI_BASE = "https://serpapi.com/search.json";
-const TIMEOUT_MS = 20_000;
+
+/**
+ * SerpAPI scrapes Google Shopping live, so a cold request regularly takes
+ * 15-30s — and longer on the first call against a brand-new key while the
+ * account warms up. The old 20s ceiling turned normal latency into a
+ * failure. The route allows 60s; leave headroom for one retry.
+ */
+const TIMEOUT_MS = Number(process.env.SERPAPI_TIMEOUT_MS ?? 25_000);
+
+/** Results per request. Higher is slower; 40 is plenty to cluster from. */
+const RESULT_COUNT = 40;
 
 type ShoppingResult = {
   title?: string;
@@ -21,27 +31,45 @@ type ShoppingResult = {
   thumbnail?: string;
   rating?: number;
   reviews?: number;
-  snippet?: string;
-  delivery?: string;
-  second_hand_condition?: string;
 };
 
 export function serpApiConfigured(): boolean {
   return !!process.env.SERPAPI_KEY;
 }
 
+async function requestOnce(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { signal: controller.signal, cache: "no-store" });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ProviderError("serpapi", "timeout", `SerpAPI timed out after ${timeoutMs}ms`);
+    }
+    throw new ProviderError(
+      "serpapi",
+      "network",
+      err instanceof Error ? err.message : "Network error reaching SerpAPI",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Fetch shopping offers from Google Shopping Canada.
  *
- * Returns every usable listing — filtering to specific retailers happens
- * later in the pipeline so we can report how many were found overall.
+ * Retries once on a timeout or 5xx — those are transient often enough that
+ * failing the whole search on the first one wastes the user's allowance for
+ * nothing.
  */
 export async function fetchOffers(
   intent: SearchIntent,
   opts: { apiKey?: string; limit?: number } = {},
 ): Promise<Offer[]> {
   const key = opts.apiKey || process.env.SERPAPI_KEY;
-  if (!key) throw new Error("SERPAPI_KEY is not configured");
+  if (!key) throw new ProviderError("serpapi", "auth", "SERPAPI_KEY is not configured");
 
   const params = new URLSearchParams({
     engine: "google_shopping",
@@ -49,44 +77,64 @@ export async function fetchOffers(
     gl: "ca",
     hl: "en",
     google_domain: "google.ca",
-    currency: "CAD",
-    num: String(opts.limit ?? 60),
+    num: String(opts.limit ?? RESULT_COUNT),
     api_key: key,
   });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const url = `${SERPAPI_BASE}?${params}`;
 
-  let res: Response;
-  try {
-    res = await fetch(`${SERPAPI_BASE}?${params}`, {
-      signal: controller.signal,
-      cache: "no-store",
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new Error("SerpAPI request timed out");
+  let res: Response | null = null;
+  let lastError: ProviderError | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const candidate = await requestOnce(url, TIMEOUT_MS);
+
+      if (candidate.ok) {
+        res = candidate;
+        break;
+      }
+
+      const detail = await candidate.text().catch(() => "");
+      const kind = classifyHttp(candidate.status, detail);
+      lastError = new ProviderError(
+        "serpapi",
+        kind,
+        kind === "auth"
+          ? "SerpAPI rejected the API key (invalid, or the account isn't activated yet)"
+          : `SerpAPI error ${candidate.status}: ${detail.slice(0, 200)}`,
+      );
+
+      if (!lastError.retryable) throw lastError;
+    } catch (err) {
+      lastError = err instanceof ProviderError
+        ? err
+        : new ProviderError("serpapi", "unknown", err instanceof Error ? err.message : "SerpAPI failed");
+
+      if (!lastError.retryable) throw lastError;
     }
-    throw err;
-  } finally {
-    clearTimeout(timer);
+
+    // Brief backoff before the single retry.
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 1200));
   }
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    // 401/403 almost always means a bad or exhausted key — say so plainly.
-    if (res.status === 401 || res.status === 403) {
-      throw new Error("SerpAPI rejected the API key (invalid or out of quota)");
-    }
-    throw new Error(`SerpAPI error ${res.status}: ${detail.slice(0, 200)}`);
-  }
+  if (!res) throw lastError ?? new ProviderError("serpapi", "unknown", "SerpAPI failed");
 
-  const data = (await res.json()) as {
+  const data = (await res.json().catch(() => null)) as {
     shopping_results?: ShoppingResult[];
     error?: string;
-  };
+  } | null;
 
-  if (data.error) throw new Error(`SerpAPI: ${data.error}`);
+  if (!data) throw new ProviderError("serpapi", "unknown", "SerpAPI returned an unreadable response");
+
+  if (data.error) {
+    const kind = /key|unauthor/i.test(data.error)
+      ? "auth"
+      : /run out|limit|plan/i.test(data.error)
+        ? "quota"
+        : "unknown";
+    throw new ProviderError("serpapi", kind, `SerpAPI: ${data.error}`);
+  }
 
   const fetchedAt = new Date().toISOString();
 
@@ -100,17 +148,14 @@ export async function fetchOffers(
       if (!price || price <= 0) return null;
 
       const source = r.source ?? "";
-      const key = matchRetailer(source, url);
 
       return {
         retailer: displayRetailer(source, url),
-        retailerKey: key,
+        retailerKey: matchRetailer(source, url),
         price: Math.round(price * 100) / 100,
         currency: "CAD",
-        url,
-        // Google Shopping only lists purchasable items; treat used listings
-        // as in stock too, but they're flagged by title downstream.
         inStock: true,
+        url,
         title: (r.title ?? "").trim(),
         thumbnail: r.thumbnail,
         rating: typeof r.rating === "number" ? r.rating : undefined,

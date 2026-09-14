@@ -193,6 +193,35 @@ export async function reserveCall(
   }
 }
 
+/**
+ * Hand a reserved call back.
+ *
+ * Called when a provider failed in a way that clearly didn't consume the
+ * account's allowance — a rejected key, or a request that never left the
+ * building. Without this, a run of transient failures silently eats a
+ * month's quota and the usage readout lies to the user.
+ */
+export async function refundCall(
+  db: SupabaseClient | undefined,
+  provider: ProviderName,
+): Promise<void> {
+  if (!db) return;
+
+  const allowance = allowanceFor(provider);
+  if (!allowance) return;
+
+  await db
+    .rpc("increment_provider_usage", {
+      p_provider: provider,
+      p_period: periodKey(allowance),
+      p_amount: -1,
+    })
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Search cache                                                      */
 /* ------------------------------------------------------------------ */
@@ -204,12 +233,11 @@ export function cacheKey(
   query: string,
   allowedRetailers: string[],
   limit: number,
-  mode = "compare",
 ): string {
   const normalised = query.trim().toLowerCase().replace(/\s+/g, " ");
   const retailers = [...allowedRetailers].sort().join(",");
   return createHash("sha256")
-    .update(`${normalised}|${retailers}|${limit}|${mode}`)
+    .update(`${normalised}|${retailers}|${limit}`)
     .digest("hex")
     .slice(0, 48);
 }
