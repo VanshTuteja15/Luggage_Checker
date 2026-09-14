@@ -13,7 +13,7 @@
 /* ------------------------------------------------------------------ */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { PRIORITY_RETAILERS, isPriorityRetailer, retailerRank } from "@/lib/retailers";
+import { RETAILER_INFO, retailerRank } from "@/lib/retailers";
 import { clusterOffers } from "./cluster";
 import { parseQuery } from "./parse";
 import * as geminiProvider from "./providers/gemini-grounded";
@@ -31,7 +31,6 @@ import {
   type Offer,
   type ProviderName,
   type SearchIntent,
-  type SearchMode,
   type SearchProduct,
   type SearchResponse,
 } from "./types";
@@ -53,11 +52,6 @@ export type SearchOptions = {
   bypassCache?: boolean;
   /** Override the cache lifetime for this search. */
   cacheTtlMinutes?: number;
-  /**
-   * compare (default): cheapest live listings — Search Products.
-   * catalog: variant discovery (type / size / colour) — Tracked Products.
-   */
-  mode?: SearchMode;
 };
 
 /**
@@ -130,21 +124,19 @@ async function fetchFromProvider(
 /* ------------------------------------------------------------------ */
 
 /**
- * Trim a product's offer list without ever dropping a priority retailer.
- * Amazon / Walmart / Costco / Samsonite etc. stay whenever they carry the item.
+ * Trim a product's offer list without ever dropping a major retailer.
+ * The client explicitly wants Amazon / Walmart / Costco / Samsonite etc.
+ * represented whenever they carry the item.
  */
 function capOffers(offers: Offer[]): Offer[] {
   if (offers.length <= MAX_OFFERS_PER_PRODUCT) return offers;
 
-  const protectedOffers = offers.filter(
-    (o) => isPriorityRetailer(o.retailerKey) || isPriorityRetailer(o.retailer),
+  const majors = offers.filter(
+    (o) => o.retailerKey && RETAILER_INFO[o.retailerKey]?.category === "major",
   );
-  const rest = offers.filter((o) => !protectedOffers.includes(o));
+  const rest = offers.filter((o) => !majors.includes(o));
 
-  const kept = [
-    ...protectedOffers,
-    ...rest.slice(0, Math.max(0, MAX_OFFERS_PER_PRODUCT - protectedOffers.length)),
-  ];
+  const kept = [...majors, ...rest.slice(0, Math.max(0, MAX_OFFERS_PER_PRODUCT - majors.length))];
   return kept.sort((a, b) => a.price - b.price);
 }
 
@@ -167,7 +159,7 @@ function applyRetailerFilter(products: SearchProduct[], allowed: string[]): Sear
         retailerCount: offers.length,
         spread: Math.round((highest - lowest) * 100) / 100,
         hasMajorRetailer: offers.some(
-          (o) => isPriorityRetailer(o.retailerKey) || isPriorityRetailer(o.retailer),
+          (o) => o.retailerKey !== null && RETAILER_INFO[o.retailerKey]?.category === "major",
         ),
       };
     })
@@ -186,40 +178,18 @@ function applyPriceFilter(products: SearchProduct[], intent: SearchIntent): Sear
 }
 
 /**
- * Rank products for the Search Products (compare) page.
- * Priority-retailer coverage first, then the lowest live price.
+ * Rank products for display.
+ *
+ * A product carried by a major retailer outranks one that isn't; among
+ * those, wider retailer coverage wins (that's what makes a price
+ * comparison useful); then the lowest price.
  */
-function rankCompareProducts(products: SearchProduct[]): SearchProduct[] {
+function rankProducts(products: SearchProduct[]): SearchProduct[] {
   return [...products].sort((a, b) => {
     if (a.hasMajorRetailer !== b.hasMajorRetailer) return a.hasMajorRetailer ? -1 : 1;
-    if (a.lowestPrice !== b.lowestPrice) return a.lowestPrice - b.lowestPrice;
     if (a.retailerCount !== b.retailerCount) return b.retailerCount - a.retailerCount;
+    if (a.lowestPrice !== b.lowestPrice) return a.lowestPrice - b.lowestPrice;
     return a.name.localeCompare(b.name);
-  });
-}
-
-function sizeSortValue(size: string): number {
-  const n = Number.parseFloat(size);
-  if (Number.isFinite(n)) return n;
-  if (/carry/i.test(size)) return 20;
-  if (/medium/i.test(size)) return 25;
-  if (/large|check/i.test(size)) return 28;
-  if (/set/i.test(size)) return 90;
-  return 50;
-}
-
-/** Rank variants for the Tracked catalog: family together, size then colour. */
-function rankCatalogProducts(products: SearchProduct[]): SearchProduct[] {
-  return [...products].sort((a, b) => {
-    const brand = a.brand.localeCompare(b.brand);
-    if (brand !== 0) return brand;
-    const model = a.model.localeCompare(b.model);
-    if (model !== 0) return model;
-    const size = sizeSortValue(a.size) - sizeSortValue(b.size);
-    if (size !== 0) return size;
-    const color = a.color.localeCompare(b.color);
-    if (color !== 0) return color;
-    return a.lowestPrice - b.lowestPrice;
   });
 }
 
@@ -239,15 +209,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const trimmed = query.trim();
   if (!trimmed) throw new Error("Search query is empty");
 
-  const mode: SearchMode = opts.mode ?? "compare";
-  const limit = opts.limit ?? (mode === "catalog" ? 20 : DEFAULT_LIMIT);
-
-  // Compare mode always keeps Amazon / Walmart / Samsonite etc. in play,
-  // even if the user unchecked them in Settings.
-  let allowedRetailers = opts.allowedRetailers ?? [];
-  if (mode === "compare" && allowedRetailers.length > 0) {
-    allowedRetailers = [...new Set([...allowedRetailers, ...PRIORITY_RETAILERS])];
-  }
+  const allowedRetailers = opts.allowedRetailers ?? [];
+  const limit = opts.limit ?? DEFAULT_LIMIT;
 
   const available = configuredProviders();
   if (available.length === 0) {
@@ -257,7 +220,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   }
 
   // ── Cache first: a repeat search should cost nothing ─────────
-  const key = cacheKey(trimmed, allowedRetailers, limit, mode);
+  const key = cacheKey(trimmed, allowedRetailers, limit);
 
   if (!opts.bypassCache) {
     const hit = await readCache(opts.db, key);
@@ -270,7 +233,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   }
 
   const warnings: string[] = [];
-  const intent = await parseQuery(trimmed, mode);
+  const intent = await parseQuery(trimmed);
 
   // ── Try each configured provider in order ────────────────────
   let offers: Offer[] = [];
@@ -303,10 +266,27 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   }
 
   if (!usedProvider) {
+    // Lead with the fix, not the symptom.
+    //
+    // Gemini grounding needs a billing-enabled project, so on a free key it
+    // always fails. If it was the only provider available, the useful message
+    // is "add a shopping key" — not a paragraph about Google billing, which
+    // sends people off to enable billing they don't need.
+    const hasShoppingProvider = available.some(
+      (p) => p === "serper" || p === "serpapi",
+    );
+
+    if (!hasShoppingProvider) {
+      throw new NoProviderError(
+        "No shopping price source is configured. Add SERPER_API_KEY (2,500 free searches) " +
+          "or SERPAPI_KEY (250 free per month) to .env.local and restart the dev server — " +
+          "note that Next.js only reads .env.local at startup, so a restart is required. " +
+          "Both are free and neither needs a credit card.",
+      );
+    }
+
     throw new NoProviderError(
-      failures.length > 0
-        ? failures.join(" · ")
-        : "Every configured price source failed.",
+      failures.length > 0 ? failures.join(" · ") : "Every configured price source failed.",
     );
   }
 
@@ -317,7 +297,6 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const response = await finish(trimmed, intent, usedProvider, offers, warnings, {
     allowedRetailers,
     limit,
-    mode,
   });
 
   if (response.products.length > 0) {
@@ -333,7 +312,7 @@ async function finish(
   provider: ProviderName,
   offers: Offer[],
   warnings: string[],
-  opts: { allowedRetailers: string[]; limit: number; mode: SearchMode },
+  opts: { allowedRetailers: string[]; limit: number },
 ): Promise<SearchResponse> {
   const offersFound = offers.length;
 
@@ -342,7 +321,7 @@ async function finish(
   }
 
   // ── Cluster into products ────────────────────────────────────
-  let products = await clusterOffers(offers, opts.mode);
+  let products = await clusterOffers(offers);
 
   // ── Filter ───────────────────────────────────────────────────
   const beforeRetailerFilter = products.length;
@@ -360,10 +339,7 @@ async function finish(
   }
 
   // ── Rank and trim ────────────────────────────────────────────
-  const ranked =
-    opts.mode === "catalog" ? rankCatalogProducts(products) : rankCompareProducts(products);
-
-  products = ranked
+  products = rankProducts(products)
     .slice(0, opts.limit)
     .map((p) => ({ ...p, offers: sortOffers(capOffers(p.offers)) }));
 
@@ -372,5 +348,5 @@ async function finish(
 
 export { getBudget, getAllBudgets, QuotaExhaustedError } from "./quota";
 export type { ProviderBudget } from "./quota";
-export type { SearchProduct, SearchResponse, SearchIntent, SearchMode, Offer } from "./types";
+export type { SearchProduct, SearchResponse, SearchIntent, Offer } from "./types";
 export { NoProviderError } from "./types";
