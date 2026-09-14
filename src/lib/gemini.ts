@@ -49,8 +49,22 @@ export function activeModel(): string {
 }
 
 /** True when the API says this model no longer exists for this key. */
-function isModelUnavailable(status: number, body: string): boolean {
+function isModelRetired(status: number, body: string): boolean {
   return status === 404 || /NOT_FOUND|no longer available|is not found/i.test(body);
+}
+
+/**
+ * True when the model exists but can't serve right now — 503 "high demand",
+ * or a per-model rate limit. Another model usually has capacity, so rotate
+ * rather than failing. Unlike a retirement, don't blacklist it: it'll be
+ * fine again in a minute.
+ */
+function isModelBusy(status: number, body: string): boolean {
+  return (
+    status === 503 ||
+    status === 429 ||
+    /UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|overloaded/i.test(body)
+  );
 }
 
 /** Default per-request timeout. Search routes are user-facing; don't hang. */
@@ -177,11 +191,19 @@ async function generate(
     const detail = await attempt.text().catch(() => "");
     lastError = `Gemini API error ${attempt.status}: ${detail.slice(0, 400)}`;
 
-    if (isModelUnavailable(attempt.status, detail)) {
+    if (isModelRetired(attempt.status, detail)) {
       // Retired or unavailable to this key — never try it again this process.
       retiredModels.add(model);
       if (resolvedModel === model) resolvedModel = null;
-      console.warn(`[gemini] model ${model} unavailable, trying next candidate`);
+      console.warn(`[gemini] model ${model} retired, trying next candidate`);
+      continue;
+    }
+
+    if (isModelBusy(attempt.status, detail)) {
+      // Temporary capacity problem. Try the next model, but don't blacklist
+      // this one — clear the cached choice so the next request re-probes.
+      if (resolvedModel === model) resolvedModel = null;
+      console.warn(`[gemini] model ${model} busy (${attempt.status}), trying next candidate`);
       continue;
     }
 
@@ -192,6 +214,11 @@ async function generate(
   }
 
   if (!res) {
+    if (/503|UNAVAILABLE|high demand|429/i.test(lastError)) {
+      throw new Error(
+        "Every Gemini model is busy right now (503 high demand). This is temporary and search still works — query parsing and product grouping just fall back to non-AI logic.",
+      );
+    }
     throw new Error(
       `${lastError}\nNo configured Gemini model is available to this API key. ` +
         "Set GEMINI_MODEL to a current model from https://ai.google.dev/gemini-api/docs/models",

@@ -6,7 +6,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "probe": "node scripts/probe-serpapi.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

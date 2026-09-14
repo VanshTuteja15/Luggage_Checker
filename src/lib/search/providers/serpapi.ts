@@ -22,8 +22,12 @@ function timeoutMs(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 25_000;
 }
 
-/** Results per request. Higher is slower; 40 is plenty to cluster from. */
-const RESULT_COUNT = 40;
+/**
+ * Results per request. SerpAPI scrapes live, so this is the single biggest
+ * lever on latency — 40 results was a meaningful part of the timeouts.
+ * 20 still gives plenty to cluster into 10 products.
+ */
+const RESULT_COUNT = 20;
 
 type ShoppingResult = {
   title?: string;
