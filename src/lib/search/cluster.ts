@@ -12,8 +12,8 @@
 /* ------------------------------------------------------------------ */
 
 import { callGeminiJSON, geminiConfigured, type GeminiSchema } from "@/lib/gemini";
-import { RETAILER_INFO, isPriorityRetailer } from "@/lib/retailers";
-import type { Offer, SearchMode, SearchProduct } from "./types";
+import { RETAILER_INFO } from "@/lib/retailers";
+import type { Offer, SearchProduct } from "./types";
 
 const CLUSTER_SCHEMA: GeminiSchema = {
   type: "OBJECT",
@@ -101,27 +101,10 @@ function stripRetailerNames(title: string): string {
   return out.replace(/\s{2,}/g, " ").replace(/^[\s\-–|,]+|[\s\-–|,]+$/g, "").trim();
 }
 
-function extractSize(title: string): string {
-  const inch = title.match(/\b(\d{2}(?:\.\d)?)\s*(?:["”]|inch|in\.?)\b/i);
-  if (inch) return `${inch[1]} inch`;
-  if (/\bcarry[- ]?on\b/i.test(title)) return "Carry-On";
-  if (/\bchecked\b/i.test(title)) return "Checked";
-  if (/\bluggage set\b|\b\d[- ]piece\b/i.test(title)) return "Set";
-  return "";
-}
-
 /** Build a SearchProduct from a set of offers plus descriptive fields. */
 function buildProduct(
   offers: Offer[],
-  meta: {
-    name: string;
-    brand: string;
-    model: string;
-    color: string;
-    size: string;
-    productType: string | null;
-    upc: string | null;
-  },
+  meta: { name: string; brand: string; model: string; color: string; productType: string | null; upc: string | null },
 ): SearchProduct | null {
   if (offers.length === 0) return null;
 
@@ -139,8 +122,7 @@ function buildProduct(
   const highest = Math.max(...prices);
 
   const thumbnail = deduped.find((o) => o.thumbnail)?.thumbnail ?? null;
-  const key =
-    slugify(`${meta.brand} ${meta.model} ${meta.size} ${meta.color}`.trim()) || slugify(meta.name);
+  const key = slugify(`${meta.brand} ${meta.model} ${meta.color}`.trim()) || slugify(meta.name);
 
   return {
     key,
@@ -148,7 +130,6 @@ function buildProduct(
     brand: meta.brand,
     model: meta.model,
     color: meta.color,
-    size: meta.size,
     upc: meta.upc,
     productType: meta.productType,
     imageUrl: thumbnail,
@@ -158,7 +139,7 @@ function buildProduct(
     retailerCount: deduped.length,
     spread: Math.round((highest - lowest) * 100) / 100,
     hasMajorRetailer: deduped.some(
-      (o) => isPriorityRetailer(o.retailerKey) || isPriorityRetailer(o.retailer),
+      (o) => o.retailerKey !== null && RETAILER_INFO[o.retailerKey]?.category === "major",
     ),
   };
 }
@@ -190,7 +171,6 @@ export function clusterHeuristic(offers: Offer[]): SearchProduct[] {
       brand,
       model,
       color: "",
-      size: extractSize(title),
       productType: null,
       upc: null,
     });
@@ -213,26 +193,26 @@ export function clusterHeuristic(offers: Offer[]): SearchProduct[] {
  */
 export async function clusterOffers(
   offers: Offer[],
-  mode: SearchMode = "compare",
+  opts: { timeoutMs?: number } = {},
 ): Promise<SearchProduct[]> {
   if (offers.length === 0) return [];
   if (!geminiConfigured()) return clusterHeuristic(offers);
 
+  // Out of time — fall back to heuristic grouping rather than returning
+  // nothing. Real prices grouped imperfectly beat an empty result.
+  const timeoutMs = opts.timeoutMs ?? 25_000;
+  if (timeoutMs < 4_000) return clusterHeuristic(offers);
+
   const listing = offers
     .map((o, i) => `${i} | ${o.retailer} | $${o.price.toFixed(2)} | ${o.title.slice(0, 130)}`)
     .join("\n");
-
-  const catalogRule =
-    mode === "catalog"
-      ? `The user is browsing a brand or product line to pick variants to track. Split every distinct size, colour, AND product type into its own product. A 21-inch and a 28-inch of the same model are NEVER the same product. A black and a navy of the same size SHOULD be separate products so the user can add the colour they want. Always fill "size" (e.g. "21 inch", "Carry-On", "Large") and "color" when the title has them.`
-      : `Two listings belong to the same product only when they are the same brand, the same model line, and the same size. Different sizes of the same model are DIFFERENT products. Different colours of the same model and size may be grouped together; put the most common colour in "color".`;
 
   const prompt = `Below are luggage listings from Canadian retailers, one per line, formatted as:
 index | retailer | price | title
 
 ${listing}
 
-Group these listings by the physical product they are selling. ${catalogRule}
+Group these listings by the physical product they are selling. Two listings belong to the same product only when they are the same brand, the same model line, and the same size. Different sizes of the same model are DIFFERENT products. Different colours of the same model and size may be grouped together; put the most common colour in "color".
 
 For each product give a clean "name" (brand + model + size, no retailer name, no marketing words like "New" or "Free Shipping"), the "brand", the "model" line, optional "color", "size" and "productType", and "offerIndexes": every index from the list above that belongs to this product.
 
@@ -246,7 +226,7 @@ Rules:
     const parsed = await callGeminiJSON<{ products?: RawCluster[] }>(prompt, CLUSTER_SCHEMA, {
       temperature: 0,
       maxOutputTokens: 4096,
-      timeoutMs: 25_000,
+      timeoutMs,
     });
 
     const clusters = parsed?.products;
@@ -281,7 +261,6 @@ Rules:
         brand,
         model: model || size || name,
         color: cleanStr(c.color),
-        size: size || extractSize(group[0].title),
         productType: cleanStr(c.productType) || null,
         upc,
       });

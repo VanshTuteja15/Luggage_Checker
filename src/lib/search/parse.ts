@@ -7,7 +7,7 @@
 /* ------------------------------------------------------------------ */
 
 import { callGeminiJSON, geminiConfigured, type GeminiSchema } from "@/lib/gemini";
-import type { SearchIntent, SearchMode } from "./types";
+import type { SearchIntent } from "./types";
 
 const INTENT_SCHEMA: GeminiSchema = {
   type: "OBJECT",
@@ -57,27 +57,17 @@ function stripPricePhrases(query: string): string {
     .trim();
 }
 
-function ensureLuggageTerms(terms: string): string {
-  if (/\b(luggage|suitcase|carry-?on|spinner|duffel|backpack|travel bag)\b/i.test(terms)) {
-    return terms;
-  }
-  return `${terms} luggage`.trim();
-}
-
-function fallbackIntent(query: string, mode: SearchMode): SearchIntent {
-  const terms = ensureLuggageTerms(stripPricePhrases(query) || query);
+function fallbackIntent(query: string): SearchIntent {
+  const terms = stripPricePhrases(query) || query;
   return {
     terms,
     brand: null,
     model: null,
     productType: null,
-    maxPrice: mode === "catalog" ? null : heuristicMaxPrice(query),
-    minPrice: mode === "catalog" ? null : heuristicMinPrice(query),
+    maxPrice: heuristicMaxPrice(query),
+    minPrice: heuristicMinPrice(query),
     features: [],
-    explanation:
-      mode === "catalog"
-        ? `Finding types, sizes and colours for "${stripPricePhrases(query) || query}".`
-        : `Searching live prices for "${terms}".`,
+    explanation: `Searching for "${terms}".`,
   };
 }
 
@@ -100,47 +90,39 @@ function cleanString(value: unknown): string | null {
  */
 export async function parseQuery(
   query: string,
-  mode: SearchMode = "compare",
+  opts: { timeoutMs?: number } = {},
 ): Promise<SearchIntent> {
   const raw = query.trim();
-  if (!raw) return fallbackIntent(raw, mode);
+  if (!raw) return fallbackIntent(raw);
 
-  if (!geminiConfigured()) return fallbackIntent(raw, mode);
+  if (!geminiConfigured()) return fallbackIntent(raw);
 
-  const catalogExtra =
-    mode === "catalog"
-      ? `
-This is a catalog lookup, not a price-comparison query.
-- If the user named a brand (e.g. "American Tourister", "Samsonite"), put that in "brand" and set "terms" to "{brand} luggage" so the engine returns the full range of types, sizes and colours.
-- Do not set productType unless the user named one — we want every type back.
-- Do not set maxPrice / minPrice unless the user stated a budget.
-- "explanation" should say we are listing variants, e.g. "Showing American Tourister luggage by type, size and colour."`
-      : `
-- "terms" must be keywords a shopping engine would match on. Include the brand and model when the user named them. Do not include price constraints or words like "cheap" or "best".
-- Convert any price constraint into maxPrice / minPrice as plain numbers in CAD.
-- "explanation" is one short sentence you would show the user, e.g. "Looking for Samsonite carry-on spinners under $300."`;
+  // With no time left, skip the LLM entirely — the heuristic parser still
+  // extracts price limits and usable keywords.
+  const timeoutMs = opts.timeoutMs ?? 12_000;
+  if (timeoutMs < 2_000) return fallbackIntent(raw);
 
   const prompt = `You interpret shopping queries for a Canadian luggage price-tracking tool.
 
 User query: "${raw}"
-${catalogExtra}
 
 Extract the search intent. Rules:
-- "terms" is the keyword string sent to Google Shopping. Always include a luggage word (luggage, suitcase, carry-on) so results stay on-category.
+- "terms" must be keywords a shopping engine would match on. Include the brand and model when the user named them. Do not include price constraints or words like "cheap" or "best".
 - If the user named a specific product, put the brand in "brand" and the model line in "model".
+- Convert any price constraint into maxPrice / minPrice as plain numbers in CAD.
 - "features" holds attributes like "hardside", "spinner", "expandable", "carry-on size", "TSA lock".
+- "explanation" is one short sentence you would show the user, e.g. "Looking for Samsonite carry-on spinners under $300."
 - Never add a brand the user did not mention.`;
 
   try {
     const parsed = await callGeminiJSON<Record<string, unknown>>(prompt, INTENT_SCHEMA, {
       temperature: 0,
-      timeoutMs: 12_000,
+      timeoutMs,
     });
 
-    if (!parsed) return fallbackIntent(raw, mode);
+    if (!parsed) return fallbackIntent(raw);
 
-    const terms =
-      ensureLuggageTerms(cleanString(parsed.terms) ?? stripPricePhrases(raw) ?? raw);
+    const terms = cleanString(parsed.terms) ?? stripPricePhrases(raw) ?? raw;
     const features = Array.isArray(parsed.features)
       ? parsed.features.filter((f): f is string => typeof f === "string" && f.trim().length > 0)
       : [];
@@ -150,18 +132,12 @@ Extract the search intent. Rules:
       brand: cleanString(parsed.brand),
       model: cleanString(parsed.model),
       productType: cleanString(parsed.productType),
-      maxPrice:
-        mode === "catalog"
-          ? clampPrice(parsed.maxPrice)
-          : (clampPrice(parsed.maxPrice) ?? heuristicMaxPrice(raw)),
-      minPrice:
-        mode === "catalog"
-          ? clampPrice(parsed.minPrice)
-          : (clampPrice(parsed.minPrice) ?? heuristicMinPrice(raw)),
+      maxPrice: clampPrice(parsed.maxPrice) ?? heuristicMaxPrice(raw),
+      minPrice: clampPrice(parsed.minPrice) ?? heuristicMinPrice(raw),
       features,
-      explanation: cleanString(parsed.explanation) ?? fallbackIntent(raw, mode).explanation,
+      explanation: cleanString(parsed.explanation) ?? `Searching for "${terms}".`,
     };
   } catch {
-    return fallbackIntent(raw, mode);
+    return fallbackIntent(raw);
   }
 }

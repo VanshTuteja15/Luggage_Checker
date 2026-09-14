@@ -19,6 +19,7 @@ import { parseQuery } from "./parse";
 import * as geminiProvider from "./providers/gemini-grounded";
 import * as serpProvider from "./providers/serpapi";
 import * as serperProvider from "./providers/serper";
+import { Deadline, NO_METER, type Meter } from "./deadline";
 import { ProviderError } from "./errors";
 import {
   QuotaExhaustedError,
@@ -42,6 +43,18 @@ const MAX_OFFERS_PER_PRODUCT = 10;
 
 /** Default number of products returned. */
 const DEFAULT_LIMIT = 10;
+
+/**
+ * Total wall-clock budget for one search.
+ *
+ * The route allows 60s. Stop at 50s so we return a real answer (or a clear
+ * error) instead of being killed by the platform after the provider has
+ * already billed us.
+ */
+function searchBudgetMs(): number {
+  const raw = Number(process.env.SEARCH_BUDGET_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 50_000;
+}
 
 export type SearchOptions = {
   /** Restrict results to these canonical retailer names. Empty = all. */
@@ -115,13 +128,25 @@ export function providerLabel(p: ProviderName): string {
 async function fetchFromProvider(
   provider: ProviderName,
   intent: SearchIntent,
+  ctx: { deadline: Deadline; meter: Meter },
 ): Promise<{ offers: Offer[]; warnings: string[] }> {
   switch (provider) {
     case "serper":
+      // Serper has no internal retry, so the caller's single reservation is
+      // already exact.
+      await ctx.meter.beforeAttempt();
       return { offers: await serperProvider.fetchOffers(intent), warnings: [] };
     case "serpapi":
-      return { offers: await serpProvider.fetchOffers(intent), warnings: [] };
+      // Meters itself per HTTP attempt, because it retries internally.
+      return {
+        offers: await serpProvider.fetchOffers(intent, {
+          deadline: ctx.deadline,
+          meter: ctx.meter,
+        }),
+        warnings: [],
+      };
     case "gemini-grounded":
+      await ctx.meter.beforeAttempt();
       return geminiProvider.fetchOffers(intent);
     default:
       throw new NoProviderError(`Unknown provider: ${provider}`);
@@ -242,7 +267,14 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   }
 
   const warnings: string[] = [];
-  const intent = await parseQuery(trimmed);
+
+  // One shared clock for the whole pipeline.
+  const deadline = Deadline.in(searchBudgetMs());
+
+  // Query parsing is a nicety — never let it eat the fetch's time.
+  const intent = await parseQuery(trimmed, {
+    timeoutMs: deadline.budget(9_000, 30_000),
+  });
 
   // ── Try each configured provider in order ────────────────────
   let offers: Offer[] = [];
@@ -250,19 +282,29 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const failures: string[] = [];
 
   for (const provider of available) {
-    // Respect the free allowance before spending a call.
-    try {
-      await reserveCall(opts.db, provider);
-    } catch (err) {
-      if (err instanceof QuotaExhaustedError) {
-        failures.push(err.message);
-        continue;
-      }
-      throw err;
+    if (deadline.expired) {
+      failures.push("The search took too long. Try again.");
+      break;
     }
 
+    // Meters every billable HTTP attempt, not just one per provider —
+    // a provider that retries internally spends two searches, and the
+    // counter has to reflect that.
+    let quotaError: QuotaExhaustedError | null = null;
+    const meter: Meter = {
+      beforeAttempt: async () => {
+        try {
+          await reserveCall(opts.db, provider);
+        } catch (err) {
+          if (err instanceof QuotaExhaustedError) quotaError = err;
+          throw err;
+        }
+      },
+      refundAttempt: async () => refundCall(opts.db, provider),
+    };
+
     try {
-      const result = await fetchFromProvider(provider, intent);
+      const result = await fetchFromProvider(provider, intent, { deadline, meter });
       offers = result.offers;
       warnings.push(...result.warnings);
       usedProvider = provider;
@@ -271,9 +313,13 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
       // A call that never reached the provider must not cost the user a
       // search. ProviderError knows which failures are billable; anything
       // unclassified is assumed billable, so we don't undercount.
-      if (err instanceof ProviderError) {
-        if (!err.consumedQuota) await refundCall(opts.db, provider);
+      if (quotaError) {
+        failures.push((quotaError as QuotaExhaustedError).message);
+      } else if (err instanceof ProviderError) {
+        // The provider already refunded its own non-billable attempts.
         failures.push(err.userMessage);
+      } else if (err instanceof QuotaExhaustedError) {
+        failures.push(err.message);
       } else {
         failures.push(
           `${providerLabel(provider)}: ${err instanceof Error ? err.message : "failed"}`,
@@ -314,6 +360,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const response = await finish(trimmed, intent, usedProvider, offers, warnings, {
     allowedRetailers,
     limit,
+    deadline,
   });
 
   if (response.products.length > 0) {
@@ -329,7 +376,7 @@ async function finish(
   provider: ProviderName,
   offers: Offer[],
   warnings: string[],
-  opts: { allowedRetailers: string[]; limit: number },
+  opts: { allowedRetailers: string[]; limit: number; deadline: Deadline },
 ): Promise<SearchResponse> {
   const offersFound = offers.length;
 
@@ -338,7 +385,12 @@ async function finish(
   }
 
   // ── Cluster into products ────────────────────────────────────
-  let products = await clusterOffers(offers);
+  // Whatever time is left is the clustering budget. If it runs out the
+  // heuristic grouping takes over, so we still return real prices rather
+  // than nothing.
+  let products = await clusterOffers(offers, {
+    timeoutMs: opts.deadline.budget(22_000, 1_500),
+  });
 
   // ── Filter ───────────────────────────────────────────────────
   const beforeRetailerFilter = products.length;

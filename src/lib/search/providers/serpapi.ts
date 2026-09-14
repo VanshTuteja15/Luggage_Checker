@@ -5,6 +5,7 @@
 /* ------------------------------------------------------------------ */
 
 import { displayRetailer, matchRetailer } from "@/lib/retailers";
+import { Deadline, NO_METER, type Meter } from "../deadline";
 import { ProviderError, classifyHttp } from "../errors";
 import type { Offer, SearchIntent } from "../types";
 
@@ -16,7 +17,10 @@ const SERPAPI_BASE = "https://serpapi.com/search.json";
  * account warms up. The old 20s ceiling turned normal latency into a
  * failure. The route allows 60s; leave headroom for one retry.
  */
-const TIMEOUT_MS = Number(process.env.SERPAPI_TIMEOUT_MS ?? 25_000);
+function timeoutMs(): number {
+  const raw = Number(process.env.SERPAPI_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 25_000;
+}
 
 /** Results per request. Higher is slower; 40 is plenty to cluster from. */
 const RESULT_COUNT = 40;
@@ -66,10 +70,20 @@ async function requestOnce(url: string, timeoutMs: number): Promise<Response> {
  */
 export async function fetchOffers(
   intent: SearchIntent,
-  opts: { apiKey?: string; limit?: number } = {},
+  opts: {
+    apiKey?: string;
+    limit?: number;
+    /** Shared time budget so a retry can't overrun the route's ceiling. */
+    deadline?: Deadline;
+    /** Counts every HTTP attempt, because SerpAPI bills per request. */
+    meter?: Meter;
+  } = {},
 ): Promise<Offer[]> {
   const key = opts.apiKey || process.env.SERPAPI_KEY;
   if (!key) throw new ProviderError("serpapi", "auth", "SERPAPI_KEY is not configured");
+
+  const meter = opts.meter ?? NO_METER;
+  const deadline = opts.deadline;
 
   const params = new URLSearchParams({
     engine: "google_shopping",
@@ -86,36 +100,75 @@ export async function fetchOffers(
   let res: Response | null = null;
   let lastError: ProviderError | null = null;
 
+  const BACKOFF_MS = 1200;
+
   for (let attempt = 0; attempt < 2; attempt++) {
+    // Never wait longer than the budget allows, and always leave a little
+    // for parsing the response.
+    // Two separate questions, previously conflated: is there enough budget
+    // left to bother trying, and how long may this attempt take?
+    const MIN_USEFUL_ATTEMPT_MS = 3_000;
+    if (deadline && !deadline.hasAtLeast(MIN_USEFUL_ATTEMPT_MS)) {
+      throw (
+        lastError ??
+        new ProviderError("serpapi", "timeout", "Ran out of time before querying SerpAPI")
+      );
+    }
+
+    const ceiling = timeoutMs();
+    const timeout = deadline ? Math.max(1, Math.min(ceiling, deadline.budget(ceiling, 2_000))) : ceiling;
+
+    // Claim the call BEFORE the request — this is the one that gets billed.
+    // A QuotaExhaustedError from here propagates: no request, no charge.
+    await meter.beforeAttempt();
+
+    // Exactly one error path per attempt, so a failure can't be refunded
+    // twice. (It could: `throw` inside the try was caught by its own catch.)
+    let failure: ProviderError | null = null;
+    let candidate: Response | null = null;
+
     try {
-      const candidate = await requestOnce(url, TIMEOUT_MS);
+      candidate = await requestOnce(url, timeout);
+    } catch (err) {
+      failure =
+        err instanceof ProviderError
+          ? err
+          : new ProviderError(
+              "serpapi",
+              "unknown",
+              err instanceof Error ? err.message : "SerpAPI failed",
+            );
+    }
 
-      if (candidate.ok) {
-        res = candidate;
-        break;
-      }
+    if (candidate?.ok) {
+      res = candidate;
+      break;
+    }
 
+    if (candidate && !candidate.ok) {
       const detail = await candidate.text().catch(() => "");
       const kind = classifyHttp(candidate.status, detail);
-      lastError = new ProviderError(
+      failure = new ProviderError(
         "serpapi",
         kind,
         kind === "auth"
           ? "SerpAPI rejected the API key (invalid, or the account isn't activated yet)"
           : `SerpAPI error ${candidate.status}: ${detail.slice(0, 200)}`,
       );
-
-      if (!lastError.retryable) throw lastError;
-    } catch (err) {
-      lastError = err instanceof ProviderError
-        ? err
-        : new ProviderError("serpapi", "unknown", err instanceof Error ? err.message : "SerpAPI failed");
-
-      if (!lastError.retryable) throw lastError;
     }
 
-    // Brief backoff before the single retry.
-    if (attempt === 0) await new Promise((r) => setTimeout(r, 1200));
+    if (failure) {
+      lastError = failure;
+      if (!failure.consumedQuota) await meter.refundAttempt();
+      if (!failure.retryable) throw failure;
+    }
+
+    // Only retry if there is genuinely time for another full attempt.
+    const nextAttemptNeeds = BACKOFF_MS + 5_000;
+    if (attempt === 0) {
+      if (deadline && !deadline.hasAtLeast(nextAttemptNeeds)) break;
+      await new Promise((r) => setTimeout(r, BACKOFF_MS));
+    }
   }
 
   if (!res) throw lastError ?? new ProviderError("serpapi", "unknown", "SerpAPI failed");
