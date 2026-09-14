@@ -4,7 +4,7 @@
 /*  Real merchant listings with a link and an extracted numeric price. */
 /* ------------------------------------------------------------------ */
 
-import { displayRetailer, matchRetailer } from "@/lib/retailers";
+import { displayRetailer, isMerchantUrl, matchRetailer } from "@/lib/retailers";
 import { Deadline, NO_METER, type Meter } from "../deadline";
 import { ProviderError, classifyHttp } from "../errors";
 import type { Offer, SearchIntent } from "../types";
@@ -197,12 +197,19 @@ export async function fetchOffers(
 
   return (data.shopping_results ?? [])
     .map((r): Offer | null => {
-      const url = r.link || r.product_link || "";
+      // `link` is the merchant's own page. `product_link` is Google's
+      // aggregate page for the product and is only worth having when it
+      // isn't actually a google.com URL — which, in practice, it is.
+      const candidate = r.link || r.product_link || "";
       const price = typeof r.extracted_price === "number" ? r.extracted_price : 0;
 
-      // Drop anything without the two things that make an offer real.
-      if (!url || !url.startsWith("http")) return null;
+      // Drop anything without the two things that make an offer real: a
+      // price, and a retailer page we can send a buyer to and re-check
+      // tomorrow.
+      if (!isMerchantUrl(candidate)) return null;
       if (!price || price <= 0) return null;
+
+      const url = candidate;
 
       const source = r.source ?? "";
 

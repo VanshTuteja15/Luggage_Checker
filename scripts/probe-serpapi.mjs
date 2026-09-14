@@ -90,14 +90,35 @@ if (!res.ok || body?.error) {
 }
 
 const results = body.shopping_results ?? [];
-const usable = results.filter(
-  (r) => (r.link || r.product_link || "").startsWith("http") && r.extracted_price > 0,
-);
+
+// Same rule the app applies: a listing is only usable if it has a price AND
+// a real merchant URL. Google's own aggregate pages (a "Various sellers" row
+// with no `link`) are dropped, because you can't send a buyer there and
+// can't re-check the price there tomorrow.
+const NON_MERCHANT = /(^|\.)(google\.(com|ca)|gstatic\.com|googleusercontent\.com)$/i;
+const merchantUrl = (r) => {
+  const u = r.link || r.product_link || "";
+  if (!/^https?:\/\//i.test(u)) return "";
+  try {
+    return NON_MERCHANT.test(new URL(u).hostname.replace(/^www\./, "")) ? "" : u;
+  } catch {
+    return "";
+  }
+};
+
+const usable = results.filter((r) => merchantUrl(r) && r.extracted_price > 0);
+const googleOnly = results.filter(
+  (r) => !merchantUrl(r) && r.extracted_price > 0 && (r.link || r.product_link),
+).length;
 
 const verdict = ms < 8000 ? G : ms < 20000 ? Y : R;
 console.log(`${verdict}✓ ${res.status}${X} in ${B}${ms}ms${X}`);
 console.log(`  listings returned: ${results.length}`);
-console.log(`  usable (url + price): ${B}${usable.length}${X}\n`);
+console.log(`  usable (merchant url + price): ${B}${usable.length}${X}`);
+if (googleOnly > 0) {
+  console.log(`  ${D}dropped ${googleOnly} priced row(s) that only link back to Google${X}`);
+}
+console.log("");
 
 for (const r of usable.slice(0, 8)) {
   const src = (r.source ?? "?").padEnd(22).slice(0, 22);

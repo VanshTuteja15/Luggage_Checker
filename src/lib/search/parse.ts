@@ -57,8 +57,31 @@ function stripPricePhrases(query: string): string {
     .trim();
 }
 
+/* ------------------------------------------------------------------ */
+/*  Category anchoring                                                */
+/*                                                                     */
+/*  Every search in this app is about luggage, but Google doesn't know */
+/*  that. "Freeform 21" returns shelving. "Alpha 3" returns car parts. */
+/*  "Monos" returns a typeface. Brand-and-model queries are exactly    */
+/*  what a luggage retailer's staff type, so anchoring the category    */
+/*  is the difference between a useful result set and a random one.    */
+/*                                                                     */
+/*  Only added when the query has no luggage word of its own, so       */
+/*  "carry-on spinner" is never padded into "carry-on spinner luggage  */
+/*  luggage".                                                         */
+/* ------------------------------------------------------------------ */
+
+const LUGGAGE_WORDS =
+  /\b(luggage|suitcase|suitcases|carry[-\s]?on|carryon|spinner|checked|check[-\s]?in|duffel|duffle|backpack|garment bag|travel bag|trolley|underseat|weekender|briefcase|tote)\b/i;
+
+export function anchorToLuggage(terms: string): string {
+  const t = terms.trim();
+  if (!t) return t;
+  return LUGGAGE_WORDS.test(t) ? t : `${t} luggage`;
+}
+
 function fallbackIntent(query: string): SearchIntent {
-  const terms = stripPricePhrases(query) || query;
+  const terms = anchorToLuggage(stripPricePhrases(query) || query);
   return {
     terms,
     brand: null,
@@ -122,7 +145,7 @@ Extract the search intent. Rules:
 
     if (!parsed) return fallbackIntent(raw);
 
-    const terms = cleanString(parsed.terms) ?? stripPricePhrases(raw) ?? raw;
+    const terms = anchorToLuggage(cleanString(parsed.terms) ?? stripPricePhrases(raw) ?? raw);
     const features = Array.isArray(parsed.features)
       ? parsed.features.filter((f): f is string => typeof f === "string" && f.trim().length > 0)
       : [];

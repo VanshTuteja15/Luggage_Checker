@@ -174,6 +174,34 @@ function capOffers(offers: Offer[]): Offer[] {
   return kept.sort((a, b) => a.price - b.price);
 }
 
+/**
+ * Recompute a product's headline numbers from the offers it actually shows.
+ *
+ * `capOffers` can remove offers after `buildProduct` has already computed
+ * the summary, which left cards claiming "12 retailers, $189–$549" above a
+ * list of 10 offers topping out at $420. On a price-comparison tool the
+ * headline number IS the product, so it has to be derived from what's on
+ * screen, not from what was on screen earlier.
+ */
+function withRecomputedSummary(product: SearchProduct): SearchProduct {
+  const prices = product.offers.map((o) => o.price);
+  if (prices.length === 0) return product;
+
+  const lowest = Math.min(...prices);
+  const highest = Math.max(...prices);
+
+  return {
+    ...product,
+    lowestPrice: lowest,
+    highestPrice: highest,
+    retailerCount: product.offers.length,
+    spread: Math.round((highest - lowest) * 100) / 100,
+    hasMajorRetailer: product.offers.some(
+      (o) => o.retailerKey !== null && RETAILER_INFO[o.retailerKey]?.category === "major",
+    ),
+  };
+}
+
 function applyRetailerFilter(products: SearchProduct[], allowed: string[]): SearchProduct[] {
   if (allowed.length === 0) return products;
   const set = new Set(allowed);
@@ -414,7 +442,7 @@ async function finish(
   // ── Rank and trim ────────────────────────────────────────────
   products = rankProducts(products)
     .slice(0, opts.limit)
-    .map((p) => ({ ...p, offers: sortOffers(capOffers(p.offers)) }));
+    .map((p) => withRecomputedSummary({ ...p, offers: sortOffers(capOffers(p.offers)) }));
 
   return { query, intent, provider, products, offersFound, warnings };
 }

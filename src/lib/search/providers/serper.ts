@@ -8,7 +8,7 @@
 /*  sustaining source.                                                */
 /* ------------------------------------------------------------------ */
 
-import { displayRetailer, matchRetailer } from "@/lib/retailers";
+import { displayRetailer, isMerchantUrl, matchRetailer } from "@/lib/retailers";
 import type { Offer, SearchIntent } from "../types";
 
 const SERPER_SHOPPING_URL = "https://google.serper.dev/shopping";
@@ -102,8 +102,10 @@ export async function fetchOffers(
       const price = parsePrice(r.price);
       const title = (r.title ?? "").trim();
 
-      // The two things that make an offer real.
-      if (!url.startsWith("http") || price <= 0 || !title) return null;
+      // The things that make an offer real: a price, a title, and a
+      // retailer page we can send a buyer to and re-check tomorrow.
+      // Google's own aggregate pages satisfy none of the last point.
+      if (!isMerchantUrl(url) || price <= 0 || !title) return null;
 
       const source = r.source ?? "";
 

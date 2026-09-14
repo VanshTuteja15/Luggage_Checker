@@ -155,29 +155,6 @@ export const MAJOR_RETAILERS: string[] = RETAILER_NAMES.filter(
   (n) => RETAILER_INFO[n].category === "major",
 );
 
-/**
- * Must-include stores for live price search: big-box plus brand-direct
- * sites the client named (Amazon, Walmart, Samsonite, …).
- */
-export const PRIORITY_RETAILERS: string[] = [
-  "Amazon.ca",
-  "Walmart.ca",
-  "Costco.ca",
-  "Samsonite.ca",
-  "Hudson's Bay",
-  "Canadian Tire",
-  "Best Buy Canada",
-  "Bentley",
-  "London Drugs",
-  "TUMI.ca",
-];
-
-export function isPriorityRetailer(name: string | null | undefined): boolean {
-  if (!name) return false;
-  if (PRIORITY_RETAILERS.includes(name)) return true;
-  return RETAILER_INFO[name]?.category === "major";
-}
-
 /** Get a retailer's brand colour, with a fallback for unknown retailers. */
 export function retailerColor(name: string): string {
   return RETAILER_INFO[name]?.color ?? "#6B7280";
@@ -293,4 +270,40 @@ export function matchRetailer(source: string, url = ""): string | null {
 /** A display label for an offer's retailer, falling back to the raw source. */
 export function displayRetailer(source: string, url = ""): string {
   return matchRetailer(source, url) ?? (source?.trim() || hostOf(url) || "Unknown");
+}
+
+/* ------------------------------------------------------------------ */
+/*  Merchant URL validation                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Hosts that aggregate other people's listings rather than selling anything.
+ *
+ * Google Shopping rows sometimes carry no merchant `link` at all — only a
+ * `product_link` pointing back at google.com/shopping/product/…, usually on
+ * a "Various sellers" row. Those are poison for this app in two ways: the
+ * Buy button sends the client to Google instead of a retailer, and the
+ * nightly refresh re-reads a page that has no single price to read.
+ *
+ * A price we cannot attribute to a retailer and cannot re-check tomorrow is
+ * not an offer. Drop it at the provider boundary.
+ */
+const NON_MERCHANT_HOSTS = [
+  "google.com",
+  "google.ca",
+  "googleusercontent.com",
+  "gstatic.com",
+  "bing.com",
+  "duckduckgo.com",
+  "shopping.google.com",
+];
+
+/** True when `url` looks like a real retailer product page we can re-fetch. */
+export function isMerchantUrl(url: string): boolean {
+  if (!url || !/^https?:\/\//i.test(url)) return false;
+
+  const host = hostOf(url);
+  if (!host) return false;
+
+  return !NON_MERCHANT_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
