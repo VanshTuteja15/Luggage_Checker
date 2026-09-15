@@ -19,7 +19,7 @@
 /* ------------------------------------------------------------------ */
 
 import { callGeminiGrounded, geminiConfigured, parseJson } from "@/lib/gemini";
-import { PRIORITY_RETAILERS, RETAILER_INFO, hostOf, matchRetailer } from "@/lib/retailers";
+import { MAJOR_RETAILERS, RETAILER_INFO, hostOf, matchRetailer } from "@/lib/retailers";
 import { NoProviderError, type Offer, type SearchIntent } from "../types";
 
 /** Plausible price band for luggage in CAD. Outside this, we don't believe it. */
@@ -69,7 +69,7 @@ function toNumber(value: number | string | undefined): number {
 export async function fetchOffers(
   intent: SearchIntent,
 ): Promise<{ offers: Offer[]; warnings: string[] }> {
-  const retailerList = PRIORITY_RETAILERS.join(", ");
+  const retailerList = MAJOR_RETAILERS.join(", ");
   const constraints: string[] = [];
   if (intent.brand) constraints.push(`Brand: ${intent.brand}`);
   if (intent.model) constraints.push(`Model: ${intent.model}`);
