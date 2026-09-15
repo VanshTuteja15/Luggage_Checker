@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RETAILER_INFO, retailerRank } from "@/lib/retailers";
+import { broadenLadder, broadenedNotice } from "./broaden";
 import { clusterOffers } from "./cluster";
 import { parseQuery } from "./parse";
 import * as geminiProvider from "./providers/gemini-grounded";
@@ -34,6 +35,7 @@ import {
   type Offer,
   type ProviderName,
   type SearchIntent,
+  type SearchMode,
   type SearchProduct,
   type SearchResponse,
 } from "./types";
@@ -56,6 +58,23 @@ function searchBudgetMs(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 50_000;
 }
 
+/**
+ * How many provider calls one search may spend widening the query.
+ *
+ * Each rung costs one call from a small free allowance, so this is
+ * deliberately tight: the original query, plus at most two broader ones.
+ * In practice the second rung almost always lands, because the usual
+ * reason for an empty result is a colour or a size word in the title.
+ */
+function maxQueryAttempts(): number {
+  const raw = Number(process.env.SEARCH_MAX_ATTEMPTS);
+  if (Number.isFinite(raw) && raw >= 1) return Math.min(raw, 5);
+  return 3;
+}
+
+/** Enough time left to be worth spending another call on a broader query. */
+const MIN_MS_FOR_ANOTHER_ATTEMPT = 12_000;
+
 export type SearchOptions = {
   /** Restrict results to these canonical retailer names. Empty = all. */
   allowedRetailers?: string[];
@@ -67,6 +86,12 @@ export type SearchOptions = {
   bypassCache?: boolean;
   /** Override the cache lifetime for this search. */
   cacheTtlMinutes?: number;
+  /**
+   * "compare" (default) groups colours of one model together to show where
+   * it is cheapest. "catalog" keeps each colour separate, for browsing a
+   * brand's range and picking a variant to track.
+   */
+  mode?: SearchMode;
 };
 
 /**
@@ -259,6 +284,16 @@ function rankProducts(products: SearchProduct[]): SearchProduct[] {
   });
 }
 
+/**
+ * The shortest sensible query to show a user whose search found nothing:
+ * brand plus the model line. Returns "" when the query is already that short.
+ */
+function suggestShorterQuery(terms: string): string {
+  const ladder = broadenLadder(terms);
+  const shortest = ladder[ladder.length - 1];
+  return shortest && shortest.toLowerCase() !== terms.toLowerCase() ? shortest : "";
+}
+
 /** Order a product's offers: cheapest first, majors breaking ties. */
 function sortOffers(offers: Offer[]): Offer[] {
   return [...offers].sort((a, b) => {
@@ -286,7 +321,11 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   }
 
   // ── Cache first: a repeat search should cost nothing ─────────
-  const key = cacheKey(trimmed, allowedRetailers, limit);
+  const mode: SearchMode = opts.mode ?? "compare";
+
+  // Mode changes the grouping, so it has to be part of the cache identity —
+  // otherwise a compare search would serve its merged rows to a catalog one.
+  const key = cacheKey(`${trimmed}::${mode}`, allowedRetailers, limit);
 
   if (!opts.bypassCache) {
     const hit = await readCache(opts.db, key);
@@ -309,8 +348,17 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   });
 
   // ── Try each configured provider in order ────────────────────
+  //
+  // Within a provider, the query itself is retried in progressively
+  // broader forms: Google returning nothing for a retailer's full product
+  // title is normal, not an error, and the bag is usually right there
+  // under a shorter name.
+  const ladder = broadenLadder(intent.terms);
+  const attemptLimit = Math.min(maxQueryAttempts(), ladder.length);
+
   let offers: Offer[] = [];
   let usedProvider: ProviderName | null = null;
+  let usedTerms = intent.terms;
   const failures: string[] = [];
 
   for (const provider of available) {
@@ -336,7 +384,27 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     };
 
     try {
-      const result = await fetchFromProvider(provider, intent, { deadline, meter });
+      let result: { offers: Offer[]; warnings: string[] } = { offers: [], warnings: [] };
+
+      for (let rung = 0; rung < attemptLimit; rung++) {
+        const terms = ladder[rung];
+
+        result = await fetchFromProvider(provider, { ...intent, terms }, { deadline, meter });
+
+        if (result.offers.length > 0) {
+          usedTerms = terms;
+          // Say so plainly. A price comparison the client didn't ask for is
+          // worse than no result if they don't realise the words changed.
+          if (rung > 0) warnings.push(broadenedNotice(intent.terms, terms));
+          break;
+        }
+
+        // Empty, not failed. Widen — but only while there is genuinely
+        // time and another rung left worth paying for.
+        if (rung + 1 >= attemptLimit) break;
+        if (!deadline.hasAtLeast(MIN_MS_FOR_ANOTHER_ATTEMPT)) break;
+      }
+
       offers = result.offers;
       warnings.push(...result.warnings);
       usedProvider = provider;
@@ -393,6 +461,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     allowedRetailers,
     limit,
     deadline,
+    mode,
+    broadestTried: ladder[Math.min(attemptLimit, ladder.length) - 1] ?? usedTerms,
   });
 
   if (response.products.length > 0) {
@@ -408,11 +478,26 @@ async function finish(
   provider: ProviderName,
   offers: Offer[],
   warnings: string[],
-  opts: { allowedRetailers: string[]; limit: number; deadline: Deadline },
+  opts: {
+    allowedRetailers: string[];
+    limit: number;
+    deadline: Deadline;
+    mode: SearchMode;
+    broadestTried: string;
+  },
 ): Promise<SearchResponse> {
   const offersFound = offers.length;
 
   if (offersFound === 0) {
+    // Nothing found even after widening. This is an ordinary outcome, not a
+    // failure — so say what was tried and what to type instead, rather than
+    // surfacing a provider error string the client can do nothing with.
+    const suggestion = suggestShorterQuery(intent.terms);
+    warnings.push(
+      suggestion
+        ? `No Canadian retailer listings found for "${intent.terms}" (we also tried "${opts.broadestTried}"). Try just the brand and model — for example "${suggestion}".`
+        : `No Canadian retailer listings found for "${intent.terms}".`,
+    );
     return { query, intent, provider, products: [], offersFound: 0, warnings };
   }
 
@@ -422,6 +507,7 @@ async function finish(
   // than nothing.
   let products = await clusterOffers(offers, {
     timeoutMs: opts.deadline.budget(22_000, 1_500),
+    mode: opts.mode,
   });
 
   // ── Filter ───────────────────────────────────────────────────

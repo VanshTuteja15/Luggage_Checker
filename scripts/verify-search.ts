@@ -555,6 +555,172 @@ async function main() {
   const retried = await search("samsonite carry on luggage");
   check("retried once and recovered", serpCalls === 2 && retried.products.length > 0, `${serpCalls} calls`);
 
+  /* ---------------- 6a. The query that failed in production ------- */
+  //
+  // Real failure, 2026-09-15: three searches burned, all red-errored with
+  // "SerpAPI: Google hasn't returned any results for this query." That is
+  // a 200 response meaning Google had nothing for those exact eight words.
+  console.log("\n\x1b[1m6a. Long retailer product title (the live failure)\x1b[0m");
+  {
+    const { broadenLadder } = await import("../src/lib/search/broaden");
+    const real = "Samsonite Rhapsody 360 Spinner Expandable Medium Luggage Black";
+    const ladder = broadenLadder(real);
+    console.log(ladder.map((q, i) => `      ${i + 1}. ${q}`).join("\n"));
+
+    check("original query is the first rung", ladder[0] === real);
+    check("every rung is distinct", new Set(ladder.map((q) => q.toLowerCase())).size === ladder.length);
+    check(
+      "each rung is shorter than the last",
+      ladder.every((q, i) => i === 0 || q.split(" ").length <= ladder[i - 1].split(" ").length),
+    );
+    check(
+      'reaches "Samsonite Rhapsody 360"',
+      ladder.includes("Samsonite Rhapsody 360"),
+      ladder.join(" | "),
+    );
+    check("colour is dropped by rung 2", !ladder[1].toLowerCase().includes("black"));
+    check("a long title reaches brand+model in ONE extra call", ladder[1] === "Samsonite Rhapsody 360", ladder[1]);
+    check("brand survives every rung", ladder.every((q) => /samsonite/i.test(q)));
+    check("a short query isn't padded with junk rungs", broadenLadder("Samsonite").length === 1);
+  }
+
+  console.log("\n\x1b[1m6a-ii. Pipeline recovers from an empty first result\x1b[0m");
+  {
+    delete process.env.GEMINI_API_KEY;
+    const asked: string[] = [];
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const q = url.searchParams.get("q") ?? "";
+      asked.push(q);
+
+      // Exactly what SerpAPI sends for a query Google can't match:
+      // HTTP 200, with the miss reported through the `error` field.
+      if (q.split(" ").length > 3) {
+        return new Response(
+          JSON.stringify({ error: "Google hasn't returned any results for this query." }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          shopping_results: [
+            {
+              title: 'Samsonite Rhapsody 360 Spinner Expandable Medium 25"',
+              link: "https://www.amazon.ca/dp/RHAP1",
+              source: "Amazon.ca",
+              price: "$329.99",
+              extracted_price: 329.99,
+            },
+            {
+              title: "Samsonite Rhapsody 360 Medium Spinner",
+              link: "https://www.thebay.com/rhapsody-360",
+              source: "Hudson's Bay",
+              price: "$379.99",
+              extracted_price: 379.99,
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const recovered = await search("Samsonite Rhapsody 360 Spinner Expandable Medium Luggage Black");
+
+    console.log(asked.map((q, i) => `      call ${i + 1}: "${q}"`).join("\n"));
+
+    check(
+      "an empty result no longer throws",
+      recovered.products.length > 0,
+      `${recovered.products.length} products`,
+    );
+    check("it widened rather than giving up", asked.length > 1, `${asked.length} call(s)`);
+    check(
+      "and stopped as soon as it found something",
+      asked.length <= 3,
+      `${asked.length} calls — allowance guard`,
+    );
+    check(
+      "the user is told the wording changed",
+      recovered.warnings.some((w) => /instead/i.test(w)),
+      recovered.warnings.join(" | "),
+    );
+    checkProductInvariants(recovered.products, "broadened");
+  }
+
+  console.log("\n\x1b[1m6a-iii. Genuinely nothing anywhere\x1b[0m");
+  {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ error: "Google hasn't returned any results for this query." }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const empty = await search("Zzzqx Nonexistent 9000 Spinner Purple");
+    check("returns an empty result, not an error", empty.products.length === 0);
+    check("never exceeds the attempt budget", calls <= 3, `${calls} calls`);
+    check(
+      "tells the user what to type instead",
+      empty.warnings.some((w) => /Try just the brand and model/i.test(w)),
+      empty.warnings.join(" | "),
+    );
+    check(
+      "no raw SerpAPI error text is shown",
+      !empty.warnings.some((w) => /SerpAPI:/i.test(w)),
+      empty.warnings.join(" | "),
+    );
+  }
+
+  /* ---------------- 6a-iv. catalog vs compare mode ---------------- */
+  console.log("\n\x1b[1m6a-iv. catalog mode keeps colour variants separate\x1b[0m");
+  {
+    delete process.env.GEMINI_API_KEY;
+    const variants = [
+      ["Samsonite Omni PC 20\" Spinner Carry-On Black", 149.99, "https://www.amazon.ca/dp/V1"],
+      ["Samsonite Omni PC 20\" Spinner Carry-On Teal", 159.99, "https://www.amazon.ca/dp/V2"],
+      ["Samsonite Omni PC 20\" Spinner Carry-On Burgundy", 154.99, "https://www.walmart.ca/en/ip/v3"],
+    ].map(([title, extracted_price, link]) => ({
+      title,
+      link,
+      source: String(link).includes("amazon") ? "Amazon.ca" : "Walmart Canada",
+      price: `$${extracted_price}`,
+      extracted_price,
+    }));
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ shopping_results: variants }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+
+    const compare = await search("Samsonite Omni PC 20", { mode: "compare" });
+    const catalog = await search("Samsonite Omni PC 20", { mode: "catalog" });
+
+    check(
+      "compare mode merges the three colours into one comparable product",
+      compare.products.length === 1,
+      `${compare.products.length} products`,
+    );
+    check(
+      "catalog mode lists all three colours to pick from",
+      catalog.products.length === 3,
+      `${catalog.products.length} products`,
+    );
+    check(
+      "catalog products name their colour",
+      catalog.products.every((p) => p.color.length > 0),
+      catalog.products.map((p) => `${p.name}="${p.color}"`).join(", "),
+    );
+    check(
+      "the two modes don't share a cache entry",
+      compare.products.length !== catalog.products.length,
+    );
+    checkProductInvariants(catalog.products, "catalog");
+  }
+
   /* ---------------- 6b. Query anchoring --------------------------- */
   console.log("\n\x1b[1m6b. Keywords sent to Google\x1b[0m");
   {

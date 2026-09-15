@@ -9,6 +9,19 @@
 
 export type ProviderName = "serper" | "serpapi" | "gemini-grounded";
 
+/**
+ * What the caller is asking for.
+ *
+ *   compare — "what does this bag cost, and where is it cheapest?"
+ *             Colours of the same model and size are one product, so the
+ *             card shows every retailer carrying it.
+ *
+ *   catalog — "show me what this brand actually sells."
+ *             Colours are DIFFERENT products, because the point is to
+ *             browse the range and pick a variant to track.
+ */
+export type SearchMode = "compare" | "catalog";
+
 /** A single retailer listing for a product, as fetched from a provider. */
 export type Offer = {
   /** Canonical retailer name when known, otherwise the raw source label. */

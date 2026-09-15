@@ -29,6 +29,17 @@ function timeoutMs(): number {
  */
 const RESULT_COUNT = 20;
 
+/**
+ * SerpAPI reports "no matches" through the same `error` field it uses for
+ * real failures, with HTTP 200. These phrasings mean the search succeeded
+ * and Google simply had nothing — the caller should broaden, not fail.
+ */
+function isNoResults(message: string): boolean {
+  return /hasn'?t returned any results|no results (were )?found|didn'?t return any results/i.test(
+    message,
+  );
+}
+
 type ShoppingResult = {
   title?: string;
   link?: string;
@@ -185,6 +196,14 @@ export async function fetchOffers(
   if (!data) throw new ProviderError("serpapi", "unknown", "SerpAPI returned an unreadable response");
 
   if (data.error) {
+    // "Google hasn't returned any results for this query." is not a failure.
+    // It is a 200 response meaning Google Shopping Canada has nothing for
+    // these exact words — which happens constantly with long, specific
+    // product names ("Samsonite Rhapsody 360 Spinner Expandable Medium
+    // Luggage Black"). Throwing here turned a normal empty result into a
+    // red error and stopped the caller from retrying with broader terms.
+    if (isNoResults(data.error)) return [];
+
     const kind = /key|unauthor/i.test(data.error)
       ? "auth"
       : /run out|limit|plan/i.test(data.error)

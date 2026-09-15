@@ -13,7 +13,30 @@
 
 import { callGeminiJSON, geminiConfigured, type GeminiSchema } from "@/lib/gemini";
 import { RETAILER_INFO } from "@/lib/retailers";
-import type { Offer, SearchProduct } from "./types";
+import type { Offer, SearchMode, SearchProduct } from "./types";
+
+/** Colour words that appear in luggage titles, for variant separation. */
+const COLOUR_WORDS =
+  /\b(black|white|grey|gray|silver|navy|blue|red|green|teal|purple|pink|burgundy|maroon|brown|tan|beige|gold|rose gold|rose|charcoal|graphite|champagne|olive|khaki|orange|yellow|ivory|cream|bronze|copper|coral)\b/i;
+
+/** Pull a colour out of a listing title, or "" when it names none. */
+export function extractColour(title: string): string {
+  const m = title.match(COLOUR_WORDS);
+  if (!m) return "";
+  return m[1].replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** The same colour vocabulary, as single tokens, for signature building. */
+const COLOUR_TOKENS = new Set(
+  COLOUR_WORDS.source
+    .replace(/^\\b\(|\)\\b$/g, "")
+    .split("|")
+    .flatMap((w) => w.split(" ")),
+);
+
+function isColourToken(token: string): boolean {
+  return COLOUR_TOKENS.has(token.toLowerCase());
+}
 
 const CLUSTER_SCHEMA: GeminiSchema = {
   type: "OBJECT",
@@ -91,8 +114,12 @@ function titleSignature(title: string): string {
     .filter(Boolean);
 
   const sizeToken = tokens.find((t) => /^\d{2}(\.\d)?("|inch|in)?$/.test(t)) ?? "";
+  // Colour never identifies the product here. The eight colours that used
+  // to live in NOISE_WORDS weren't enough — "Teal" and "Burgundy" survived
+  // and split one suitcase into three, so a comparison showed one retailer
+  // per row instead of three retailers on one row.
   const meaningful = tokens
-    .filter((t) => !NOISE_WORDS.has(t) && !/^\d+$/.test(t) && t.length > 2)
+    .filter((t) => !NOISE_WORDS.has(t) && !isColourToken(t) && !/^\d+$/.test(t) && t.length > 2)
     .slice(0, 4);
 
   return [...meaningful, sizeToken].filter(Boolean).join("-");
@@ -159,11 +186,14 @@ function buildProduct(
 /*  Heuristic clustering (no LLM)                                     */
 /* ------------------------------------------------------------------ */
 
-export function clusterHeuristic(offers: Offer[]): SearchProduct[] {
+export function clusterHeuristic(offers: Offer[], mode: SearchMode = "compare"): SearchProduct[] {
   const groups = new Map<string, Offer[]>();
 
   for (const offer of offers) {
-    const sig = titleSignature(offer.title) || offer.title.toLowerCase().slice(0, 30);
+    const base = titleSignature(offer.title) || offer.title.toLowerCase().slice(0, 30);
+    // In catalog mode the colour is part of the product's identity, so the
+    // black and the navy version stay two rows the client can pick between.
+    const sig = mode === "catalog" ? `${base}|${extractColour(offer.title).toLowerCase()}` : base;
     const existing = groups.get(sig);
     if (existing) existing.push(offer);
     else groups.set(sig, [offer]);
@@ -181,7 +211,7 @@ export function clusterHeuristic(offers: Offer[]): SearchProduct[] {
       name: title.slice(0, 140) || "Unknown product",
       brand,
       model,
-      color: "",
+      color: extractColour(group[0].title),
       size: extractSize(group[0].title),
       productType: null,
       upc: null,
@@ -205,15 +235,17 @@ export function clusterHeuristic(offers: Offer[]): SearchProduct[] {
  */
 export async function clusterOffers(
   offers: Offer[],
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; mode?: SearchMode } = {},
 ): Promise<SearchProduct[]> {
+  const mode: SearchMode = opts.mode ?? "compare";
+
   if (offers.length === 0) return [];
-  if (!geminiConfigured()) return clusterHeuristic(offers);
+  if (!geminiConfigured()) return clusterHeuristic(offers, mode);
 
   // Out of time — fall back to heuristic grouping rather than returning
   // nothing. Real prices grouped imperfectly beat an empty result.
   const timeoutMs = opts.timeoutMs ?? 25_000;
-  if (timeoutMs < 4_000) return clusterHeuristic(offers);
+  if (timeoutMs < 4_000) return clusterHeuristic(offers, mode);
 
   const listing = offers
     .map((o, i) => `${i} | ${o.retailer} | $${o.price.toFixed(2)} | ${o.title.slice(0, 130)}`)
@@ -224,7 +256,11 @@ index | retailer | price | title
 
 ${listing}
 
-Group these listings by the physical product they are selling. Two listings belong to the same product only when they are the same brand, the same model line, and the same size. Different sizes of the same model are DIFFERENT products. Different colours of the same model and size may be grouped together; put the most common colour in "color".
+Group these listings by the physical product they are selling. Two listings belong to the same product only when they are the same brand, the same model line, and the same size. Different sizes of the same model are DIFFERENT products. ${
+    mode === "catalog"
+      ? 'Different COLOURS of the same model and size are also DIFFERENT products — the user is browsing a range and needs to pick a specific variant, so keep each colour as its own product and name the colour in "color".'
+      : 'Different colours of the same model and size may be grouped together; put the most common colour in "color".'
+  }
 
 For each product give a clean "name" (brand + model + size, no retailer name, no marketing words like "New" or "Free Shipping"), the "brand", the "model" line, optional "color", "size" and "productType", and "offerIndexes": every index from the list above that belongs to this product.
 
@@ -242,7 +278,7 @@ Rules:
     });
 
     const clusters = parsed?.products;
-    if (!Array.isArray(clusters) || clusters.length === 0) return clusterHeuristic(offers);
+    if (!Array.isArray(clusters) || clusters.length === 0) return clusterHeuristic(offers, mode);
 
     const used = new Set<number>();
     const products: SearchProduct[] = [];
@@ -282,10 +318,10 @@ Rules:
 
     // Recover anything the model dropped.
     const leftovers = offers.filter((_, i) => !used.has(i));
-    if (leftovers.length > 0) products.push(...clusterHeuristic(leftovers));
+    if (leftovers.length > 0) products.push(...clusterHeuristic(leftovers, mode));
 
-    return products.length > 0 ? products : clusterHeuristic(offers);
+    return products.length > 0 ? products : clusterHeuristic(offers, mode);
   } catch {
-    return clusterHeuristic(offers);
+    return clusterHeuristic(offers, mode);
   }
 }
