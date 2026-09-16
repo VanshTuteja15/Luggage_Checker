@@ -20,6 +20,55 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProviderName, SearchResponse } from "./types";
 
+
+/* ------------------------------------------------------------------ */
+/*  Bounded database access                                           */
+/*                                                                     */
+/*  Caching and metering are OPTIMISATIONS. They exist to make a small */
+/*  free allowance last — they are not allowed to cost the user their  */
+/*  search.                                                            */
+/*                                                                     */
+/*  On a slow connection a single Supabase round trip was observed     */
+/*  taking 5-11 seconds. A search makes four of them (cache read,      */
+/*  quota reserve per attempt, cache write), so the database alone     */
+/*  could spend the entire 50-second budget before Google was ever     */
+/*  asked for a price.                                                 */
+/*                                                                     */
+/*  So every call here is bounded and fails OPEN: if the database is   */
+/*  slow or down, we skip the optimisation and run the search.         */
+/* ------------------------------------------------------------------ */
+
+/** How long any single metering/caching query may take. */
+function dbTimeoutMs(): number {
+  const raw = Number(process.env.SEARCH_DB_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 2_500;
+}
+
+/**
+ * Run a database call with a hard ceiling, returning `fallback` if it is
+ * slow or throws. Never rejects.
+ */
+async function bounded<T>(work: Promise<T> | (() => Promise<T>), fallback: T): Promise<T> {
+  const promise = typeof work === "function" ? work() : work;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      Promise.resolve(promise).catch(() => fallback),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(
+            `[search] a Supabase call exceeded ${dbTimeoutMs()}ms and was skipped — search continues without it.`,
+          );
+          resolve(fallback);
+        }, dbTimeoutMs());
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Allowances                                                        */
 /* ------------------------------------------------------------------ */
@@ -162,11 +211,16 @@ export async function reserveCall(
 
   const period = periodKey(allowance);
 
-  const { data, error } = await db.rpc("increment_provider_usage", {
-    p_provider: provider,
-    p_period: period,
-    p_amount: 1,
-  });
+  const { data, error } = await bounded<{ data: unknown; error: unknown }>(
+    () =>
+      db.rpc("increment_provider_usage", {
+        p_provider: provider,
+        p_period: period,
+        p_amount: 1,
+      }) as unknown as Promise<{ data: unknown; error: unknown }>,
+    // Timed out: treat metering as unavailable and let the search proceed.
+    { data: null, error: new Error("metering timed out") },
+  );
 
   // If metering is unavailable, let the search through rather than blocking
   // the feature — the provider's own limit is the backstop.
@@ -254,14 +308,19 @@ export async function readCache(
 ): Promise<CachedSearch | null> {
   if (!db) return null;
 
-  const { data, error } = await db
-    .from("search_cache")
-    .select("response, fetched_at, expires_at")
-    .eq("cache_key", key)
-    .maybeSingle();
+  const { data, error } = await bounded<{ data: Record<string, unknown> | null; error: unknown }>(
+    () =>
+      db
+        .from("search_cache")
+        .select("response, fetched_at, expires_at")
+        .eq("cache_key", key)
+        .maybeSingle() as unknown as Promise<{ data: Record<string, unknown> | null; error: unknown }>,
+    // Timed out: behave exactly like a cache miss.
+    { data: null, error: null },
+  );
 
   if (error || !data) return null;
-  if (new Date(data.expires_at).getTime() < Date.now()) return null;
+  if (new Date(data.expires_at as string).getTime() < Date.now()) return null;
 
   const fetchedAt = data.fetched_at as string;
   const ageMinutes = Math.max(

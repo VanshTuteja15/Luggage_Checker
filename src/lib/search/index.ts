@@ -75,6 +75,47 @@ function maxQueryAttempts(): number {
 /** Enough time left to be worth spending another call on a broader query. */
 const MIN_MS_FOR_ANOTHER_ATTEMPT = 12_000;
 
+
+/* ------------------------------------------------------------------ */
+/*  Stage timing                                                      */
+/*                                                                     */
+/*  When a search fails slowly, the only question that matters is      */
+/*  WHICH STAGE ate the time — and from a screenshot of a red banner   */
+/*  that is unknowable. So every search logs its own breakdown:        */
+/*                                                                     */
+/*    [search] "samsonite luggage" cache=2503ms parse=1840ms           */
+/*             fetch=24110ms cluster=9900ms total=38353ms  serpapi     */
+/*                                                                     */
+/*  One line, server-side, every time. No guessing.                    */
+/* ------------------------------------------------------------------ */
+
+class StageTimer {
+  private readonly startedAt = Date.now();
+  private readonly stages: [string, number][] = [];
+  private mark = Date.now();
+
+  /** Record the time spent since the previous stage ended. */
+  lap(name: string): void {
+    const now = Date.now();
+    this.stages.push([name, now - this.mark]);
+    this.mark = now;
+  }
+
+  get totalMs(): number {
+    return Date.now() - this.startedAt;
+  }
+
+  report(query: string, extra = ""): void {
+    const parts = this.stages
+      .filter(([, ms]) => ms >= 1)
+      .map(([name, ms]) => `${name}=${ms}ms`)
+      .join(" ");
+    console.info(
+      `[search] ${JSON.stringify(query)} ${parts} total=${this.totalMs}ms${extra ? ` ${extra}` : ""}`,
+    );
+  }
+}
+
 export type SearchOptions = {
   /** Restrict results to these canonical retailer names. Empty = all. */
   allowedRetailers?: string[];
@@ -320,6 +361,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     );
   }
 
+  const timer = new StageTimer();
+
   // ── Cache first: a repeat search should cost nothing ─────────
   const mode: SearchMode = opts.mode ?? "compare";
 
@@ -329,7 +372,9 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
 
   if (!opts.bypassCache) {
     const hit = await readCache(opts.db, key);
+    timer.lap("cache");
     if (hit) {
+      timer.report(trimmed, "CACHE HIT");
       return {
         ...hit.response,
         cached: { fetchedAt: hit.fetchedAt, ageMinutes: hit.ageMinutes },
@@ -351,6 +396,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const intent = await parseQuery(trimmed, {
     timeoutMs: deadline.budget(6_000, 40_000),
   });
+  timer.lap("parse");
 
   // ── Try each configured provider in order ────────────────────
   //
@@ -434,7 +480,10 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     }
   }
 
+  timer.lap("fetch");
+
   if (!usedProvider) {
+    timer.report(trimmed, `FAILED: ${failures[0] ?? "no provider"}`);
     // Lead with the fix, not the symptom.
     //
     // Gemini grounding needs a billing-enabled project, so on a free key it
@@ -470,9 +519,19 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     broadestTried: ladder[Math.min(attemptLimit, ladder.length) - 1] ?? usedTerms,
   });
 
+  timer.lap("cluster");
+
+  // Cache writes are pure optimisation for the NEXT search. Awaiting one on
+  // a slow connection made the user wait seconds for a result already
+  // computed, so it runs in the background and its failure is ignored.
   if (response.products.length > 0) {
-    await writeCache(opts.db, key, response, opts.cacheTtlMinutes);
+    void writeCache(opts.db, key, response, opts.cacheTtlMinutes).catch(() => undefined);
   }
+
+  timer.report(
+    trimmed,
+    `${usedProvider} offers=${response.offersFound} products=${response.products.length}`,
+  );
 
   return response;
 }

@@ -816,6 +816,56 @@ async function main() {
     delete process.env.GEMINI_API_KEY;
   }
 
+  /* ---------------- 6a-vi. Slow Supabase must not block ----------- */
+  //
+  // Real failure, 2026-09-16: the dev log showed a plain
+  // `GET /api/products` taking 11.6s and another 5.2s — every Supabase round
+  // trip on this connection is slow. A search makes several (cache read,
+  // quota reserve per attempt, cache write), so the database alone could
+  // spend the whole 50s budget before Google was asked for a price.
+  //
+  // Caching and metering are optimisations. They must fail open.
+  console.log("\n\x1b[1m6a-vi. A hanging database must not block the search\x1b[0m");
+  {
+    delete process.env.GEMINI_API_KEY;
+    process.env.SEARCH_DB_TIMEOUT_MS = "300";
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("serpapi.com")) {
+        return new Response(JSON.stringify({ shopping_results: SHOPPING_RESULTS }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error("unexpected fetch");
+    }) as typeof fetch;
+
+    // A Supabase client whose every call never settles.
+    const neverSettles = () => new Promise(() => {});
+    const hangingDb = {
+      rpc: neverSettles,
+      from: () => ({
+        select: () => ({ eq: () => ({ maybeSingle: neverSettles }) }),
+        upsert: neverSettles,
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const startedAt = Date.now();
+    const result = await search("samsonite carry on luggage", { db: hangingDb });
+    const elapsed = Date.now() - startedAt;
+
+    check("the search completed despite the database hanging", result.products.length > 0);
+    check(
+      "and wasn't held up by it",
+      elapsed < 3_000,
+      `${elapsed}ms — each bounded call should cost ~300ms, not forever`,
+    );
+    checkProductInvariants(result.products, "slow-db");
+
+    delete process.env.SEARCH_DB_TIMEOUT_MS;
+  }
+
   /* ---------------- 6b. Query anchoring --------------------------- */
   console.log("\n\x1b[1m6b. Keywords sent to Google\x1b[0m");
   {
