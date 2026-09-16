@@ -343,8 +343,13 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const deadline = Deadline.in(searchBudgetMs());
 
   // Query parsing is a nicety — never let it eat the fetch's time.
+  //
+  // Reserve is deliberately large: the shopping call is the only step that
+  // produces prices, and it needs a real window (25s, plus room to widen
+  // the query if Google has no match). Parsing gets whatever is left over
+  // up to 6s, and falls back to the regex parser when that isn't enough.
   const intent = await parseQuery(trimmed, {
-    timeoutMs: deadline.budget(9_000, 30_000),
+    timeoutMs: deadline.budget(6_000, 40_000),
   });
 
   // ── Try each configured provider in order ────────────────────

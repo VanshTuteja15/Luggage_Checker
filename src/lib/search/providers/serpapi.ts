@@ -122,11 +122,18 @@ export async function fetchOffers(
     // for parsing the response.
     // Two separate questions, previously conflated: is there enough budget
     // left to bother trying, and how long may this attempt take?
-    const MIN_USEFUL_ATTEMPT_MS = 3_000;
+    // SerpAPI scrapes Google live and rarely answers in under ~5s, so a
+    // 3s window was never going to succeed — it just spent a search from
+    // the allowance to fail. Don't start an attempt we can't finish.
+    const MIN_USEFUL_ATTEMPT_MS = 10_000;
     if (deadline && !deadline.hasAtLeast(MIN_USEFUL_ATTEMPT_MS)) {
       throw (
         lastError ??
-        new ProviderError("serpapi", "timeout", "Ran out of time before querying SerpAPI")
+        new ProviderError(
+          "serpapi",
+          "budget",
+          `Only ${deadline.remaining}ms of the search budget was left — too little to query SerpAPI, so no call was made.`,
+        )
       );
     }
 

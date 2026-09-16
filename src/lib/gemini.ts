@@ -70,6 +70,60 @@ function isModelBusy(status: number, body: string): boolean {
 /** Default per-request timeout. Search routes are user-facing; don't hang. */
 const DEFAULT_TIMEOUT_MS = 20_000;
 
+/* ------------------------------------------------------------------ */
+/*  Circuit breaker                                                   */
+/*                                                                     */
+/*  Gemini is a nicety here: it parses queries and groups listings,    */
+/*  and both fall back to non-AI logic. But when it is down (Google's  */
+/*  free tier has stretches of 503 "high demand" across every model),  */
+/*  every single search still pays the full wait before falling back — */
+/*  and that wait is time the shopping provider then doesn't have.     */
+/*                                                                     */
+/*  So after a couple of consecutive failures we stop calling it for a */
+/*  few minutes and go straight to the fallback. Searches get faster   */
+/*  and cheaper during an outage instead of slower.                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Backoff is progressive, and the first step is short on purpose.
+ *
+ * One search calls Gemini twice — once to parse the query, once to group
+ * the listings. When Gemini hangs, the old behaviour paid the full wait
+ * BOTH times: 6s parsing, then another 22s grouping prices we already had.
+ * 28 seconds for a result that needed two.
+ *
+ * So the first failure opens the breaker just long enough to cover the
+ * rest of the current request. A second failure means it isn't a blip,
+ * and backs off for minutes.
+ */
+const BREAKER_FIRST_MS = 30_000;
+const BREAKER_SUSTAINED_MS = 5 * 60_000;
+
+let consecutiveFailures = 0;
+let breakerOpenUntil = 0;
+
+function noteFailure(): void {
+  consecutiveFailures += 1;
+
+  const cooldown = consecutiveFailures === 1 ? BREAKER_FIRST_MS : BREAKER_SUSTAINED_MS;
+  breakerOpenUntil = Date.now() + cooldown;
+
+  console.warn(
+    `[gemini] failure ${consecutiveFailures} — skipping Gemini for ${Math.round(cooldown / 1000)}s. ` +
+      "Search still works; query parsing and product grouping use non-AI logic.",
+  );
+}
+
+function noteSuccess(): void {
+  consecutiveFailures = 0;
+  breakerOpenUntil = 0;
+}
+
+/** True when Gemini is being skipped after repeated failures. */
+export function geminiCircuitOpen(): boolean {
+  return Date.now() < breakerOpenUntil;
+}
+
 export function geminiConfigured(): boolean {
   return !!process.env.GEMINI_API_KEY;
 }
@@ -146,6 +200,14 @@ async function generate(
     body.tools = [{ google_search: {} }];
   }
 
+  // Breaker open: don't spend the caller's time budget discovering that
+  // Gemini is still down. Callers treat a throw as "use the fallback".
+  if (geminiCircuitOpen()) {
+    throw new Error(
+      "Gemini is temporarily being skipped after repeated failures. Search still works — query parsing and product grouping use non-AI logic.",
+    );
+  }
+
   // Try each candidate model, moving on when one has been retired.
   const models = candidateModels();
   if (models.length === 0) {
@@ -157,9 +219,24 @@ async function generate(
   let res: Response | null = null;
   let lastError = "";
 
+  // `timeoutMs` is the budget for this CALL, not for each model we try.
+  //
+  // It used to be per-model: five candidates × a 9s timeout meant Gemini
+  // could spend 45 seconds of a 50-second search budget before the shopping
+  // provider was even called — which then got a 3-second window, failed,
+  // and reported "the price service took too long". The provider was fine.
+  const callDeadline = Date.now() + timeoutMs;
+  const MIN_ATTEMPT_MS = 1_500;
+
   for (const model of models) {
+    const remaining = callDeadline - Date.now();
+    if (remaining < MIN_ATTEMPT_MS) {
+      lastError = lastError || `Gemini ran out of time after ${timeoutMs}ms`;
+      break;
+    }
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), remaining);
 
     let attempt: Response;
     try {
@@ -172,8 +249,10 @@ async function generate(
       });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
+        noteFailure();
         throw new Error(`Gemini request timed out after ${timeoutMs}ms`);
       }
+      noteFailure();
       throw err;
     } finally {
       clearTimeout(timer);
@@ -184,6 +263,7 @@ async function generate(
         resolvedModel = model;
         console.info(`[gemini] using model: ${model}`);
       }
+      noteSuccess();
       res = attempt;
       break;
     }
@@ -210,10 +290,12 @@ async function generate(
     // Any other failure (quota, bad request, grounding not enabled) is a real
     // error about this request, not the model — surface it rather than
     // burning through every candidate with the same doomed call.
+    noteFailure();
     throw new Error(lastError);
   }
 
   if (!res) {
+    noteFailure();
     if (/503|UNAVAILABLE|high demand|429/i.test(lastError)) {
       throw new Error(
         "Every Gemini model is busy right now (503 high demand). This is temporary and search still works — query parsing and product grouping just fall back to non-AI logic.",

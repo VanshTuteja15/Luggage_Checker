@@ -22,6 +22,8 @@ export type FailureKind =
   | "timeout"
   /** Provider returned 5xx. */
   | "server"
+  /** We never sent the request — the search budget was already spent. */
+  | "budget"
   /** Anything else — malformed response, unexpected shape. */
   | "unknown";
 
@@ -48,6 +50,8 @@ export class ProviderError extends Error {
     switch (this.kind) {
       case "network":
       case "auth":
+      case "budget":
+        // No HTTP request left this process, so nothing was billed.
         return false;
       case "quota":
       case "timeout":
@@ -75,6 +79,8 @@ export class ProviderError extends Error {
         return "The price service took too long to respond. This is usually temporary — try again.";
       case "server":
         return "The price service is having problems right now. Try again shortly.";
+      case "budget":
+        return "The search used up its time before it could reach Google. The AI step was slow — try again, it should be quick now.";
       default:
         return this.message;
     }

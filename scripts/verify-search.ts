@@ -721,6 +721,101 @@ async function main() {
     checkProductInvariants(catalog.products, "catalog");
   }
 
+  /* ---------------- 6a-v. Slow Gemini must not starve the fetch --- */
+  //
+  // Real failure, 2026-09-16: "The price service took too long to respond"
+  // on a short query. SerpAPI was never the problem — Gemini got the FULL
+  // timeout for EACH of five candidate models, so it could spend 45s of a
+  // 50s budget before the shopping call started.
+  console.log("\n\x1b[1m6a-v. Gemini hanging must not starve the shopping call\x1b[0m");
+  {
+    process.env.GEMINI_API_KEY = "test-key";
+    // The real default budget — this is the production scenario.
+    process.env.SEARCH_BUDGET_MS = "50000";
+
+    let geminiCalls = 0;
+    let serpCalled = false;
+    let serpTimeBudget = 0;
+    const startedAt = Date.now();
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes("generativelanguage")) {
+        geminiCalls += 1;
+        // Hang until aborted, exactly like an unresponsive endpoint. Real
+        // fetch rejects with AbortError when its signal fires, so honour it.
+        return new Promise<Response>((_, reject) => {
+          const signal = (init as RequestInit | undefined)?.signal;
+          const fail = () => {
+            const e = new Error("The operation was aborted.");
+            e.name = "AbortError";
+            reject(e);
+          };
+          if (signal?.aborted) return fail();
+          signal?.addEventListener("abort", fail, { once: true });
+        });
+      }
+
+      if (url.includes("serpapi.com")) {
+        serpCalled = true;
+        serpTimeBudget = 50_000 - (Date.now() - startedAt);
+        return new Response(
+          JSON.stringify({
+            shopping_results: [
+              {
+                title: 'Samsonite Rhapsody 360 Medium Spinner 25"',
+                link: "https://www.amazon.ca/dp/RHAP",
+                source: "Amazon.ca",
+                price: "$329.99",
+                extracted_price: 329.99,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error("unexpected fetch");
+    }) as typeof fetch;
+
+    const result = await search("Samsonite Rhapsody 360");
+    const elapsed = Date.now() - startedAt;
+
+    check("SerpAPI still got called", serpCalled);
+    check(
+      "…with a usable window, not the scraps",
+      serpTimeBudget > 30_000,
+      `only ${serpTimeBudget}ms left when it was called`,
+    );
+    check(
+      "Gemini was tried once, not once per candidate model",
+      geminiCalls === 1,
+      `${geminiCalls} Gemini calls`,
+    );
+    check("the search returned real prices", result.products.length > 0);
+    check(
+      "and finished inside the budget",
+      elapsed < 20_000,
+      `${elapsed}ms`,
+    );
+
+    // The breaker should now be open, so the NEXT search skips Gemini
+    // entirely rather than paying the wait again.
+    const { geminiCircuitOpen } = await import("../src/lib/gemini");
+    check("the Gemini circuit breaker opened after the failure", geminiCircuitOpen());
+
+    const before = geminiCalls;
+    await search("Samsonite Freeform");
+    check(
+      "the next search skips Gemini entirely while the breaker is open",
+      geminiCalls === before,
+      `${geminiCalls - before} extra Gemini call(s)`,
+    );
+
+    delete process.env.SEARCH_BUDGET_MS;
+    delete process.env.GEMINI_API_KEY;
+  }
+
   /* ---------------- 6b. Query anchoring --------------------------- */
   console.log("\n\x1b[1m6b. Keywords sent to Google\x1b[0m");
   {
