@@ -94,6 +94,33 @@ function fallbackIntent(query: string): SearchIntent {
   };
 }
 
+/**
+ * True when a query is just a product name — brand, model, maybe a size —
+ * with nothing an LLM could usefully extract.
+ *
+ * Conservative: anything with a price constraint, a comparison word, or a
+ * sentence-like shape goes to the model.
+ */
+export function isPlainProductQuery(query: string): boolean {
+  const q = query.trim();
+  if (!q) return false;
+
+  // Price constraints are the main thing the LLM is there for.
+  if (/\d\s*(?:dollars?|cad|\$)|\$\s*\d/i.test(q)) return false;
+  if (/\b(under|below|less than|over|above|more than|between|max|min|up to|at least|cheaper|cheapest|budget)\b/i.test(q)) {
+    return false;
+  }
+
+  // Questions and instructions, not product names.
+  if (/[?]/.test(q)) return false;
+  if (/\b(show|find|get|need|want|looking|compare|best|good|vs|versus|for my|that|which|what|recommend)\b/i.test(q)) {
+    return false;
+  }
+
+  // Short and plain. Six words covers "Samsonite Omni PC 20 inch spinner".
+  return q.split(/\s+/).filter(Boolean).length <= 6;
+}
+
 function clampPrice(value: unknown): number | null {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n) || n <= 0 || n > 100_000) return null;
@@ -119,6 +146,16 @@ export async function parseQuery(
   if (!raw) return fallbackIntent(raw);
 
   if (!geminiConfigured()) return fallbackIntent(raw);
+
+  // A plain product query needs no LLM: the heuristic produces the same
+  // keywords the model would, instantly and without a network round trip.
+  //
+  // This matters more than it looks. "samsonite luggage" is the typical
+  // search, and sending it to Gemini added a network hop that could take
+  // seconds — time subtracted from the only call that actually returns
+  // prices. The LLM earns its place on queries with real structure to
+  // extract ("hard shell carry-on under $300"), not on two nouns.
+  if (isPlainProductQuery(raw)) return fallbackIntent(raw);
 
   // With no time left, skip the LLM entirely — the heuristic parser still
   // extracts price limits and usable keywords.

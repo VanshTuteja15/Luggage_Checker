@@ -117,15 +117,18 @@ export async function fetchOffers(
 
   const BACKOFF_MS = 1200;
 
+  /**
+   * SerpAPI scrapes Google live and rarely answers in under ~5s, so an
+   * attempt with a smaller window than this is one we'd pay for and lose.
+   */
+  const MIN_USEFUL_ATTEMPT_MS = 10_000;
+
   for (let attempt = 0; attempt < 2; attempt++) {
     // Never wait longer than the budget allows, and always leave a little
     // for parsing the response.
     // Two separate questions, previously conflated: is there enough budget
     // left to bother trying, and how long may this attempt take?
-    // SerpAPI scrapes Google live and rarely answers in under ~5s, so a
-    // 3s window was never going to succeed — it just spent a search from
-    // the allowance to fail. Don't start an attempt we can't finish.
-    const MIN_USEFUL_ATTEMPT_MS = 10_000;
+    // Don't start an attempt we can't finish.
     if (deadline && !deadline.hasAtLeast(MIN_USEFUL_ATTEMPT_MS)) {
       throw (
         lastError ??
@@ -186,7 +189,9 @@ export async function fetchOffers(
     }
 
     // Only retry if there is genuinely time for another full attempt.
-    const nextAttemptNeeds = BACKOFF_MS + 5_000;
+    // This has to match the guard at the top of the loop, or we sleep for
+    // the backoff and then immediately give up — 1.2s spent for nothing.
+    const nextAttemptNeeds = BACKOFF_MS + MIN_USEFUL_ATTEMPT_MS;
     if (attempt === 0) {
       if (deadline && !deadline.hasAtLeast(nextAttemptNeeds)) break;
       await new Promise((r) => setTimeout(r, BACKOFF_MS));

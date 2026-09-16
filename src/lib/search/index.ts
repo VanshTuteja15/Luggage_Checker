@@ -49,13 +49,18 @@ const DEFAULT_LIMIT = 10;
 /**
  * Total wall-clock budget for one search.
  *
- * The route allows 60s. Stop at 50s so we return a real answer (or a clear
- * error) instead of being killed by the platform after the provider has
- * already billed us.
+ * The route allows 60s — but that 60s covers the WHOLE request, and this
+ * budget only starts once search() is entered. Authenticating the caller
+ * happens first, and on a slow Supabase connection that alone was taking
+ * 5-11 seconds. A 50s budget plus 11s of auth is 61s: over the ceiling,
+ * killed mid-flight, after the provider had already been billed.
+ *
+ * 38s leaves real headroom for auth before and serialising the response
+ * after. Raise it with SEARCH_BUDGET_MS if your Supabase is fast.
  */
 function searchBudgetMs(): number {
   const raw = Number(process.env.SEARCH_BUDGET_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : 50_000;
+  return Number.isFinite(raw) && raw > 0 ? raw : 38_000;
 }
 
 /**
@@ -569,8 +574,12 @@ async function finish(
   // Whatever time is left is the clustering budget. If it runs out the
   // heuristic grouping takes over, so we still return real prices rather
   // than nothing.
+  // Grouping is the last step and the least essential: the prices are
+  // already in hand, and the heuristic grouping is instant. 22s of budget
+  // meant a hanging Gemini could add 22 seconds to a search that had
+  // everything it needed — so keep this short and fall back quickly.
   let products = await clusterOffers(offers, {
-    timeoutMs: opts.deadline.budget(22_000, 1_500),
+    timeoutMs: opts.deadline.budget(12_000, 1_500),
     mode: opts.mode,
   });
 

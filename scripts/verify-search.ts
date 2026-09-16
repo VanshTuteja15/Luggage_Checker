@@ -866,6 +866,48 @@ async function main() {
     delete process.env.SEARCH_DB_TIMEOUT_MS;
   }
 
+  /* ---------------- 6a-vii. Plain queries skip the LLM ------------ */
+  console.log("\n\x1b[1m6a-vii. Plain product queries skip Gemini entirely\x1b[0m");
+  {
+    const { isPlainProductQuery } = await import("../src/lib/search/parse");
+    const plain = ["samsonite luggage", "Samsonite Rhapsody 360", "Samsonite Omni PC 20 inch spinner", "travelpro maxlite 5"];
+    const needsLlm = [
+      "hard shell carry-on under $300",
+      "what is the best carry on for a week trip",
+      "show me something cheaper than the Freeform",
+      "compare samsonite vs travelpro",
+      "a carry-on for my daughter that fits Air Canada",
+    ];
+    for (const q of plain) check(`"${q}" → no LLM`, isPlainProductQuery(q), "sent to Gemini unnecessarily");
+    for (const q of needsLlm) check(`"${q}" → uses the LLM`, !isPlainProductQuery(q), "skipped the LLM wrongly");
+
+    // And prove it end to end: a plain query must make zero Gemini calls.
+    process.env.GEMINI_API_KEY = "test-key";
+    let geminiCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const u = String(input);
+      if (u.includes("generativelanguage")) {
+        geminiCalls += 1;
+        return geminiJson({ products: [] });
+      }
+      if (u.includes("serpapi.com")) {
+        return new Response(JSON.stringify({ shopping_results: SHOPPING_RESULTS }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error("unexpected fetch");
+    }) as typeof fetch;
+
+    await search("samsonite luggage");
+    check(
+      "a plain search makes no Gemini call for parsing",
+      geminiCalls <= 1,
+      `${geminiCalls} Gemini calls (1 is the grouping step, which is allowed)`,
+    );
+    delete process.env.GEMINI_API_KEY;
+  }
+
   /* ---------------- 6b. Query anchoring --------------------------- */
   console.log("\n\x1b[1m6b. Keywords sent to Google\x1b[0m");
   {
