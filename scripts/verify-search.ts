@@ -173,12 +173,30 @@ const SHOPPING_RESULTS = [
     extracted_price: 0,
   },
   {
-    // No merchant link — only a Google Shopping product page.
+    // No merchant link — only a Google Shopping product page. KEPT: the
+    // price and the retailer name are real, and a Google product page is
+    // better than dropping the listing. Rejecting these turned a
+    // 40-listing SerpAPI response into an empty search page.
     title: 'Samsonite Freeform 21" Spinner',
     product_link: "https://www.google.com/shopping/product/1234567890",
-    source: "Various sellers",
+    source: "Best Buy Canada",
     price: "$231.00",
     extracted_price: 231.0,
+  },
+  {
+    // Google redirect wrapping the real merchant URL — must be unwrapped.
+    title: 'Samsonite Omni PC 20" Spinner Carry-On',
+    link: "https://www.google.com/url?q=https%3A%2F%2Fwww.costco.ca%2Fomni-pc-20.html&sa=U",
+    source: "Costco Wholesale Canada",
+    price: "$159.99",
+    extracted_price: 159.99,
+  },
+  {
+    // extracted_price absent — the display string still has the number.
+    title: 'Travelpro Maxlite 5 25" Expandable Spinner',
+    link: "https://www.travelpro.com/products/maxlite-5-25",
+    source: "Travelpro",
+    price: "CA$1,129.00",
   },
   {
     // Empty title.
@@ -346,10 +364,17 @@ function checkProductInvariants(products: SearchProduct[], label: string) {
     allOffers.find((o) => !/^https?:\/\//.test(o.url))?.url,
   );
 
+  // A Google link is acceptable ONLY as a last resort — and even then the
+  // retailer must be a real name, never "google.com".
   check(
-    `${label}: no offer links to a Google Shopping page`,
-    allOffers.every((o) => !/(^|\.)google\.com/.test(new URL(o.url).hostname)),
-    allOffers.find((o) => /google\.com/.test(o.url))?.url,
+    `${label}: no offer is attributed to Google as the retailer`,
+    allOffers.every((o) => !/google/i.test(o.retailer)),
+    allOffers.find((o) => /google/i.test(o.retailer))?.retailer,
+  );
+  check(
+    `${label}: Google redirect links were unwrapped to the merchant`,
+    allOffers.every((o) => !o.url.includes("google.com/url")),
+    allOffers.find((o) => o.url.includes("google.com/url"))?.url,
   );
 
   check(
@@ -464,8 +489,8 @@ async function main() {
   check("exactly one SerpAPI HTTP call was made", serpCalls === 1, `made ${serpCalls}`);
   check("provider reported as serpapi", heuristic.provider === "serpapi");
   check(
-    "16 of 20 raw rows survived mapping (4 junk rows rejected)",
-    heuristic.offersFound === 16,
+    "19 of 22 raw rows survived mapping (3 junk rows rejected)",
+    heuristic.offersFound === 19,
     `got ${heuristic.offersFound}`,
   );
   check("returned at least one product", heuristic.products.length > 0);
@@ -507,8 +532,8 @@ async function main() {
   const llmOfferCount = llm.products.reduce((n, p) => n + p.offers.length, 0);
   check(
     "no real listing vanished between fetch and display",
-    llmOfferCount === 15,
-    `${llmOfferCount} shown (16 fetched, 1 is Amazon's deduped duplicate)`,
+    llmOfferCount === 18,
+    `${llmOfferCount} shown (19 fetched, 1 is Amazon's deduped duplicate)`,
   );
 
   check(

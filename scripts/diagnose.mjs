@@ -38,7 +38,11 @@ const note = (level, text) => findings.push({ level, text });
 async function timed(fn) {
   const t0 = Date.now();
   try {
-    return [Date.now() - t0, await fn(), null];
+    // `await` FIRST, then measure. Array literals evaluate left to right,
+    // so `[Date.now() - t0, await fn()]` timed nothing at all and reported
+    // 0ms for every call in this script.
+    const result = await fn();
+    return [Date.now() - t0, result, null];
   } catch (err) {
     return [Date.now() - t0, null, err];
   }
@@ -275,8 +279,37 @@ if (!env.SERPAPI_KEY) {
         console.log(`    ${(r.source ?? "?").padEnd(22).slice(0, 22)} $${String(r.extracted_price).padStart(8)}  ${D}${(r.title ?? "").slice(0, 44)}${X}`);
       }
 
+      // WHY were rows rejected? Without this the app just shows nothing and
+      // there is no way to tell a dead API from a mapper that is too strict.
+      if (dropped > 0) {
+        const reasons = { noUrl: 0, googleUrl: 0, noPrice: 0, noTitle: 0 };
+        for (const r of results) {
+          const raw = r.link || r.product_link || "";
+          if (!/^https?:\/\//i.test(raw)) reasons.noUrl += 1;
+          else if (!merchant(r)) reasons.googleUrl += 1;
+          if (!(r.extracted_price > 0)) reasons.noPrice += 1;
+          if (!(r.title ?? "").trim()) reasons.noTitle += 1;
+        }
+        console.log(`  ${Y}why rows were rejected:${X}`);
+        console.log(`    no url at all .......... ${reasons.noUrl}`);
+        console.log(`    url points at Google ... ${reasons.googleUrl}`);
+        console.log(`    no numeric price ....... ${reasons.noPrice}`);
+        console.log(`    no title ............... ${reasons.noTitle}`);
+
+        console.log(`\n  ${Y}first 2 raw listings, exactly as SerpAPI sent them:${X}`);
+        for (const r of results.slice(0, 2)) {
+          console.log(`    ${D}${JSON.stringify(r, null, 2).split("\n").join("\n    ").slice(0, 1400)}${X}`);
+        }
+
+        try {
+          const { writeFileSync } = await import("node:fs");
+          writeFileSync("serpapi-response.json", JSON.stringify(body, null, 2));
+          console.log(`\n  ${D}full response written to serpapi-response.json${X}`);
+        } catch {}
+      }
+
       if (usable.length === 0) {
-        note("error", "SerpAPI answered but no listing had both a price and a merchant link. The search page would show an empty result.");
+        note("error", "SerpAPI answered with listings, but NONE passed the app's filter. The API is fine — the mapping code is rejecting real data. See the rejection reasons and raw rows above.");
       } else if (ms > 20_000) {
         note("warn", `SerpAPI took ${ms}ms. Set SERPAPI_TIMEOUT_MS=40000 and SEARCH_BUDGET_MS=55000 in .env.local.`);
       } else {

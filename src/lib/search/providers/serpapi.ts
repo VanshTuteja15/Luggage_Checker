@@ -52,6 +52,70 @@ type ShoppingResult = {
   reviews?: number;
 };
 
+/**
+ * A listing's price.
+ *
+ * `extracted_price` is the numeric field, but it is not always present —
+ * Google's own markup varies by merchant, and SerpAPI passes that through.
+ * When it's missing, the display string ("$229.99", "CA$1,129.00") still
+ * carries the number, so parse it rather than discarding a real offer.
+ */
+function priceOf(r: ShoppingResult): number {
+  if (typeof r.extracted_price === "number" && r.extracted_price > 0) {
+    return r.extracted_price;
+  }
+
+  const raw = r.price ?? "";
+  // Keep digits, dots and commas; drop currency words and symbols. Then
+  // treat commas as thousands separators.
+  const cleaned = raw.replace(/[^\d.,]/g, "").replace(/,/g, "");
+  const value = Number.parseFloat(cleaned);
+  return Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : 0;
+}
+
+/**
+ * The best URL we can offer for a listing, and whether it goes straight to
+ * the merchant.
+ *
+ * Google Shopping rows come in several shapes and this has to handle all of
+ * them, because rejecting a shape means throwing away a real price:
+ *
+ *   1. `link` is the merchant's product page          — ideal
+ *   2. `link` is a Google redirect (/url?q=… , /aclk) — unwrap it
+ *   3. only `product_link`, a Google Shopping page    — usable, not direct
+ *
+ * Case 3 used to be dropped outright. That was too strict: the price and
+ * the retailer name are both real, and a link to Google's page for the
+ * product is far better than showing the client nothing at all.
+ */
+export function resolveOfferUrl(r: ShoppingResult): { url: string; direct: boolean } | null {
+  const candidates = [r.link, r.product_link].filter(
+    (u): u is string => typeof u === "string" && /^https?:\/\//i.test(u),
+  );
+
+  for (const candidate of candidates) {
+    if (isMerchantUrl(candidate)) return { url: candidate, direct: true };
+
+    // A Google redirect carries the real destination in a query parameter.
+    try {
+      const parsed = new URL(candidate);
+      for (const param of ["q", "url", "adurl", "dest"]) {
+        const inner = parsed.searchParams.get(param);
+        if (inner && /^https?:\/\//i.test(inner) && isMerchantUrl(inner)) {
+          return { url: inner, direct: true };
+        }
+      }
+    } catch {
+      // Unparseable — fall through.
+    }
+  }
+
+  // Nothing direct. Keep a Google Shopping page as a last resort so the
+  // listing still reaches the client.
+  const fallback = candidates[0];
+  return fallback ? { url: fallback, direct: false } : null;
+}
+
 export function serpApiConfigured(): boolean {
   return !!process.env.SERPAPI_KEY;
 }
@@ -228,25 +292,27 @@ export async function fetchOffers(
 
   return (data.shopping_results ?? [])
     .map((r): Offer | null => {
-      // `link` is the merchant's own page. `product_link` is Google's
-      // aggregate page for the product and is only worth having when it
-      // isn't actually a google.com URL — which, in practice, it is.
-      const candidate = r.link || r.product_link || "";
-      const price = typeof r.extracted_price === "number" ? r.extracted_price : 0;
+      const resolved = resolveOfferUrl(r);
+      const price = priceOf(r);
 
-      // Drop anything without the two things that make an offer real: a
-      // price, and a retailer page we can send a buyer to and re-check
-      // tomorrow.
-      if (!isMerchantUrl(candidate)) return null;
-      if (!price || price <= 0) return null;
+      // An offer needs a price and somewhere to send the buyer. Nothing
+      // stricter — being stricter than this is how a 40-listing response
+      // became an empty search page.
+      if (!resolved) return null;
+      if (price <= 0) return null;
 
-      const url = candidate;
+      const url = resolved.url;
 
       const source = r.source ?? "";
 
+      // Only let the URL identify the retailer when it IS the retailer's.
+      // Otherwise a Google Shopping link would make the retailer read
+      // "google.com" on the card.
+      const identityUrl = resolved.direct ? url : "";
+
       return {
-        retailer: displayRetailer(source, url),
-        retailerKey: matchRetailer(source, url),
+        retailer: displayRetailer(source, identityUrl),
+        retailerKey: matchRetailer(source, identityUrl),
         price: Math.round(price * 100) / 100,
         currency: "CAD",
         inStock: true,
