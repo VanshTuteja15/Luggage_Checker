@@ -9,10 +9,11 @@ track it, and get told when the price drops.
 
 ## What it does
 
-**Search** — Type "hardside carry-on under $300". Gemini interprets the query,
-a shopping provider fetches real listings, Gemini groups those listings into
-distinct products, and you get up to 10 products each showing every retailer
-that carries it, cheapest first. Major Canadian retailers (Amazon.ca,
+**Search** — Type "Samsonite Freeform 21" or "hardside carry-on under $300".
+One Tavily web-research call reads Canadian retailer pages, the price, stock
+status and specs are read from each page (with the exact words kept as
+evidence), listings are grouped into distinct products, and you get up to 10
+products each showing every retailer that carries it, cheapest first. Major Canadian retailers (Amazon.ca,
 Walmart.ca, Costco.ca, Hudson's Bay, Canadian Tire, Best Buy, Bentley, London
 Drugs) are never dropped from a result set when they carry the item.
 
@@ -41,7 +42,7 @@ output.
 | Styling | Tailwind v4, shadcn/ui, Recharts |
 | Data | Supabase (Postgres + Auth + RLS) |
 | Server state | TanStack Query |
-| Prices | Serper.dev / SerpAPI (Google Shopping) |
+| Research | Tavily web research (Canada), credit-capped at $0 |
 | AI | Gemini — query parsing, product clustering, chat |
 | Email | Resend |
 
@@ -60,9 +61,10 @@ npm run dev
 Then run `supabase/migrations/000_complete_setup.sql` and
 `003_search_cache_and_quota.sql` in the Supabase SQL Editor.
 
-You need **one** price provider key — [Serper.dev](https://serper.dev)
-(2,500 free searches) or [SerpAPI](https://serpapi.com) (250 free per month).
-Neither asks for a credit card.
+You need a **Tavily** key — [app.tavily.com](https://app.tavily.com), free
+plan: 1,000 credits a month, no card. The app stops at 950 by default and
+refuses any call past that before it is sent, so research can't cost money.
+Check setup with `npm run diagnose`.
 
 ---
 
@@ -87,7 +89,9 @@ src/
     │   ├── parse.ts        ← LLM query understanding
     │   ├── cluster.ts      ← LLM groups listings into products
     │   ├── quota.ts        ← search cache + allowance guard
-    │   └── providers/      ← serper | serpapi | gemini-grounded
+    │   ├── extract.ts      ← price / stock / specs from page text
+    │   └── providers/      ← tavily (active); serper, serpapi retired
+    ├── tavily.ts           ← reusable research client: cap, cache, dedupe
     ├── db/                 ← persistence + refresh
     ├── retailers.ts        ← canonical retailer registry
     ├── queries.ts          ← TanStack Query hooks
@@ -99,16 +103,17 @@ src/
 ```
 "hardside carry-on under $300"
   → cache lookup      free — a repeat search costs nothing
-  → parse intent      Gemini, structured JSON
-  → fetch listings    Serper → SerpAPI → grounded Gemini
-                      the ONLY source of prices, metered against quota
-  → cluster listings  Gemini groups them into distinct products
+  → parse intent      plain product names skip the LLM entirely
+  → web research      ONE Tavily search (1 credit), 20 pages with text
+                      the ONLY source of prices — read from retailer
+                      pages, Canadian storefronts only, with evidence
+  → cluster listings  Gemini, or an instant heuristic if it's slow
   → filter + rank     retailer settings, price ceiling, majors first
   → top 10 products, each with every offer found
 ```
 
-Providers are tried in order; if one fails or is out of allowance, the next
-takes over rather than failing the search.
+Research is read-only: it never creates products. Tracking a result is a
+separate workflow (`/api/track`).
 
 ### Staying inside a free tier
 
@@ -160,5 +165,6 @@ npx tsc --noEmit # typecheck
 - **Vercel's Hobby plan is non-commercial only.** Fine for building and demos;
   if this becomes a business tool, move to a paid plan or a host whose free tier
   permits commercial use.
-- `src/lib/serpapi.ts` is dead code, superseded by
-  `src/lib/search/providers/serpapi.ts`. Safe to delete.
+- `src/lib/serpapi.ts`, `src/lib/search/providers/serpapi.ts`,
+  `serper.ts`, `gemini-grounded.ts` and `scripts/probe-serpapi.mjs` are no
+  longer used (research moved to Tavily). Safe to delete.

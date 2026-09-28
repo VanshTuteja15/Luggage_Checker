@@ -55,14 +55,23 @@ export class Deadline {
 /* ------------------------------------------------------------------ */
 
 export type Meter = {
-  /** Claim one call. Throws if the allowance is gone — stops the retry. */
-  beforeAttempt: () => Promise<void>;
-  /** Hand the claim back when the attempt provably wasn't billable. */
-  refundAttempt: () => Promise<void>;
+  /**
+   * Claim the expected cost of one attempt (default 1). Throws if the
+   * allowance can't cover it — which stops the attempt before any request.
+   */
+  beforeAttempt: (units?: number) => Promise<void>;
+  /** Hand a claim back when the attempt provably wasn't billable. */
+  refundAttempt: (units?: number) => Promise<void>;
+  /**
+   * Correct the count once the provider reports what the attempt really
+   * cost (Tavily returns this per response). Positive or negative.
+   */
+  reconcile?: (delta: number) => Promise<void>;
 };
 
 /** A meter that counts nothing — for tests and unmetered callers. */
 export const NO_METER: Meter = {
   beforeAttempt: async () => {},
   refundAttempt: async () => {},
+  reconcile: async () => {},
 };

@@ -18,6 +18,7 @@
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { lastKnownTavilyUsage, monthlyCreditCap } from "@/lib/tavily";
 import type { ProviderName, SearchResponse } from "./types";
 
 
@@ -95,6 +96,17 @@ function envInt(name: string, fallback: number): number {
  */
 export function allowanceFor(provider: ProviderName): Allowance | null {
   switch (provider) {
+    case "tavily":
+      // Tavily's free plan is 1,000 credits a month. The app stops at 950 by
+      // default, so a stray manual test or dashboard playground query can't
+      // push the account over — and "over" is the only way money could ever
+      // be involved.
+      return {
+        // Same parser as the research client, so the two can't disagree.
+        limit: monthlyCreditCap(),
+        period: "month",
+        label: "Tavily research credits",
+      };
     case "serper":
       return {
         limit: envInt("SERPER_CREDIT_LIMIT", 2500),
@@ -145,14 +157,26 @@ export async function getBudget(
 
   const period = periodKey(allowance);
 
-  const { data } = await db
-    .from("provider_usage")
-    .select("calls")
-    .eq("provider", provider)
-    .eq("period", period)
-    .maybeSingle();
+  const { data } = await bounded<{ data: { calls?: unknown } | null }>(
+    () =>
+      db
+        .from("provider_usage")
+        .select("calls")
+        .eq("provider", provider)
+        .eq("period", period)
+        .maybeSingle() as unknown as Promise<{ data: { calls?: unknown } | null }>,
+    { data: null },
+  );
 
-  const used = typeof data?.calls === "number" ? data.calls : 0;
+  let used = typeof data?.calls === "number" ? data.calls : 0;
+
+  // Tavily reports its own count; when we've seen it recently, trust
+  // whichever figure is higher. Our counter can miss calls made outside
+  // the app (dashboard playground, other machines); Tavily's can't.
+  if (provider === "tavily") {
+    const remote = lastKnownTavilyUsage();
+    if (remote && remote.used > used) used = remote.used;
+  }
   const remaining = Math.max(0, allowance.limit - used);
 
   return {
@@ -164,9 +188,11 @@ export async function getBudget(
     period: allowance.period,
     exhausted: remaining <= 0,
     note:
-      allowance.period === "month"
-        ? "Resets on the 1st of each month"
-        : "One-time free allowance — does not refill",
+      provider === "tavily"
+        ? "Free monthly credits — the app stops before the limit, so nothing is ever charged"
+        : allowance.period === "month"
+          ? "Resets on the 1st of each month"
+          : "One-time free allowance — does not refill",
   };
 }
 
@@ -203,6 +229,7 @@ export class QuotaExhaustedError extends Error {
 export async function reserveCall(
   db: SupabaseClient | undefined,
   provider: ProviderName,
+  units = 1,
 ): Promise<void> {
   if (!db) return; // No database handle — nothing to meter against.
 
@@ -216,7 +243,7 @@ export async function reserveCall(
       db.rpc("increment_provider_usage", {
         p_provider: provider,
         p_period: period,
-        p_amount: 1,
+        p_amount: units,
       }) as unknown as Promise<{ data: unknown; error: unknown }>,
     // Timed out: treat metering as unavailable and let the search proceed.
     { data: null, error: new Error("metering timed out") },
@@ -231,7 +258,7 @@ export async function reserveCall(
       .rpc("increment_provider_usage", {
         p_provider: provider,
         p_period: period,
-        p_amount: -1,
+        p_amount: -units,
       })
       .then(
         () => undefined,
@@ -241,8 +268,8 @@ export async function reserveCall(
     throw new QuotaExhaustedError(
       provider,
       allowance.period === "month"
-        ? `${allowance.label} free allowance used up for this month (${allowance.limit} searches). It resets on the 1st — or add another provider key.`
-        : `${allowance.label} free allowance used up (${allowance.limit} searches). Add a SERPAPI_KEY to keep going on its monthly free tier.`,
+        ? `${allowance.label}: this month's free allowance is used up (${allowance.limit}). Research resumes when it resets — nothing is charged.`
+        : `${allowance.label}: the free allowance is used up (${allowance.limit}).`,
     );
   }
 }
@@ -258,22 +285,35 @@ export async function reserveCall(
 export async function refundCall(
   db: SupabaseClient | undefined,
   provider: ProviderName,
+  units = 1,
 ): Promise<void> {
-  if (!db) return;
+  await adjustCall(db, provider, -units);
+}
+
+/**
+ * Nudge the counter by `delta` without an allowance check — used to
+ * reconcile a reservation with what the provider says a call really cost.
+ * Bounded and fire-safe like everything else here.
+ */
+export async function adjustCall(
+  db: SupabaseClient | undefined,
+  provider: ProviderName,
+  delta: number,
+): Promise<void> {
+  if (!db || !delta) return;
 
   const allowance = allowanceFor(provider);
   if (!allowance) return;
 
-  await db
-    .rpc("increment_provider_usage", {
-      p_provider: provider,
-      p_period: periodKey(allowance),
-      p_amount: -1,
-    })
-    .then(
-      () => undefined,
-      () => undefined,
-    );
+  await bounded(
+    () =>
+      db.rpc("increment_provider_usage", {
+        p_provider: provider,
+        p_period: periodKey(allowance),
+        p_amount: delta,
+      }) as unknown as Promise<unknown>,
+    undefined,
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -282,13 +322,31 @@ export async function refundCall(
 
 const DEFAULT_TTL_MINUTES = envInt("SEARCH_CACHE_TTL_MINUTES", 360); // 6 hours
 
-/** Stable key for a search. Normalised so casing and spacing don't miss. */
+/**
+ * Stable key for a search. Normalised so casing, spacing, punctuation and
+ * word order don't cause a miss: "Samsonite luggage", "luggage samsonite"
+ * and "Samsonite  Luggage!" are one search, and should cost one credit.
+ */
+export function normaliseQuery(query: string): string {
+  return [
+    ...new Set(
+      query
+        .toLowerCase()
+        .replace(/[^a-z0-9$.:\s-]/g, " ")
+        .split(/\s+/)
+        .filter(Boolean),
+    ),
+  ]
+    .sort()
+    .join(" ");
+}
+
 export function cacheKey(
   query: string,
   allowedRetailers: string[],
   limit: number,
 ): string {
-  const normalised = query.trim().toLowerCase().replace(/\s+/g, " ");
+  const normalised = normaliseQuery(query);
   const retailers = [...allowedRetailers].sort().join(",");
   return createHash("sha256")
     .update(`${normalised}|${retailers}|${limit}`)

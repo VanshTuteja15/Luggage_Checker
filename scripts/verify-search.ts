@@ -1,310 +1,244 @@
 /* ------------------------------------------------------------------ */
-/*  Offline verification of the whole search pipeline                  */
+/*  Offline verification of research + search                        */
 /*                                                                     */
 /*    npm run verify:search                                            */
 /*                                                                     */
-/*  Feeds a realistic 20-result Google Shopping (Canada) payload        */
-/*  through the REAL pipeline with `fetch` stubbed, and asserts the     */
-/*  things a client would notice: every offer links to the merchant,    */
-/*  prices are real, the same suitcase at six retailers becomes ONE     */
-/*  product, majors are never dropped, and the numbers on the card      */
-/*  match the offers underneath it.                                    */
+/*  Drives the REAL pipeline with `fetch` stubbed, using realistic     */
+/*  Tavily responses (retailer pages with nav junk, list prices,       */
+/*  "orders over $75", "Customers also viewed" rows, US storefronts,   */
+/*  category pages). Asserts the things that matter:                   */
+/*                                                                     */
+/*    • no fake prices — every price is on the page, with evidence     */
+/*    • no paid usage — the credit cap refuses before any request      */
+/*    • no wasted credits — caching, de-duplication, negative cache    */
+/*    • errors, rate limits, timeouts and empty results handled        */
+/*    • research never touches the Add Product workflow                */
 /*                                                                     */
 /*  Costs nothing. Makes no network call.                              */
 /* ------------------------------------------------------------------ */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { search } from "../src/lib/search/index";
-import { matchRetailer } from "../src/lib/retailers";
+import { isCanadianStorefront, matchRetailer } from "../src/lib/retailers";
+import {
+  analyzePage,
+  cleanPageTitle,
+  extractDetails,
+  pickListingPrice,
+} from "../src/lib/search/extract";
+import { ProviderError } from "../src/lib/search/errors";
+import { resetTavilyState, tavilyCreditStatus, tavilySearch } from "../src/lib/tavily";
 import type { SearchProduct } from "../src/lib/search/types";
 
 /* ------------------------------------------------------------------ */
-/*  A realistic SerpAPI google_shopping response                      */
-/*                                                                     */
-/*  Modelled on what Google Shopping Canada actually returns for       */
-/*  "samsonite carry on": the same three or four suitcases repeated    */
-/*  across retailers, inconsistent title formats, a couple of rows     */
-/*  with no price, one with no merchant link, one retailer listing     */
-/*  the same bag twice, and several sellers we don't have in the       */
-/*  registry.                                                          */
+/*  Realistic retailer pages, as Tavily returns them                  */
 /* ------------------------------------------------------------------ */
 
-const SHOPPING_RESULTS = [
+type TavilyRow = {
+  title: string;
+  url: string;
+  content: string;
+  score: number;
+  raw_content: string | null;
+};
+
+type PageSpec = {
+  name: string;
+  site: string;
+  url: string;
+  /** Exactly as the page prints it, e.g. "$229.99", "CA$219.00", "164,97 $". */
+  price?: string;
+  /** Extra lines inside the product section (specs, stock notes…). */
+  extra?: string;
+};
+
+/**
+ * A product page the way a text extractor sees it: header junk with its
+ * own amounts, breadcrumbs, the product, its price, then a "customers also
+ * viewed" row of OTHER products' prices that must be ignored.
+ */
+function productPage(p: PageSpec): TavilyRow {
+  const priceLine = p.price ? `Sale price ${p.price}` : "See price in cart";
+  const raw = [
+    "Skip to main content",
+    "Free shipping on orders over $75",
+    "Sign in | Cart $0.00",
+    `Home > Luggage > ${p.name}`,
+    p.name,
+    "4.6 out of 5 stars (3,121 reviews)",
+    priceLine,
+    "Add to cart",
+    p.extra ?? "",
+    "Customers also viewed",
+    "Travel Pillow $24.99",
+    "Garment Bag $189.99",
+  ].join("\n");
+
+  return {
+    title: `${p.name} | ${p.site}`,
+    url: p.url,
+    content: `${p.name} ${priceLine} Add to cart`,
+    score: 0.8,
+    raw_content: raw,
+  };
+}
+
+/** 16 good pages (order matters: the Gemini stub groups by index), then junk. */
+const PAGES: TavilyRow[] = [
   // ── Samsonite Freeform 21" carry-on, at six retailers ──
-  {
-    title: 'Samsonite Freeform Hardside Expandable Spinner Carry-On 21"',
-    link: "https://www.amazon.ca/dp/B07FPBNBZF",
-    source: "Amazon.ca",
-    price: "$229.99",
-    extracted_price: 229.99,
-    thumbnail: "https://serpapi.example/thumb1.jpg",
-    rating: 4.6,
-    reviews: 3121,
-  },
-  {
-    title: 'Samsonite Freeform 21" Spinner Carry-On Luggage - Black',
-    link: "https://www.walmart.ca/en/ip/samsonite-freeform/6000202334455",
-    source: "Walmart Canada",
-    price: "$249.99",
-    extracted_price: 249.99,
-  },
-  {
-    title: "Samsonite Freeform Spinner Carry-On 21 inch",
-    link: "https://www.samsonite.ca/freeform-carry-on-spinner/12345.html",
-    source: "Samsonite",
-    price: "$279.99",
-    extracted_price: 279.99,
-    thumbnail: "https://serpapi.example/thumb1b.jpg",
-  },
-  {
-    title: 'Samsonite Freeform 21" Carry-On Spinner, Coral Red',
-    link: "https://www.thebay.com/product/samsonite-freeform-21-spinner-0600089",
-    source: "Hudson's Bay",
-    price: "$264.00",
-    extracted_price: 264.0,
-  },
-  {
-    title: 'SAMSONITE Freeform 21" Hardside Spinner - New, Free Shipping',
-    link: "https://www.ebay.ca/itm/226611882314",
-    source: "eBay",
-    price: "$198.50",
-    extracted_price: 198.5,
-  },
-  {
-    // Same retailer, same bag, listed twice — the dearer one must vanish.
-    title: 'Samsonite Freeform 21" Spinner Carry-On (Renewed)',
-    link: "https://www.amazon.ca/dp/B07FPBNBZG",
-    source: "Amazon.ca",
-    price: "$259.99",
-    extracted_price: 259.99,
-  },
-  {
-    title: 'Samsonite Freeform Carry-On Spinner 21"',
-    link: "https://www.luggagedepot.ca/products/samsonite-freeform-21",
-    source: "Luggage Depot",
-    price: "$239.00",
-    extracted_price: 239.0,
-  },
+  productPage({ name: 'Samsonite Freeform Hardside Expandable Spinner Carry-On 21"', site: "Amazon.ca", url: "https://www.amazon.ca/dp/B07FPBNBZF", price: "$229.99" }),
+  productPage({ name: 'Samsonite Freeform 21" Spinner Carry-On Luggage - Black', site: "Walmart Canada", url: "https://www.walmart.ca/en/ip/samsonite-freeform/6000202334455", price: "$249.99" }),
+  productPage({ name: "Samsonite Freeform Spinner Carry-On 21 inch", site: "Samsonite Canada", url: "https://www.samsonite.ca/freeform-carry-on-spinner/12345.html", price: "$279.99" }),
+  productPage({ name: 'Samsonite Freeform 21" Carry-On Spinner, Coral Red', site: "Hudson's Bay", url: "https://www.thebay.com/product/samsonite-freeform-21-spinner-0600089", price: "$264.00" }),
+  productPage({ name: 'SAMSONITE Freeform 21" Hardside Spinner - New, Free Shipping', site: "eBay", url: "https://www.ebay.ca/itm/226611882314", price: "$198.50" }),
+  // Same retailer, same bag, listed twice — the dearer one must vanish.
+  productPage({ name: 'Samsonite Freeform 21" Spinner Carry-On (Renewed)', site: "Amazon.ca", url: "https://www.amazon.ca/dp/B07FPBNBZG", price: "$259.99" }),
+  productPage({ name: 'Samsonite Freeform Carry-On Spinner 21"', site: "Luggage Depot", url: "https://www.luggagedepot.ca/products/samsonite-freeform-21", price: "$239.00" }),
 
   // ── Samsonite Freeform 28" — SAME model, DIFFERENT size ──
-  {
-    title: 'Samsonite Freeform Hardside Expandable Spinner 28" Large Check-In',
-    link: "https://www.amazon.ca/dp/B07FPCCCC1",
-    source: "Amazon.ca",
-    price: "$329.99",
-    extracted_price: 329.99,
-  },
-  {
-    title: 'Samsonite Freeform 28" Spinner Checked Luggage',
-    link: "https://www.costco.ca/samsonite-freeform-28-spinner.product.100512345.html",
-    source: "Costco Wholesale Canada",
-    price: "$299.99",
-    extracted_price: 299.99,
-  },
-  {
-    title: 'Samsonite Freeform Spinner 28 inch Check-In Suitcase',
-    link: "https://www.canadiantire.ca/en/pdp/samsonite-freeform-28-0871234p.html",
-    source: "Canadian Tire",
-    price: "$349.99",
-    extracted_price: 349.99,
-  },
+  productPage({ name: 'Samsonite Freeform Hardside Expandable Spinner 28" Large Check-In', site: "Amazon.ca", url: "https://www.amazon.ca/dp/B07FPCCCC1", price: "$329.99" }),
+  productPage({ name: 'Samsonite Freeform 28" Spinner Checked Luggage', site: "Costco", url: "https://www.costco.ca/samsonite-freeform-28-spinner.product.100512345.html", price: "$299.99" }),
+  productPage({ name: "Samsonite Freeform Spinner 28 inch Check-In Suitcase", site: "Canadian Tire", url: "https://www.canadiantire.ca/en/pdp/samsonite-freeform-28-0871234p.html", price: "$349.99" }),
 
   // ── Samsonite Omni PC 20" ──
-  {
-    title: 'Samsonite Omni PC Hardside Spinner 20" Carry-On',
-    link: "https://www.amazon.ca/dp/B00N3RXRXO",
-    source: "Amazon.ca",
-    price: "$149.99",
-    extracted_price: 149.99,
-    rating: 4.5,
-    reviews: 18422,
-  },
-  {
-    title: "Samsonite Omni PC 20 inch Spinner Carry On - Teal",
-    link: "https://www.bentley.ca/en/samsonite-omni-pc-20-spinner",
-    source: "Bentley",
-    price: "$169.99",
-    extracted_price: 169.99,
-  },
-  {
-    title: 'Samsonite Omni PC 20" Hardside Carry-On Spinner',
-    link: "https://www.londondrugs.com/samsonite-omni-pc-20-spinner/L1234567.html",
-    source: "London Drugs",
-    price: "$179.99",
-    extracted_price: 179.99,
-  },
+  productPage({ name: 'Samsonite Omni PC Hardside Spinner 20" Carry-On', site: "Amazon.ca", url: "https://www.amazon.ca/dp/B00N3RXRXO", price: "$149.99" }),
+  productPage({ name: "Samsonite Omni PC 20 inch Spinner Carry On - Teal", site: "Bentley", url: "https://www.bentley.ca/en/samsonite-omni-pc-20-spinner", price: "$169.99" }),
+  productPage({ name: 'Samsonite Omni PC 20" Hardside Carry-On Spinner', site: "London Drugs", url: "https://www.londondrugs.com/samsonite-omni-pc-20-spinner/L1234567.html", price: "$179.99" }),
 
-  // ── Competing brands that legitimately show up in the same search ──
-  {
-    title: 'American Tourister Moonlight Hardside Spinner 21" Carry-On',
-    link: "https://www.walmart.ca/en/ip/american-tourister-moonlight/6000200112233",
-    source: "Walmart Canada",
-    price: "$99.97",
-    extracted_price: 99.97,
-  },
-  {
-    title: 'American Tourister Moonlight 21" Spinner Luggage',
-    link: "https://www.amazon.ca/dp/B01MSGF9VB",
-    source: "Amazon.ca",
-    price: "$109.99",
-    extracted_price: 109.99,
-  },
-  {
-    title: 'Travelpro Maxlite 5 21" Expandable Carry-On Spinner',
-    link: "https://www.travelpro.com/products/maxlite-5-carry-on-spinner",
-    source: "Travelpro",
-    price: "$219.00",
-    extracted_price: 219.0,
-  },
+  // ── Competing brands in the same search ──
+  productPage({ name: 'American Tourister Moonlight Hardside Spinner 21" Carry-On', site: "Walmart Canada", url: "https://www.walmart.ca/en/ip/american-tourister-moonlight/6000200112233", price: "$99.97" }),
+  productPage({ name: 'American Tourister Moonlight 21" Spinner Luggage', site: "Amazon.ca", url: "https://www.amazon.ca/dp/B01MSGF9VB", price: "$109.99" }),
+  // A .com retailer — accepted only because the page states CA$.
+  productPage({ name: 'Travelpro Maxlite 5 21" Expandable Carry-On Spinner', site: "Travelpro", url: "https://www.travelpro.com/products/maxlite-5-carry-on-spinner", price: "CA$219.00" }),
 
-  // ── Rows the mapper MUST reject ──
+  // ── Pages that must NOT become offers ──
+  productPage({ name: 'Samsonite Freeform 21" Carry-On Spinner', site: "Sport Chek", url: "https://www.sportchek.ca/product/samsonite-freeform.html" }), // no price
+  productPage({ name: "Samsonite Luggage Set 3 Piece", site: "Deals Depot", url: "https://example-store.ca/products/set", price: "$0.00" }), // implausible
+  productPage({ name: 'Samsonite Freeform 21" Spinner', site: "Google Shopping", url: "https://www.google.com/shopping/product/1234567890", price: "$231.00" }), // not a retailer
+  { ...productPage({ name: "", site: "", url: "https://www.walmart.ca/en/ip/unknown/6000209999999", price: "$89.99" }), title: "" }, // no title
+  productPage({ name: 'Samsonite Freeform 21" Spinner', site: "Amazon.com", url: "https://www.amazon.com/dp/B07USA", price: "$179.99" }), // USD storefront
   {
-    // No price at all — Google shows "See price in cart".
-    title: 'Samsonite Freeform 21" Carry-On Spinner',
-    link: "https://www.sportchek.ca/product/samsonite-freeform.html",
-    source: "Sport Chek",
-    price: "See price in cart",
-  },
-  {
-    // extracted_price present but zero.
-    title: "Samsonite Luggage Set 3 Piece",
-    link: "https://example-store.ca/set",
-    source: "Deals Depot",
-    price: "$0.00",
-    extracted_price: 0,
-  },
-  {
-    // No merchant link — only a Google Shopping product page. KEPT: the
-    // price and the retailer name are real, and a Google product page is
-    // better than dropping the listing. Rejecting these turned a
-    // 40-listing SerpAPI response into an empty search page.
-    title: 'Samsonite Freeform 21" Spinner',
-    product_link: "https://www.google.com/shopping/product/1234567890",
-    source: "Best Buy Canada",
-    price: "$231.00",
-    extracted_price: 231.0,
-  },
-  {
-    // Google redirect wrapping the real merchant URL — must be unwrapped.
-    title: 'Samsonite Omni PC 20" Spinner Carry-On',
-    link: "https://www.google.com/url?q=https%3A%2F%2Fwww.costco.ca%2Fomni-pc-20.html&sa=U",
-    source: "Costco Wholesale Canada",
-    price: "$159.99",
-    extracted_price: 159.99,
-  },
-  {
-    // extracted_price absent — the display string still has the number.
-    title: 'Travelpro Maxlite 5 25" Expandable Spinner',
-    link: "https://www.travelpro.com/products/maxlite-5-25",
-    source: "Travelpro",
-    price: "CA$1,129.00",
-  },
-  {
-    // Empty title.
-    title: "",
-    link: "https://www.walmart.ca/en/ip/unknown/6000209999999",
-    source: "Walmart Canada",
-    price: "$89.99",
-    extracted_price: 89.99,
-  },
+    title: "Search results for samsonite | Walmart Canada",
+    url: "https://www.walmart.ca/search?q=samsonite",
+    content: "Samsonite Freeform $249.99 Samsonite Omni $149.99",
+    score: 0.6,
+    raw_content: "Samsonite Freeform $249.99\nSamsonite Omni $149.99\nSamsonite Winfield $199.99",
+  }, // search page
 ];
 
 /* ------------------------------------------------------------------ */
 /*  fetch stub                                                        */
 /* ------------------------------------------------------------------ */
 
+type SearchHandler = (body: Record<string, unknown>, init?: RequestInit) => Response | Promise<Response>;
+
 type StubOpts = {
-  /** Emulate Gemini being configured and answering. */
+  /** Handles POST api.tavily.com/search. Default: return PAGES. */
+  search?: SearchHandler;
+  /** Handles GET api.tavily.com/usage. Default: a fresh free account (0 of 1,000). */
+  usage?: () => Response;
+  /** Emulate Gemini answering. */
   gemini?: boolean;
   /** Emulate Gemini returning 503 high demand on every model. */
   geminiBusy?: boolean;
-  /** Count SerpAPI HTTP requests actually made. */
-  onSerpApiCall?: () => void;
-  /** Force SerpAPI to fail this many times before succeeding. */
-  serpApiFailures?: number;
+  /** Emulate Gemini hanging until aborted. */
+  geminiHangs?: boolean;
 };
 
-function installFetchStub(opts: StubOpts) {
-  let failuresLeft = opts.serpApiFailures ?? 0;
+const calls = { search: 0, usage: 0, gemini: 0, bodies: [] as Record<string, unknown>[], headers: [] as Headers[] };
+
+function tavilyJson(results: TavilyRow[], credits = 1): Response {
+  return new Response(
+    JSON.stringify({
+      query: "q",
+      results,
+      response_time: 1.2,
+      usage: { credits },
+      request_id: "req-test",
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+function usageJson(used: number, extra: Record<string, unknown> = {}): Response {
+  return new Response(
+    JSON.stringify({
+      key: { usage: used, limit: null },
+      account: { current_plan: "Researcher", plan_usage: used, plan_limit: 1000, paygo_usage: 0, paygo_limit: 0, ...extra },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+function tavilyError(status: number, message: string, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify({ detail: { error: message } }), {
+    status,
+    headers: { "content-type": "application/json", ...headers },
+  });
+}
+
+function hangUntilAborted(init?: RequestInit): Promise<Response> {
+  return new Promise<Response>((_, reject) => {
+    const signal = init?.signal;
+    const fail = () => {
+      const e = new Error("The operation was aborted.");
+      e.name = "AbortError";
+      reject(e);
+    };
+    if (signal?.aborted) return fail();
+    signal?.addEventListener("abort", fail, { once: true });
+  });
+}
+
+/** Install a fresh stub and clear every in-process cache and ledger. */
+function installStub(opts: StubOpts = {}) {
+  resetTavilyState();
+  calls.search = 0;
+  calls.usage = 0;
+  calls.gemini = 0;
+  calls.bodies = [];
+  calls.headers = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
 
-    if (url.includes("serpapi.com")) {
-      opts.onSerpApiCall?.();
-      if (failuresLeft > 0) {
-        failuresLeft -= 1;
-        return new Response("upstream timeout", { status: 503 });
-      }
-      return new Response(JSON.stringify({ shopping_results: SHOPPING_RESULTS }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+    if (url === "https://api.tavily.com/usage") {
+      calls.usage += 1;
+      return opts.usage ? opts.usage() : usageJson(0);
+    }
+
+    if (url === "https://api.tavily.com/search") {
+      calls.search += 1;
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      calls.bodies.push(body);
+      calls.headers.push(new Headers(init?.headers));
+      return opts.search ? opts.search(body, init) : tavilyJson(PAGES);
     }
 
     if (url.includes("generativelanguage.googleapis.com")) {
+      calls.gemini += 1;
+      if (opts.geminiHangs) return hangUntilAborted(init);
       if (opts.geminiBusy) {
         return new Response(
           JSON.stringify({ error: { code: 503, message: "The model is overloaded. UNAVAILABLE" } }),
           { status: 503 },
         );
       }
-
       const body = JSON.parse(String(init?.body ?? "{}"));
       const prompt: string = body.contents?.[0]?.parts?.[0]?.text ?? "";
-
-      // Clustering prompt → group by the model line + size, the way a
-      // competent model would.
       if (prompt.includes("Group these listings")) {
         return geminiJson({
           products: [
-            {
-              name: 'Samsonite Freeform 21" Carry-On Spinner',
-              brand: "Samsonite",
-              model: "Freeform",
-              color: "Black",
-              size: "21 inch",
-              productType: "carry-on",
-              offerIndexes: [0, 1, 2, 3, 4, 5, 6],
-            },
-            {
-              name: 'Samsonite Freeform 28" Large Check-In Spinner',
-              brand: "Samsonite",
-              model: "Freeform",
-              size: "28 inch",
-              productType: "checked",
-              offerIndexes: [7, 8, 9],
-            },
-            {
-              name: 'Samsonite Omni PC 20" Carry-On Spinner',
-              brand: "Samsonite",
-              model: "Omni PC",
-              size: "20 inch",
-              productType: "carry-on",
-              offerIndexes: [10, 11, 12],
-            },
-            {
-              name: 'American Tourister Moonlight 21" Spinner',
-              brand: "American Tourister",
-              model: "Moonlight",
-              size: "21 inch",
-              offerIndexes: [13, 14],
-            },
-            // Deliberately drops index 15 (Travelpro) — the recovery path
-            // must pick it up rather than silently losing a real listing.
+            { name: 'Samsonite Freeform 21" Carry-On Spinner', brand: "Samsonite", model: "Freeform", color: "Black", size: "21 inch", productType: "carry-on", offerIndexes: [0, 1, 2, 3, 4, 5, 6] },
+            { name: 'Samsonite Freeform 28" Large Check-In Spinner', brand: "Samsonite", model: "Freeform", size: "28 inch", productType: "checked", offerIndexes: [7, 8, 9] },
+            { name: 'Samsonite Omni PC 20" Carry-On Spinner', brand: "Samsonite", model: "Omni PC", size: "20 inch", productType: "carry-on", offerIndexes: [10, 11, 12] },
+            { name: 'American Tourister Moonlight 21" Spinner', brand: "American Tourister", model: "Moonlight", size: "21 inch", offerIndexes: [13, 14] },
+            // Deliberately drops index 15 (Travelpro): recovery must pick it up.
           ],
         });
       }
-
-      // Intent-parsing prompt.
-      return geminiJson({
-        terms: "samsonite carry on luggage",
-        brand: "Samsonite",
-        productType: "carry-on",
-        maxPrice: null,
-        minPrice: null,
-        features: [],
-        explanation: "Searching for Samsonite carry-on luggage across Canadian retailers.",
-      });
+      return geminiJson({ terms: "samsonite carry on luggage", brand: "Samsonite", explanation: "Samsonite carry-ons." });
     }
 
     throw new Error(`Unexpected fetch in verification: ${url}`);
@@ -313,9 +247,7 @@ function installFetchStub(opts: StubOpts) {
 
 function geminiJson(payload: unknown): Response {
   return new Response(
-    JSON.stringify({
-      candidates: [{ content: { parts: [{ text: JSON.stringify(payload) }] } }],
-    }),
+    JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(payload) }] } }] }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
@@ -337,15 +269,15 @@ function check(label: string, condition: boolean, detail = "") {
   }
 }
 
+function section(title: string) {
+  console.log(`\n\x1b[1m${title}\x1b[0m`);
+}
+
 function show(products: SearchProduct[]) {
   for (const p of products) {
     console.log(
       `\n    \x1b[1m${p.name}\x1b[0m` +
-        `\n      $${p.lowestPrice.toFixed(2)}–$${p.highestPrice.toFixed(2)}` +
-        `  spread $${p.spread.toFixed(2)}` +
-        `  ${p.retailerCount} retailer(s)` +
-        `  size="${p.size}"` +
-        `  major=${p.hasMajorRetailer}`,
+        `\n      $${p.lowestPrice.toFixed(2)}–$${p.highestPrice.toFixed(2)}  ${p.retailerCount} retailer(s)  size="${p.size}"`,
     );
     for (const o of p.offers) {
       console.log(`        ${o.retailer.padEnd(20)} $${o.price.toFixed(2).padStart(8)}  ${o.url.slice(0, 58)}`);
@@ -354,676 +286,646 @@ function show(products: SearchProduct[]) {
   console.log("");
 }
 
+const MAJORS = ["Amazon.ca", "Walmart.ca", "Costco.ca", "Hudson's Bay", "Canadian Tire", "Bentley", "Best Buy Canada", "London Drugs"];
+
 /** Invariants that must hold for EVERY product, on every path. */
 function checkProductInvariants(products: SearchProduct[], label: string) {
   const allOffers = products.flatMap((p) => p.offers);
 
+  check(`${label}: every offer links to a real retailer page`, allOffers.every((o) => /^https?:\/\//.test(o.url) && !/google\./.test(o.url)));
+  check(`${label}: every offer has a positive, plausible price`, allOffers.every((o) => o.price >= 15 && o.price <= 6000));
   check(
-    `${label}: every offer has a real http(s) merchant URL`,
-    allOffers.every((o) => /^https?:\/\//.test(o.url)),
-    allOffers.find((o) => !/^https?:\/\//.test(o.url))?.url,
-  );
-
-  // A Google link is acceptable ONLY as a last resort — and even then the
-  // retailer must be a real name, never "google.com".
-  check(
-    `${label}: no offer is attributed to Google as the retailer`,
-    allOffers.every((o) => !/google/i.test(o.retailer)),
-    allOffers.find((o) => /google/i.test(o.retailer))?.retailer,
+    `${label}: every price appears in the page words kept as evidence`,
+    allOffers.every((o) => {
+      const ev = o.evidence ?? "";
+      const [whole, cents] = o.price.toFixed(2).split(".");
+      const withCommas = Number(whole).toLocaleString("en-US");
+      return ev.includes(`${whole}.${cents}`) || ev.includes(`${withCommas}.${cents}`) || ev.includes(`${whole},${cents}`);
+    }),
+    allOffers.find((o) => !o.evidence)?.url,
   );
   check(
-    `${label}: Google redirect links were unwrapped to the merchant`,
-    allOffers.every((o) => !o.url.includes("google.com/url")),
-    allOffers.find((o) => o.url.includes("google.com/url"))?.url,
+    `${label}: every offer is from a Canadian storefront`,
+    allOffers.every((o) => isCanadianStorefront(o.url, o.evidence ?? "")),
   );
-
-  check(
-    `${label}: every offer has a positive price`,
-    allOffers.every((o) => o.price > 0),
-  );
-
-  check(
-    `${label}: no offer has an empty title`,
-    allOffers.every((o) => o.title.trim().length > 0),
-  );
-
+  check(`${label}: no offer is attributed to Google`, allOffers.every((o) => !/google/i.test(o.retailer)));
+  check(`${label}: no offer has an empty title`, allOffers.every((o) => o.title.trim().length > 0));
   check(
     `${label}: lowestPrice equals the cheapest displayed offer`,
     products.every((p) => p.lowestPrice === Math.min(...p.offers.map((o) => o.price))),
-    products
-      .filter((p) => p.lowestPrice !== Math.min(...p.offers.map((o) => o.price)))
-      .map((p) => `${p.name}: card says ${p.lowestPrice}, cheapest offer ${Math.min(...p.offers.map((o) => o.price))}`)
-      .join("; "),
   );
-
   check(
     `${label}: highestPrice equals the dearest displayed offer`,
     products.every((p) => p.highestPrice === Math.max(...p.offers.map((o) => o.price))),
-    products
-      .filter((p) => p.highestPrice !== Math.max(...p.offers.map((o) => o.price)))
-      .map((p) => `${p.name}: card says ${p.highestPrice}, dearest offer ${Math.max(...p.offers.map((o) => o.price))}`)
-      .join("; "),
   );
-
-  check(
-    `${label}: retailerCount equals the number of displayed offers`,
-    products.every((p) => p.retailerCount === p.offers.length),
-    products
-      .filter((p) => p.retailerCount !== p.offers.length)
-      .map((p) => `${p.name}: says ${p.retailerCount}, shows ${p.offers.length}`)
-      .join("; "),
-  );
-
-  check(
-    `${label}: spread equals highest − lowest`,
-    products.every(
-      (p) => Math.abs(p.spread - (p.highestPrice - p.lowestPrice)) < 0.005,
-    ),
-  );
-
-  check(
-    `${label}: offers are sorted cheapest first`,
-    products.every((p) => p.offers.every((o, i) => i === 0 || p.offers[i - 1].price <= o.price)),
-  );
-
+  check(`${label}: retailerCount equals the offers shown`, products.every((p) => p.retailerCount === p.offers.length));
+  check(`${label}: spread equals highest − lowest`, products.every((p) => Math.abs(p.spread - (p.highestPrice - p.lowestPrice)) < 0.005));
+  check(`${label}: offers sorted cheapest first`, products.every((p) => p.offers.every((o, i) => i === 0 || p.offers[i - 1].price <= o.price)));
   check(
     `${label}: no retailer appears twice within one product`,
     products.every((p) => new Set(p.offers.map((o) => o.retailer)).size === p.offers.length),
-    products
-      .filter((p) => new Set(p.offers.map((o) => o.retailer)).size !== p.offers.length)
-      .map((p) => p.name)
-      .join("; "),
   );
-
   check(
     `${label}: hasMajorRetailer agrees with the offers shown`,
-    products.every((p) => {
-      const actual = p.offers.some((o) => {
-        const k = o.retailerKey;
-        return k !== null && ["Amazon.ca", "Walmart.ca", "Costco.ca", "Hudson's Bay", "Canadian Tire", "Bentley", "Best Buy Canada", "London Drugs"].includes(k);
-      });
-      return p.hasMajorRetailer === actual;
-    }),
+    products.every((p) => p.hasMajorRetailer === p.offers.some((o) => o.retailerKey !== null && MAJORS.includes(o.retailerKey))),
   );
+}
+
+async function expectProviderError(fn: () => Promise<unknown>): Promise<ProviderError | null> {
+  try {
+    await fn();
+    return null;
+  } catch (err) {
+    return err instanceof ProviderError ? err : null;
+  }
 }
 
 /* ------------------------------------------------------------------ */
 
 async function main() {
-  process.env.SERPAPI_KEY = "test-key";
-  delete process.env.SERPER_API_KEY;
-  delete process.env.ENABLE_GEMINI_GROUNDED_SEARCH;
+  process.env.TAVILY_API_KEY = "tvly-test-key";
+  for (const k of ["SERPAPI_KEY", "SERPER_API_KEY", "ENABLE_GEMINI_GROUNDED_SEARCH", "GEMINI_API_KEY"]) delete process.env[k];
 
-  /* ---------------- 1. Retailer identification ------------------- */
-  console.log("\n\x1b[1m1. Retailer identification from Google's `source` labels\x1b[0m");
+  /* ============ A. Reading pages ==================================== */
+
+  section("A1. Retailer identification");
   const idCases: [string, string, string | null][] = [
-    ["Amazon.ca", "https://www.amazon.ca/dp/x", "Amazon.ca"],
-    ["Walmart Canada", "https://www.walmart.ca/en/ip/x", "Walmart.ca"],
-    ["Costco Wholesale Canada", "https://www.costco.ca/x", "Costco.ca"],
-    ["Hudson's Bay", "https://www.thebay.com/x", "Hudson's Bay"],
-    ["Canadian Tire", "https://www.canadiantire.ca/x", "Canadian Tire"],
-    ["Samsonite", "https://www.samsonite.ca/x", "Samsonite.ca"],
-    ["eBay", "https://www.ebay.ca/itm/1", "eBay.ca"],
-    ["Bentley", "https://www.bentley.ca/x", "Bentley"],
-    ["London Drugs", "https://www.londondrugs.com/x", "London Drugs"],
-    ["Travelpro", "https://www.travelpro.com/x", "Travelpro"],
-    // Unknown source label, but the URL gives it away.
-    ["Some Reseller", "https://www.amazon.ca/dp/y", "Amazon.ca"],
-    // Genuinely unknown — must be null, not a wrong guess.
-    ["Luggage Depot", "https://www.luggagedepot.ca/x", null],
+    ["", "https://www.amazon.ca/dp/x", "Amazon.ca"],
+    ["", "https://www.walmart.ca/en/ip/x", "Walmart.ca"],
+    ["", "https://www.costco.ca/x", "Costco.ca"],
+    ["", "https://www.thebay.com/x", "Hudson's Bay"],
+    ["", "https://www.canadiantire.ca/x", "Canadian Tire"],
+    ["", "https://www.samsonite.ca/x", "Samsonite.ca"],
+    ["", "https://www.ebay.ca/itm/1", "eBay.ca"],
+    ["", "https://www.bentley.ca/x", "Bentley"],
+    ["", "https://www.londondrugs.com/x", "London Drugs"],
+    ["Walmart Canada", "", "Walmart.ca"],
+    ["", "https://www.luggagedepot.ca/x", null],
   ];
   for (const [source, url, expected] of idCases) {
     const got = matchRetailer(source, url);
-    check(`"${source}" → ${expected ?? "null"}`, got === expected, `got ${got}`);
+    check(`${source || url} → ${expected ?? "null"}`, got === expected, `got ${got}`);
   }
 
-  /* ---------------- 2. Full pipeline, heuristic path -------------- */
-  console.log("\n\x1b[1m2. Full pipeline — no Gemini key (heuristic parse + grouping)\x1b[0m");
-  delete process.env.GEMINI_API_KEY;
-  let serpCalls = 0;
-  installFetchStub({ onSerpApiCall: () => (serpCalls += 1) });
+  section("A2. Only Canadian storefronts count");
+  const storefronts: [string, string, boolean][] = [
+    ["https://www.amazon.ca/dp/X", "", true],
+    ["https://www.thebay.com/p", "", true],
+    ["https://www.londondrugs.com/p", "", true],
+    ["https://www.amazon.com/dp/X", "$179.99", false],
+    ["https://www.samsonite.com/p", "CA$229.99", false],
+    ["https://www.rimowa.com/ca/en/luggage/123.html", "", true],
+    ["https://www.travelpro.com/p", "$219.00", false],
+    ["https://www.travelpro.com/p", "CA$219.00", true],
+    ["https://www.bagagesmira.com/p", "Prix 179,95 $", true],
+  ];
+  for (const [url, text, expected] of storefronts) {
+    check(`${url}${text ? ` ("${text}")` : ""} → ${expected ? "Canadian" : "rejected"}`, isCanadianStorefront(url, text) === expected);
+  }
 
+  section("A3. Picking THE price from a real-looking page");
+  const priceCases: [string, string, string, number | null][] = [
+    [
+      "Amazon: list price and savings around the real price",
+      "Samsonite Freeform Carry-On",
+      "Samsonite Freeform Carry-On Spinner\nList Price: $299.99\nPrice: $229.99\nYou Save: $70.00 (23%)\nFREE delivery",
+      229.99,
+    ],
+    ["Was / Now", "Samsonite Freeform 28", "Samsonite Freeform 28\nWas $329.99\nNow $279.99", 279.99],
+    [
+      "Instalments are not the price",
+      "Samsonite Omni PC 20",
+      "Samsonite Omni PC 20 Hardside\n$149.99\nor 4 payments of $37.50\nas low as $14/mo with Affirm",
+      149.99,
+    ],
+    [
+      "Shipping threshold before the product is ignored",
+      "Travelpro Maxlite 5",
+      "Free shipping on orders over $75\nTravelpro Maxlite 5 21\" Carry-On\n$219.00\nAdd to cart",
+      219.0,
+    ],
+    ["French-Canadian format", "Samsonite Omni PC 20", "Samsonite Omni PC 20 po\nPrix 164,97 $\nAjouter au panier", 164.97],
+    ["Thousands separator", "TUMI Alpha 3 International", "TUMI Alpha 3 International Carry-On\nPrice $1,129.00", 1129.0],
+    [
+      "Only 'customers also viewed' prices → no price",
+      "Samsonite Winfield 3",
+      "Samsonite Winfield 3 DLX Spinner\nSee price in cart\nCustomers also viewed\nWinfield 2 $199.99\nOmni $149.99",
+      null,
+    ],
+    ["USD is never a Canadian price", "Samsonite Freeform", "Samsonite Freeform Spinner\nUS$179.99", null],
+    ["A variant range with no single price → none", "Samsonite Ziplite", "Choose a size: from $199.99 to $249.99", null],
+  ];
+  for (const [label, title, text, expected] of priceCases) {
+    const got = pickListingPrice(text, title);
+    check(`${label} → ${expected ?? "no price"}`, (got?.price ?? null) === expected, `got ${got?.price ?? "null"}`);
+  }
+
+  section("A4. Whole-page decisions");
+  {
+    const category = analyzePage({
+      url: "https://www.samsonite.ca/collections/carry-on-luggage",
+      title: "Carry-On Luggage | Samsonite Canada",
+      content: "",
+      rawContent: Array.from({ length: 10 }, (_, i) => `Bag ${i} $${199 + i * 10}.99`).join("\n"),
+    });
+    check("category page with many prices → skipped", category.offer === null, category.reason ?? "");
+
+    const brandSuffix = analyzePage({
+      url: "https://www.luggagedepot.ca/products/freeform-21",
+      title: "Samsonite Freeform 21 - Samsonite | Luggage Depot",
+      content: "Samsonite Freeform 21 Sale price $239.00",
+      rawContent: null,
+    });
+    check(
+      "a reseller's page is credited to the reseller, not the brand in its title",
+      brandSuffix.offer?.retailer === "Luggage Depot" && brandSuffix.offer?.retailerKey === null,
+      `${brandSuffix.offer?.retailer} / ${brandSuffix.offer?.retailerKey}`,
+    );
+
+    const oos = analyzePage({
+      url: "https://www.bestbuy.ca/en-ca/product/samsonite-omni/1234567",
+      title: "Samsonite Omni PC 24 Spinner | Best Buy Canada",
+      content: "",
+      rawContent: "Samsonite Omni PC 24 Spinner\nSale price $199.99\nSold out online",
+    });
+    check("'sold out' is reported as out of stock", oos.offer?.inStock === false);
+
+    const amazonTitle = cleanPageTitle("Samsonite Freeform Hardside Expandable Spinner : Amazon.ca: Luggage & Bags");
+    check("Amazon page title cleaned", amazonTitle.name === "Samsonite Freeform Hardside Expandable Spinner", amazonTitle.name);
+    const walmartTitle = cleanPageTitle('Samsonite Winfield 2 28" Spinner | Walmart Canada');
+    check("Walmart page title cleaned", walmartTitle.name === 'Samsonite Winfield 2 28" Spinner' && walmartTitle.site === "Walmart Canada");
+  }
+
+  section("A5. Specs from the same page (no extra searches)");
+  {
+    const d = extractDetails(
+      "Samsonite Freeform Carry-On\nDimensions: 21.5 x 15 x 9 in\nItem weight: 6.8 lbs\nCapacity 41 L\n" +
+        "Polycarbonate shell with 4 spinner wheels. Expandable. TSA lock. 10-year limited warranty.\n" +
+        "Airline checked bag weight limit 50 lb",
+      "Samsonite Freeform Carry-On",
+    );
+    check("dimensions", d?.dimensions === "21.5 x 15 x 9 in", d?.dimensions);
+    check("weight (and NOT the airline weight limit)", d?.weight === "6.8 lb", d?.weight);
+    check("capacity", d?.capacity === "41 L", d?.capacity);
+    check("material", d?.material === "Polycarbonate", d?.material);
+    check("wheels", d?.wheels === "Spinner (4 wheels)", d?.wheels);
+    check("expandable + TSA lock", d?.expandable === true && d?.tsaLock === true);
+    check("warranty", d?.warranty === "10-year", d?.warranty);
+    check("a page with no specs yields none", extractDetails("Samsonite bag $99.99", "Samsonite bag") === undefined || !extractDetails("Samsonite bag $99.99", "Samsonite bag")?.weight);
+  }
+
+  /* ============ B. The Tavily client: cost and reliability ========== */
+
+  section("B1. The request itself — cheapest settings, key in a header only");
+  installStub();
+  await search("samsonite carry on luggage");
+  {
+    const body = calls.bodies[0] ?? {};
+    const headers = calls.headers[0];
+    check("exactly one Tavily call for one search", calls.search === 1, `${calls.search}`);
+    check("search_depth is basic (1 credit)", body.search_depth === "basic", String(body.search_depth));
+    check("auto_parameters is off (it can silently double the cost)", body.auto_parameters === false);
+    check("include_usage is on (real cost is metered)", body.include_usage === true);
+    check("20 results for the price of 1", body.max_results === 20);
+    check("page text requested — price AND specs from one call", body.include_raw_content === "text");
+    check("country is canada", body.country === "canada");
+    check("Canadian retailers preferred, not required", body.include_domains_mode === "prefer" && Array.isArray(body.include_domains));
+    check("US storefronts excluded up front", Array.isArray(body.exclude_domains) && (body.exclude_domains as string[]).includes("amazon.com"));
+    check("no answer/images requested", body.include_answer === false && body.include_images === false);
+    check("API key sent as a Bearer header", headers?.get("authorization") === "Bearer tvly-test-key");
+    check("API key never in the body", !JSON.stringify(body).includes("tvly-test-key"));
+  }
+
+  section("B2. Credits are metered from Tavily's own figure");
+  installStub({ search: () => tavilyJson(PAGES, 1) });
+  await tavilySearch({ query: "credit test one" });
+  check("1 credit recorded", tavilyCreditStatus().usedEstimate === 1, `${tavilyCreditStatus().usedEstimate}`);
+  installStub({ search: () => tavilyJson(PAGES, 2) });
+  await tavilySearch({ query: "credit test two" });
+  check("a call Tavily says cost 2 is recorded as 2", tavilyCreditStatus().usedEstimate === 2, `${tavilyCreditStatus().usedEstimate}`);
+
+  section("B3. A repeat question costs nothing");
+  installStub();
+  await search("samsonite luggage");
+  await search("samsonite luggage");
+  check("same search twice → 1 HTTP call", calls.search === 1, `${calls.search}`);
+  await search("Luggage  SAMSONITE!");
+  check("different word order / casing / punctuation → still 1 call", calls.search === 1, `${calls.search}`);
+  check("credits spent: 1", tavilyCreditStatus().usedEstimate === 1, `${tavilyCreditStatus().usedEstimate}`);
+
+  section("B4. Two identical searches at once share one call");
+  installStub({
+    search: async () => {
+      await new Promise((r) => setTimeout(r, 150));
+      return tavilyJson(PAGES);
+    },
+  });
+  await Promise.all([search("travelpro maxlite"), search("travelpro maxlite")]);
+  check("concurrent duplicates → 1 HTTP call", calls.search === 1, `${calls.search}`);
+
+  section("B5. An empty answer isn't bought twice");
+  installStub({ search: () => tavilyJson([]) });
+  await tavilySearch({ query: "zzqx nothing here" });
+  await tavilySearch({ query: "zzqx nothing here" });
+  check("empty result cached briefly → 1 HTTP call", calls.search === 1, `${calls.search}`);
+
+  section("B6. The monthly cap refuses BEFORE any request is sent");
+  process.env.TAVILY_MONTHLY_CREDIT_CAP = "3";
+  installStub();
+  await tavilySearch({ query: "cap one" });
+  await tavilySearch({ query: "cap two" });
+  await tavilySearch({ query: "cap three" });
+  const before = calls.search;
+  const capErr = await expectProviderError(() => tavilySearch({ query: "cap four" }));
+  check("4th call refused at a cap of 3", capErr?.kind === "quota", capErr?.message);
+  check("…and no HTTP request was made", calls.search === before, `${calls.search - before} extra`);
+  check("…and the user is told nothing was charged", /nothing is charged/i.test(capErr?.userMessage ?? ""), capErr?.userMessage);
+  const viaSearch = await search("cap five").then(() => null, (e: Error) => e.message);
+  check("the search page gets a clear message, not a crash", !!viaSearch && /credit|allowance/i.test(viaSearch), viaSearch ?? "");
+  delete process.env.TAVILY_MONTHLY_CREDIT_CAP;
+
+  section("B7. Tavily's own usage figure is honoured");
+  installStub({
+    usage: () =>
+      new Response(JSON.stringify({ key: { usage: 949, limit: null }, account: { current_plan: "Researcher", plan_usage: 949, plan_limit: 1000, paygo_usage: 0, paygo_limit: 0 } }), { status: 200 }),
+  });
+  await tavilySearch({ query: "usage one" });
+  check("949 used + 1 = 950 → allowed (cap 950)", calls.search === 1, `${calls.search}`);
+  const overErr = await expectProviderError(() => tavilySearch({ query: "usage two" }));
+  check("the next call is refused locally", overErr?.kind === "quota" && calls.search === 1, overErr?.message);
+  check("status reads from Tavily", tavilyCreditStatus().source === "tavily");
+  check("/usage fetched once, not per search", calls.usage === 1, `${calls.usage}`);
+
+  section("B8. Pay-as-you-go ON → research refuses to run at all");
+  installStub({
+    usage: () =>
+      new Response(JSON.stringify({ key: { usage: 10 }, account: { plan_usage: 10, plan_limit: 1000, paygo_usage: 0, paygo_limit: 100 } }), { status: 200 }),
+  });
+  {
+    const e = await expectProviderError(() => tavilySearch({ query: "paygo" }));
+    check("paygo detected", tavilyCreditStatus().paygoEnabled === true);
+    check("refused even with 990 free credits left", e?.kind === "policy" && calls.search === 0, `${e?.kind}, ${calls.search} sent`);
+    check("tells you exactly what to switch off", /turn pay-as-you-go off/i.test(e?.userMessage ?? ""), e?.userMessage);
+  }
+
+  section("B9. Out of credits (432 / 433) — no retry, then stop asking");
+  installStub({ search: () => tavilyError(432, "This request exceeds your plan's set usage limit.") });
+  const e432 = await expectProviderError(() => tavilySearch({ query: "limit" }));
+  check("432 → quota error", e432?.kind === "quota");
+  check("432 is not retried", calls.search === 1, `${calls.search}`);
+  await expectProviderError(() => tavilySearch({ query: "limit again" }));
+  check("the next call is refused without asking Tavily again", calls.search === 1, `${calls.search}`);
+  installStub({ search: () => tavilyError(433, "PayGo limit exceeded") });
+  const e433 = await expectProviderError(() => tavilySearch({ query: "paygo limit" }));
+  check("433 → quota error, not retried", e433?.kind === "quota" && calls.search === 1);
+
+  section("B10. Bad key (401) — clear message, no retry");
+  installStub({ search: () => tavilyError(401, "Unauthorized: missing or invalid API key.") });
+  const e401 = await expectProviderError(() => tavilySearch({ query: "auth" }));
+  check("401 → auth error", e401?.kind === "auth");
+  check("401 not retried", calls.search === 1);
+  check("message points at TAVILY_API_KEY", /TAVILY_API_KEY/.test(e401?.message ?? ""), e401?.message);
+  check("no credit counted for a rejected key", tavilyCreditStatus().usedEstimate === 0);
+
+  section("B10b. Blocked by a firewall/proxy (403) — not blamed on the key");
+  installStub({ search: () => new Response("Host not in allowlist: api.tavily.com", { status: 403 }) });
+  const e403 = await expectProviderError(() => tavilySearch({ query: "blocked" }));
+  check("403 → network, not auth", e403?.kind === "network", e403?.kind);
+  check("message mentions firewall/proxy", /firewall|proxy|VPN/i.test(e403?.message ?? ""), e403?.message);
+  check("no credit counted", tavilyCreditStatus().usedEstimate === 0);
+
+  section("B11. Rate limited (429) — wait Retry-After once, then succeed");
+  {
+    let n = 0;
+    installStub({ search: () => (++n === 1 ? tavilyError(429, "Too many requests", { "retry-after": "1" }) : tavilyJson(PAGES)) });
+    const started = Date.now();
+    const r = await tavilySearch({ query: "rate limited" });
+    check("retried once and succeeded", calls.search === 2 && r.results.length > 0, `${calls.search} calls`);
+    check("waited for Retry-After (~1s)", Date.now() - started >= 900, `${Date.now() - started}ms`);
+    check("only the successful call is counted", tavilyCreditStatus().usedEstimate === 1, `${tavilyCreditStatus().usedEstimate}`);
+  }
+  installStub({ search: () => tavilyError(429, "Too many requests", { "retry-after": "1" }) });
+  const e429 = await expectProviderError(() => tavilySearch({ query: "still limited" }));
+  check("persistent 429 → gives up after one retry", e429?.kind === "rate_limit" && calls.search === 2, `${calls.search}`);
+  check("…with a plain message", /wait a few seconds/i.test(e429?.userMessage ?? ""));
+
+  section("B12. Rejected option (400) — resent once with essentials only");
+  {
+    let n = 0;
+    installStub({ search: () => (++n === 1 ? tavilyError(400, "include_domains_mode is not a valid option") : tavilyJson(PAGES)) });
+    const r = await tavilySearch({ query: "bad option", includeDomains: ["amazon.ca"], includeDomainsMode: "prefer", chunksPerSource: 3 });
+    check("recovered on the second attempt", r.results.length > 0 && calls.search === 2);
+    check("the retry dropped the optional options", !("include_domains" in (calls.bodies[1] ?? {})) && !("chunks_per_source" in (calls.bodies[1] ?? {})));
+    check("the retry kept the cost-critical settings", calls.bodies[1]?.search_depth === "basic" && calls.bodies[1]?.auto_parameters === false);
+  }
+
+  section("B13. Server error (5xx) — one retry");
+  {
+    let n = 0;
+    installStub({ search: () => (++n === 1 ? tavilyError(502, "Bad gateway") : tavilyJson(PAGES)) });
+    const r = await tavilySearch({ query: "flaky" });
+    check("recovered after one 5xx", r.results.length > 0 && calls.search === 2);
+  }
+
+  section("B14. Timeout — bounded, clear error");
+  process.env.TAVILY_TIMEOUT_MS = "1000";
+  installStub({ search: (_b, init) => hangUntilAborted(init) });
+  {
+    const started = Date.now();
+    const eTimeout = await expectProviderError(() => tavilySearch({ query: "slow" }));
+    const elapsed = Date.now() - started;
+    check("timeout → timeout error", eTimeout?.kind === "timeout", eTimeout?.message);
+    check("a timeout is NOT retried (it may already have been billed)", calls.search === 1, `${calls.search} calls`);
+    check("gave up in bounded time", elapsed < 2_500, `${elapsed}ms`);
+  }
+  delete process.env.TAVILY_TIMEOUT_MS;
+
+  section("B14b. Balance can't be confirmed → no request is sent");
+  installStub({ usage: () => new Response("upstream error", { status: 500 }) });
+  {
+    const e = await expectProviderError(() => tavilySearch({ query: "unverified" }));
+    check("refused", !!e, e?.message);
+    check("no research request was sent", calls.search === 0, `${calls.search}`);
+    check("the message says why", /couldn't confirm/i.test(e?.message ?? ""), e?.message);
+    check("/usage isn't hammered (retried at most once a minute)", (await expectProviderError(() => tavilySearch({ query: "unverified 2" })), calls.usage === 1), `${calls.usage}`);
+  }
+  installStub({ usage: () => new Response(JSON.stringify({ detail: { error: "Unauthorized" } }), { status: 401 }) });
+  {
+    const e = await expectProviderError(() => tavilySearch({ query: "bad key usage" }));
+    check("a rejected key on /usage is reported as a key problem", e?.kind === "auth" && calls.search === 0, `${e?.kind}`);
+  }
+  installStub({ usage: () => new Response(JSON.stringify({ something: "else" }), { status: 200 }) });
+  {
+    const e = await expectProviderError(() => tavilySearch({ query: "odd usage shape" }));
+    check("a /usage reply without a usage figure confirms nothing → refused", !!e && calls.search === 0, e?.message);
+  }
+
+  section("B14c. Concurrent searches can't squeeze past the last credit");
+  installStub({
+    usage: () => usageJson(949),
+    search: async () => {
+      await new Promise((r) => setTimeout(r, 200));
+      return tavilyJson(PAGES);
+    },
+  });
+  {
+    const outcomes = await Promise.allSettled([
+      tavilySearch({ query: "race one" }),
+      tavilySearch({ query: "race two" }),
+      tavilySearch({ query: "race three" }),
+    ]);
+    const sent = calls.search;
+    const refused = outcomes.filter((o) => o.status === "rejected").length;
+    check("only 1 of 3 simultaneous calls was sent (949 used, cap 950)", sent === 1, `${sent} sent`);
+    check("the other 2 were refused locally", refused === 2, `${refused} refused`);
+  }
+
+  section("B14d. 433 (pay-as-you-go cap) pauses research for the month");
+  installStub({ search: () => tavilyError(433, "PayGo limit exceeded") });
+  {
+    await expectProviderError(() => tavilySearch({ query: "paygo hit" }));
+    const again = await expectProviderError(() => tavilySearch({ query: "paygo again" }));
+    check("the next call is refused without a request", again?.kind === "quota" && calls.search === 1, `${calls.search}`);
+  }
+
+  section("B15. Depth is only ever raised on purpose");
+  process.env.TAVILY_SEARCH_DEPTH = "advanced";
+  installStub({ search: () => tavilyJson(PAGES, 2) });
+  await search("depth check advanced");
+  check("TAVILY_SEARCH_DEPTH=advanced is honoured", calls.bodies[0]?.search_depth === "advanced");
+  process.env.TAVILY_SEARCH_DEPTH = "ultra-expensive";
+  installStub();
+  await search("depth check junk");
+  check("an unknown depth falls back to basic", calls.bodies[0]?.search_depth === "basic");
+  delete process.env.TAVILY_SEARCH_DEPTH;
+
+  /* ============ C. The full search pipeline ========================= */
+
+  section("C1. Full pipeline — no Gemini (heuristic grouping)");
+  installStub();
   const heuristic = await search("samsonite carry on luggage");
   show(heuristic.products);
-
-  check("exactly one SerpAPI HTTP call was made", serpCalls === 1, `made ${serpCalls}`);
-  check("provider reported as serpapi", heuristic.provider === "serpapi");
-  check(
-    "19 of 22 raw rows survived mapping (3 junk rows rejected)",
-    heuristic.offersFound === 19,
-    `got ${heuristic.offersFound}`,
-  );
-  check("returned at least one product", heuristic.products.length > 0);
+  check("one Tavily call", calls.search === 1, `${calls.search}`);
+  check("provider reported as tavily", heuristic.provider === "tavily");
+  check("16 of 22 pages became offers (6 junk pages rejected)", heuristic.offersFound === 16, `got ${heuristic.offersFound}`);
+  check("returned products", heuristic.products.length > 0);
   checkProductInvariants(heuristic.products, "heuristic");
+  {
+    const ff21 = heuristic.products.find((p) => /freeform/i.test(p.name) && p.size === "21 inch");
+    check("heuristic groups the 21\" Freeform across retailers", (ff21?.retailerCount ?? 0) >= 5, `${ff21?.retailerCount}`);
+    const maxlite = heuristic.products.find((p) => /maxlite/i.test(p.name));
+    check("a brand that is also a retailer keeps its name (Travelpro)", /^Travelpro\b/.test(maxlite?.name ?? "") && maxlite?.brand === "Travelpro", `${maxlite?.name} / ${maxlite?.brand}`);
+    const ff28 = heuristic.products.filter((p) => /freeform/i.test(p.name) && p.size === "28 inch");
+    check("…and the 28\" listings into one product", ff28.length === 1 && ff28[0].retailerCount === 3, `${ff28.length} products`);
+  }
 
-  /* ---------------- 3. Full pipeline, LLM path -------------------- */
-  console.log("\n\x1b[1m3. Full pipeline — Gemini answering (LLM parse + grouping)\x1b[0m");
+  section("C2. Full pipeline — Gemini grouping");
   process.env.GEMINI_API_KEY = "test-key";
-  serpCalls = 0;
-  installFetchStub({ gemini: true, onSerpApiCall: () => (serpCalls += 1) });
-
+  installStub({ gemini: true });
   const llm = await search("samsonite carry on luggage");
   show(llm.products);
-
-  check("exactly one SerpAPI HTTP call was made", serpCalls === 1, `made ${serpCalls}`);
   checkProductInvariants(llm.products, "llm");
+  const ff21 = llm.products.find((p) => /freeform/i.test(p.name) && p.size === "21 inch");
+  check("the same suitcase at 6 retailers became ONE product", !!ff21);
+  check(
+    "  …Amazon's duplicate listing deduped to the cheaper one",
+    ff21?.offers.filter((o) => o.retailer === "Amazon.ca").length === 1 && ff21?.offers.find((o) => o.retailer === "Amazon.ca")?.price === 229.99,
+  );
+  check("  …6 retailers, cheapest $198.50 (eBay.ca)", ff21?.retailerCount === 6 && ff21?.lowestPrice === 198.5, `${ff21?.retailerCount}, ${ff21?.lowestPrice}`);
+  check("the 28\" stayed a SEPARATE product", !!llm.products.find((p) => /freeform/i.test(p.name) && p.size === "28 inch"));
+  check("the listing Gemini forgot (Travelpro) was recovered", llm.products.some((p) => p.offers.some((o) => o.retailerKey === "Travelpro")));
+  const shown = llm.products.reduce((n, p) => n + p.offers.length, 0);
+  check("no real listing vanished", shown === 15, `${shown} shown (16 found, 1 Amazon duplicate)`);
+  check("a major-retailer product ranks first", llm.products[0]?.hasMajorRetailer === true);
+  delete process.env.GEMINI_API_KEY;
 
-  const freeform21 = llm.products.find((p) => /freeform/i.test(p.name) && p.size === "21 inch");
-  check("the same suitcase at 6 retailers became ONE product", !!freeform21);
-  check(
-    "  …and Amazon's duplicate listing was deduped to the cheaper one",
-    freeform21?.offers.filter((o) => o.retailer === "Amazon.ca").length === 1 &&
-      freeform21?.offers.find((o) => o.retailer === "Amazon.ca")?.price === 229.99,
-  );
-  check(
-    "  …showing 6 distinct retailers, cheapest $198.50 (eBay.ca)",
-    freeform21?.retailerCount === 6 && freeform21?.lowestPrice === 198.5,
-    `${freeform21?.retailerCount} retailers, lowest ${freeform21?.lowestPrice}`,
-  );
-
-  const freeform28 = llm.products.find((p) => /freeform/i.test(p.name) && p.size === "28 inch");
-  check("the 28\" Freeform stayed a SEPARATE product from the 21\"", !!freeform28);
-
-  check(
-    "the listing Gemini forgot (Travelpro) was recovered, not lost",
-    llm.products.some((p) => p.offers.some((o) => o.retailerKey === "Travelpro")),
-  );
-
-  const llmOfferCount = llm.products.reduce((n, p) => n + p.offers.length, 0);
-  check(
-    "no real listing vanished between fetch and display",
-    llmOfferCount === 18,
-    `${llmOfferCount} shown (19 fetched, 1 is Amazon's deduped duplicate)`,
-  );
-
-  check(
-    "a major-retailer product ranks first",
-    llm.products[0]?.hasMajorRetailer === true,
-  );
-
-  /* ---------------- 4. Retailer filter ---------------------------- */
-  console.log("\n\x1b[1m4. Retailer settings filter\x1b[0m");
-  installFetchStub({ gemini: true });
-  const filtered = await search("samsonite carry on luggage", {
-    allowedRetailers: ["Amazon.ca", "Walmart.ca"],
-  });
-  const filteredKeys = new Set(
-    filtered.products.flatMap((p) => p.offers.map((o) => o.retailerKey)),
-  );
-  check(
-    "disabled retailers are gone",
-    !filteredKeys.has("Costco.ca") && !filteredKeys.has("Hudson's Bay"),
-    [...filteredKeys].join(", "),
-  );
-  check(
-    "unrecognised retailers are KEPT (the user disabled named ones, not unknown ones)",
-    filteredKeys.has(null),
-  );
+  section("C3. Retailer settings filter");
+  installStub();
+  const filtered = await search("samsonite carry on luggage", { allowedRetailers: ["Amazon.ca", "Walmart.ca"] });
+  const keys = new Set(filtered.products.flatMap((p) => p.offers.map((o) => o.retailerKey)));
+  check("disabled retailers are gone", !keys.has("Costco.ca") && !keys.has("Hudson's Bay"), [...keys].join(", "));
+  check("unrecognised retailers are kept", keys.has(null));
   checkProductInvariants(filtered.products, "filtered");
 
-  /* ---------------- 5. Price filter ------------------------------- */
-  console.log("\n\x1b[1m5. Price ceiling from the query\x1b[0m");
-  delete process.env.GEMINI_API_KEY; // heuristic price extraction
-  installFetchStub({});
+  section("C4. Price ceiling from the query");
+  installStub();
   const cheap = await search("samsonite carry on under $200");
-  check("maxPrice parsed from the query", cheap.intent.maxPrice === 200, `got ${cheap.intent.maxPrice}`);
-  check("'under $200' stripped from the keywords", !/200|under/i.test(cheap.intent.terms), cheap.intent.terms);
-  check(
-    "every product shown is actually under $200",
-    cheap.products.every((p) => p.lowestPrice <= 200),
-  );
+  check("maxPrice parsed", cheap.intent.maxPrice === 200, `${cheap.intent.maxPrice}`);
+  check("'under $200' stripped from the research query", !/200|under/i.test(String(calls.bodies[0]?.query)), String(calls.bodies[0]?.query));
+  check("every product shown is under $200", cheap.products.every((p) => p.lowestPrice <= 200));
 
-  /* ---------------- 6. Transient failure + retry ------------------ */
-  console.log("\n\x1b[1m6. One transient 503, then success\x1b[0m");
-  serpCalls = 0;
-  installFetchStub({ serpApiFailures: 1, onSerpApiCall: () => (serpCalls += 1) });
-  const retried = await search("samsonite carry on luggage");
-  check("retried once and recovered", serpCalls === 2 && retried.products.length > 0, `${serpCalls} calls`);
+  section("C5. Specs attached to products");
+  installStub({
+    search: () =>
+      tavilyJson([
+        productPage({ name: "Samsonite Omni PC 24 Spinner", site: "Samsonite Canada", url: "https://www.samsonite.ca/omni-pc-24/1001.html", price: "$219.99", extra: "Dimensions: 27 x 18.5 x 11 in\nWeight: 9.5 lbs\nPolycarbonate. Expandable. TSA lock. 10-year warranty." }),
+        productPage({ name: "Samsonite Omni PC 24 Spinner", site: "Walmart Canada", url: "https://www.walmart.ca/en/ip/omni-pc-24/600111", price: "$199.97" }),
+      ]),
+  });
+  const withSpecs = await search("samsonite omni pc 24");
+  const omni = withSpecs.products[0];
+  check("one product, two retailers", withSpecs.products.length === 1 && omni?.retailerCount === 2);
+  check("specs merged onto the product", omni?.details?.dimensions === "27 x 18.5 x 11 in" && omni?.details?.weight === "9.5 lb", JSON.stringify(omni?.details));
+  check("specs cost no extra call", calls.search === 1);
 
-  /* ---------------- 6a. The query that failed in production ------- */
-  //
-  // Real failure, 2026-09-15: three searches burned, all red-errored with
-  // "SerpAPI: Google hasn't returned any results for this query." That is
-  // a 200 response meaning Google had nothing for those exact eight words.
-  console.log("\n\x1b[1m6a. Long retailer product title (the live failure)\x1b[0m");
+  section("C6. Nothing found → ONE broader query, then stop");
   {
-    const { broadenLadder } = await import("../src/lib/search/broaden");
-    const real = "Samsonite Rhapsody 360 Spinner Expandable Medium Luggage Black";
-    const ladder = broadenLadder(real);
-    console.log(ladder.map((q, i) => `      ${i + 1}. ${q}`).join("\n"));
-
-    check("original query is the first rung", ladder[0] === real);
-    check("every rung is distinct", new Set(ladder.map((q) => q.toLowerCase())).size === ladder.length);
-    check(
-      "each rung is shorter than the last",
-      ladder.every((q, i) => i === 0 || q.split(" ").length <= ladder[i - 1].split(" ").length),
-    );
-    check(
-      'reaches "Samsonite Rhapsody 360"',
-      ladder.includes("Samsonite Rhapsody 360"),
-      ladder.join(" | "),
-    );
-    check("colour is dropped by rung 2", !ladder[1].toLowerCase().includes("black"));
-    check("a long title reaches brand+model in ONE extra call", ladder[1] === "Samsonite Rhapsody 360", ladder[1]);
-    check("brand survives every rung", ladder.every((q) => /samsonite/i.test(q)));
-    check("a short query isn't padded with junk rungs", broadenLadder("Samsonite").length === 1);
+    installStub({
+      search: (body) => {
+        const words = String(body.query).split(/\s+/).length;
+        return words > 4
+          ? tavilyJson([])
+          : tavilyJson([
+              productPage({ name: 'Samsonite Rhapsody 360 Spinner Expandable Medium 25"', site: "Amazon.ca", url: "https://www.amazon.ca/dp/RHAP1", price: "$329.99" }),
+              productPage({ name: "Samsonite Rhapsody 360 Medium Spinner", site: "Hudson's Bay", url: "https://www.thebay.com/product/rhapsody-360", price: "$379.99" }),
+            ]);
+      },
+    });
+    const r = await search("Samsonite Rhapsody 360 Spinner Expandable Medium Luggage Black");
+    check("recovered with a broader query", r.products.length > 0);
+    check("2 calls at most", calls.search === 2, `${calls.search}`);
+    check("the user is told the wording changed", r.warnings.some((w) => /instead/i.test(w)), r.warnings.join(" | "));
+    checkProductInvariants(r.products, "broadened");
   }
 
-  console.log("\n\x1b[1m6a-ii. Pipeline recovers from an empty first result\x1b[0m");
+  section("C7. Pages found but no readable price → NO extra credit spent");
+  installStub({
+    search: () =>
+      tavilyJson([
+        { title: "Best carry-on luggage 2026 | Travel blog", url: "https://travelblog.ca/best-carry-on", content: "Our favourite carry-ons this year", score: 0.7, raw_content: "Our favourite carry-ons this year, reviewed." },
+        { title: "Samsonite Freeform review", url: "https://reviews.ca/freeform", content: "A solid bag.", score: 0.6, raw_content: "A solid bag with good wheels." },
+      ]),
+  });
   {
-    delete process.env.GEMINI_API_KEY;
-    const asked: string[] = [];
-
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = new URL(String(input));
-      const q = url.searchParams.get("q") ?? "";
-      asked.push(q);
-
-      // Exactly what SerpAPI sends for a query Google can't match:
-      // HTTP 200, with the miss reported through the `error` field.
-      if (q.split(" ").length > 3) {
-        return new Response(
-          JSON.stringify({ error: "Google hasn't returned any results for this query." }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      return new Response(
-        JSON.stringify({
-          shopping_results: [
-            {
-              title: 'Samsonite Rhapsody 360 Spinner Expandable Medium 25"',
-              link: "https://www.amazon.ca/dp/RHAP1",
-              source: "Amazon.ca",
-              price: "$329.99",
-              extracted_price: 329.99,
-            },
-            {
-              title: "Samsonite Rhapsody 360 Medium Spinner",
-              link: "https://www.thebay.com/rhapsody-360",
-              source: "Hudson's Bay",
-              price: "$379.99",
-              extracted_price: 379.99,
-            },
-          ],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    }) as typeof fetch;
-
-    const recovered = await search("Samsonite Rhapsody 360 Spinner Expandable Medium Luggage Black");
-
-    console.log(asked.map((q, i) => `      call ${i + 1}: "${q}"`).join("\n"));
-
-    check(
-      "an empty result no longer throws",
-      recovered.products.length > 0,
-      `${recovered.products.length} products`,
-    );
-    check("it widened rather than giving up", asked.length > 1, `${asked.length} call(s)`);
-    check(
-      "and stopped as soon as it found something",
-      asked.length <= 3,
-      `${asked.length} calls — allowance guard`,
-    );
-    check(
-      "the user is told the wording changed",
-      recovered.warnings.some((w) => /instead/i.test(w)),
-      recovered.warnings.join(" | "),
-    );
-    checkProductInvariants(recovered.products, "broadened");
+    const r = await search("samsonite freeform review");
+    check("no broadening when pages exist", calls.search === 1, `${calls.search}`);
+    check("explains what happened", r.warnings.some((w) => /none showed a clear Canadian price/i.test(w)), r.warnings.join(" | "));
+    check("returns empty, not fake", r.products.length === 0);
   }
 
-  console.log("\n\x1b[1m6a-iii. Genuinely nothing anywhere\x1b[0m");
+  section("C8. Genuinely nothing anywhere");
+  installStub({ search: () => tavilyJson([]) });
   {
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      return new Response(
-        JSON.stringify({ error: "Google hasn't returned any results for this query." }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    }) as typeof fetch;
-
-    const empty = await search("Zzzqx Nonexistent 9000 Spinner Purple");
-    check("returns an empty result, not an error", empty.products.length === 0);
-    check("never exceeds the attempt budget", calls <= 3, `${calls} calls`);
-    check(
-      "tells the user what to type instead",
-      empty.warnings.some((w) => /Try just the brand and model/i.test(w)),
-      empty.warnings.join(" | "),
-    );
-    check(
-      "no raw SerpAPI error text is shown",
-      !empty.warnings.some((w) => /SerpAPI:/i.test(w)),
-      empty.warnings.join(" | "),
-    );
+    const r = await search("Zzzqx Nonexistent 9000 Spinner Purple");
+    check("empty result, not an error", r.products.length === 0);
+    check("never more than 2 calls", calls.search <= 2, `${calls.search}`);
+    check("tells the user what to type", r.warnings.some((w) => /Try just the brand and model/i.test(w)), r.warnings.join(" | "));
   }
 
-  /* ---------------- 6a-iv. catalog vs compare mode ---------------- */
-  console.log("\n\x1b[1m6a-iv. catalog mode keeps colour variants separate\x1b[0m");
+  section("C9. catalog keeps colours apart; compare merges them");
   {
-    delete process.env.GEMINI_API_KEY;
-    const variants = [
-      ["Samsonite Omni PC 20\" Spinner Carry-On Black", 149.99, "https://www.amazon.ca/dp/V1"],
-      ["Samsonite Omni PC 20\" Spinner Carry-On Teal", 159.99, "https://www.amazon.ca/dp/V2"],
-      ["Samsonite Omni PC 20\" Spinner Carry-On Burgundy", 154.99, "https://www.walmart.ca/en/ip/v3"],
-    ].map(([title, extracted_price, link]) => ({
-      title,
-      link,
-      source: String(link).includes("amazon") ? "Amazon.ca" : "Walmart Canada",
-      price: `$${extracted_price}`,
-      extracted_price,
-    }));
-
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ shopping_results: variants }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })) as typeof fetch;
-
+    const variants = ["Black", "Teal", "Burgundy"].map((c, i) =>
+      productPage({ name: `Samsonite Omni PC 20" Spinner Carry-On ${c}`, site: i === 2 ? "Walmart Canada" : "Amazon.ca", url: i === 2 ? "https://www.walmart.ca/en/ip/v3/600300" : `https://www.amazon.ca/dp/V${i}`, price: `$${[149.99, 159.99, 154.99][i]}` }),
+    );
+    installStub({ search: () => tavilyJson(variants) });
     const compare = await search("Samsonite Omni PC 20", { mode: "compare" });
     const catalog = await search("Samsonite Omni PC 20", { mode: "catalog" });
-
-    check(
-      "compare mode merges the three colours into one comparable product",
-      compare.products.length === 1,
-      `${compare.products.length} products`,
-    );
-    check(
-      "catalog mode lists all three colours to pick from",
-      catalog.products.length === 3,
-      `${catalog.products.length} products`,
-    );
-    check(
-      "catalog products name their colour",
-      catalog.products.every((p) => p.color.length > 0),
-      catalog.products.map((p) => `${p.name}="${p.color}"`).join(", "),
-    );
-    check(
-      "the two modes don't share a cache entry",
-      compare.products.length !== catalog.products.length,
-    );
+    check("compare merges the three colours", compare.products.length === 1, `${compare.products.length}`);
+    check("catalog lists all three", catalog.products.length === 3, `${catalog.products.length}`);
+    check("catalog products name their colour", catalog.products.every((p) => p.color.length > 0));
     checkProductInvariants(catalog.products, "catalog");
   }
 
-  /* ---------------- 6a-v. Slow Gemini must not starve the fetch --- */
-  //
-  // Real failure, 2026-09-16: "The price service took too long to respond"
-  // on a short query. SerpAPI was never the problem — Gemini got the FULL
-  // timeout for EACH of five candidate models, so it could spend 45s of a
-  // 50s budget before the shopping call started.
-  console.log("\n\x1b[1m6a-v. Gemini hanging must not starve the shopping call\x1b[0m");
+  section("C10. 13 retailers for one bag — capped at 10, majors kept");
   {
-    process.env.GEMINI_API_KEY = "test-key";
-    // The real default budget — this is the production scenario.
-    process.env.SEARCH_BUDGET_MS = "50000";
-
-    let geminiCalls = 0;
-    let serpCalled = false;
-    let serpTimeBudget = 0;
-    const startedAt = Date.now();
-
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-
-      if (url.includes("generativelanguage")) {
-        geminiCalls += 1;
-        // Hang until aborted, exactly like an unresponsive endpoint. Real
-        // fetch rejects with AbortError when its signal fires, so honour it.
-        return new Promise<Response>((_, reject) => {
-          const signal = (init as RequestInit | undefined)?.signal;
-          const fail = () => {
-            const e = new Error("The operation was aborted.");
-            e.name = "AbortError";
-            reject(e);
-          };
-          if (signal?.aborted) return fail();
-          signal?.addEventListener("abort", fail, { once: true });
-        });
-      }
-
-      if (url.includes("serpapi.com")) {
-        serpCalled = true;
-        serpTimeBudget = 50_000 - (Date.now() - startedAt);
-        return new Response(
-          JSON.stringify({
-            shopping_results: [
-              {
-                title: 'Samsonite Rhapsody 360 Medium Spinner 25"',
-                link: "https://www.amazon.ca/dp/RHAP",
-                source: "Amazon.ca",
-                price: "$329.99",
-                extracted_price: 329.99,
-              },
-            ],
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      throw new Error("unexpected fetch");
-    }) as typeof fetch;
-
-    const result = await search("Samsonite Rhapsody 360");
-    const elapsed = Date.now() - startedAt;
-
-    check("SerpAPI still got called", serpCalled);
-    check(
-      "…with a usable window, not the scraps",
-      serpTimeBudget > 30_000,
-      `only ${serpTimeBudget}ms left when it was called`,
-    );
-    check(
-      "Gemini was tried once, not once per candidate model",
-      geminiCalls === 1,
-      `${geminiCalls} Gemini calls`,
-    );
-    check("the search returned real prices", result.products.length > 0);
-    check(
-      "and finished inside the budget",
-      elapsed < 20_000,
-      `${elapsed}ms`,
-    );
-
-    // The breaker should now be open, so the NEXT search skips Gemini
-    // entirely rather than paying the wait again.
-    const { geminiCircuitOpen } = await import("../src/lib/gemini");
-    check("the Gemini circuit breaker opened after the failure", geminiCircuitOpen());
-
-    const before = geminiCalls;
-    await search("Samsonite Freeform");
-    check(
-      "the next search skips Gemini entirely while the breaker is open",
-      geminiCalls === before,
-      `${geminiCalls - before} extra Gemini call(s)`,
-    );
-
-    delete process.env.SEARCH_BUDGET_MS;
-    delete process.env.GEMINI_API_KEY;
-  }
-
-  /* ---------------- 6a-vi. Slow Supabase must not block ----------- */
-  //
-  // Real failure, 2026-09-16: the dev log showed a plain
-  // `GET /api/products` taking 11.6s and another 5.2s — every Supabase round
-  // trip on this connection is slow. A search makes several (cache read,
-  // quota reserve per attempt, cache write), so the database alone could
-  // spend the whole 50s budget before Google was asked for a price.
-  //
-  // Caching and metering are optimisations. They must fail open.
-  console.log("\n\x1b[1m6a-vi. A hanging database must not block the search\x1b[0m");
-  {
-    delete process.env.GEMINI_API_KEY;
-    process.env.SEARCH_DB_TIMEOUT_MS = "300";
-
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      if (String(input).includes("serpapi.com")) {
-        return new Response(JSON.stringify({ shopping_results: SHOPPING_RESULTS }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      throw new Error("unexpected fetch");
-    }) as typeof fetch;
-
-    // A Supabase client whose every call never settles.
-    const neverSettles = () => new Promise(() => {});
-    const hangingDb = {
-      rpc: neverSettles,
-      from: () => ({
-        select: () => ({ eq: () => ({ maybeSingle: neverSettles }) }),
-        upsert: neverSettles,
-      }),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
-
-    const startedAt = Date.now();
-    const result = await search("samsonite carry on luggage", { db: hangingDb });
-    const elapsed = Date.now() - startedAt;
-
-    check("the search completed despite the database hanging", result.products.length > 0);
-    check(
-      "and wasn't held up by it",
-      elapsed < 3_000,
-      `${elapsed}ms — each bounded call should cost ~300ms, not forever`,
-    );
-    checkProductInvariants(result.products, "slow-db");
-
-    delete process.env.SEARCH_DB_TIMEOUT_MS;
-  }
-
-  /* ---------------- 6a-vii. Plain queries skip the LLM ------------ */
-  console.log("\n\x1b[1m6a-vii. Plain product queries skip Gemini entirely\x1b[0m");
-  {
-    const { isPlainProductQuery } = await import("../src/lib/search/parse");
-    const plain = ["samsonite luggage", "Samsonite Rhapsody 360", "Samsonite Omni PC 20 inch spinner", "travelpro maxlite 5"];
-    const needsLlm = [
-      "hard shell carry-on under $300",
-      "what is the best carry on for a week trip",
-      "show me something cheaper than the Freeform",
-      "compare samsonite vs travelpro",
-      "a carry-on for my daughter that fits Air Canada",
+    const many: [string, string, string][] = [
+      ["Amazon.ca", "https://www.amazon.ca/dp/A", "$229.99"],
+      ["Walmart Canada", "https://www.walmart.ca/en/ip/a/600001", "$249.99"],
+      ["Costco", "https://www.costco.ca/a.product.100001.html", "$239.99"],
+      ["Hudson's Bay", "https://www.thebay.com/product/a", "$264.00"],
+      ["Canadian Tire", "https://www.canadiantire.ca/en/pdp/a-0001p.html", "$269.99"],
+      ["Bentley", "https://www.bentley.ca/en/a", "$259.99"],
+      ["London Drugs", "https://www.londondrugs.com/a/L1.html", "$274.99"],
+      ["Best Buy Canada", "https://www.bestbuy.ca/en-ca/product/a/1000001", "$254.99"],
+      ["Samsonite Canada", "https://www.samsonite.ca/a/1.html", "$279.99"],
+      ["eBay", "https://www.ebay.ca/itm/1", "$198.50"],
+      ["Travelpro", "https://www.travelpro.com/products/a", "CA$289.99"],
+      ["Luggage Depot", "https://www.luggagedepot.ca/products/a", "$234.00"],
+      ["Bag King", "https://bagking.ca/products/a", "$349.00"],
     ];
-    for (const q of plain) check(`"${q}" → no LLM`, isPlainProductQuery(q), "sent to Gemini unnecessarily");
-    for (const q of needsLlm) check(`"${q}" → uses the LLM`, !isPlainProductQuery(q), "skipped the LLM wrongly");
-
-    // And prove it end to end: a plain query must make zero Gemini calls.
-    process.env.GEMINI_API_KEY = "test-key";
-    let geminiCalls = 0;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const u = String(input);
-      if (u.includes("generativelanguage")) {
-        geminiCalls += 1;
-        return geminiJson({ products: [] });
-      }
-      if (u.includes("serpapi.com")) {
-        return new Response(JSON.stringify({ shopping_results: SHOPPING_RESULTS }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      throw new Error("unexpected fetch");
-    }) as typeof fetch;
-
-    await search("samsonite luggage");
-    check(
-      "a plain search makes no Gemini call for parsing",
-      geminiCalls <= 1,
-      `${geminiCalls} Gemini calls (1 is the grouping step, which is allowed)`,
-    );
-    delete process.env.GEMINI_API_KEY;
+    installStub({ search: () => tavilyJson(many.map(([site, url, price]) => productPage({ name: 'Samsonite Freeform Hardside Spinner Carry-On 21"', site, url, price }))) });
+    const capped = await search("samsonite freeform 21");
+    const big = capped.products[0];
+    show([big]);
+    check("capped at 10", big.offers.length === 10, `${big.offers.length}`);
+    check("all 8 majors survived", MAJORS.every((k) => big.offers.some((o) => o.retailerKey === k)));
+    check("cheapest ($198.50) kept", big.offers.some((o) => o.price === 198.5));
+    checkProductInvariants([big], "capped");
   }
 
-  /* ---------------- 6b. Query anchoring --------------------------- */
-  console.log("\n\x1b[1m6b. Keywords sent to Google\x1b[0m");
+  section("C11. A misread price is dropped, not shown as a 'deal'");
+  installStub({
+    search: () =>
+      tavilyJson([
+        productPage({ name: "Samsonite Winfield 3 DLX Medium", site: "Amazon.ca", url: "https://www.amazon.ca/dp/W1", price: "$299.99" }),
+        productPage({ name: "Samsonite Winfield 3 DLX Medium", site: "Walmart Canada", url: "https://www.walmart.ca/en/ip/w/600010", price: "$319.99" }),
+        productPage({ name: "Samsonite Winfield 3 DLX Medium", site: "Bentley", url: "https://www.bentley.ca/en/w", price: "$309.99" }),
+        productPage({ name: "Samsonite Winfield 3 DLX Medium", site: "Some Shop", url: "https://someshop.ca/products/w", price: "$29.99" }),
+      ]),
+  });
   {
-    const { anchorToLuggage } = await import("../src/lib/search/parse");
-    const cases: [string, string][] = [
-      // Brand/model queries would otherwise return shelving and car parts.
-      ["Freeform 21", "Freeform 21 luggage"],
-      ["Samsonite Omni PC", "Samsonite Omni PC luggage"],
-      ["Monos", "Monos luggage"],
-      // Already unambiguous — must not be padded.
-      ["hard shell carry-on", "hard shell carry-on"],
-      ["samsonite luggage", "samsonite luggage"],
-      ["travelpro spinner", "travelpro spinner"],
-      ["large checked suitcase", "large checked suitcase"],
-    ];
-    for (const [input, expected] of cases) {
-      const got = anchorToLuggage(input);
-      check(`"${input}" → "${expected}"`, got === expected, `got "${got}"`);
-    }
+    const r = await search("samsonite winfield 3 dlx medium");
+    check("$29.99 among ~$300 prices is discarded", r.products[0]?.lowestPrice === 299.99, `${r.products[0]?.lowestPrice}`);
   }
 
-  /* ---------------- 7. One product at 13 retailers ---------------- */
-  //
-  // A narrow query ("samsonite freeform 21") returns the SAME bag at every
-  // retailer. The offer list is capped at 10, and the card's headline
-  // numbers have to describe the 10 that are shown — not the 13 that were
-  // found. Majors must survive the cap.
-  console.log("\n\x1b[1m7. One product carried by 13 retailers (offer cap)\x1b[0m");
-  delete process.env.GEMINI_API_KEY;
-  const many = [
-    ["Amazon.ca", "https://www.amazon.ca/dp/A", 229.99],
-    ["Walmart Canada", "https://www.walmart.ca/en/ip/a/1", 249.99],
-    ["Costco Wholesale Canada", "https://www.costco.ca/a.html", 239.99],
-    ["Hudson's Bay", "https://www.thebay.com/a", 264.0],
-    ["Canadian Tire", "https://www.canadiantire.ca/a.html", 269.99],
-    ["Bentley", "https://www.bentley.ca/a", 259.99],
-    ["London Drugs", "https://www.londondrugs.com/a.html", 274.99],
-    ["Best Buy Canada", "https://www.bestbuy.ca/a", 254.99],
-    ["Samsonite", "https://www.samsonite.ca/a.html", 279.99],
-    ["eBay", "https://www.ebay.ca/itm/1", 198.5],
-    ["Travelpro", "https://www.travelpro.com/a", 289.99],
-    ["Luggage Depot", "https://www.luggagedepot.ca/a", 234.0],
-    ["Bag King", "https://bagking.ca/a", 549.0],
-  ].map(([source, link, extracted_price]) => ({
-    title: 'Samsonite Freeform Hardside Spinner Carry-On 21"',
-    link,
-    source,
-    price: `$${extracted_price}`,
-    extracted_price,
-  }));
-
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    if (String(input).includes("serpapi.com")) {
-      return new Response(JSON.stringify({ shopping_results: many }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    throw new Error("unexpected fetch");
-  }) as typeof fetch;
-
-  const capped = await search("samsonite freeform 21");
-  const big = capped.products[0];
-  show([big]);
-
-  check("offer list capped at 10", big.offers.length === 10, `${big.offers.length}`);
-  check(
-    "all 8 major retailers survived the cap",
-    ["Amazon.ca", "Walmart.ca", "Costco.ca", "Hudson's Bay", "Canadian Tire", "Bentley", "London Drugs", "Best Buy Canada"].every(
-      (k) => big.offers.some((o) => o.retailerKey === k),
-    ),
-  );
-  check(
-    "the cheapest offer overall ($198.50 eBay) was not capped away",
-    big.offers.some((o) => o.price === 198.5),
-  );
-  checkProductInvariants([big], "capped");
-
-  /* ---------------- 8. Gemini 503 on every model ------------------ */
-  console.log("\n\x1b[1m8. Gemini 503 'high demand' on every model\x1b[0m");
+  section("C12. Gemini hanging never starves the research call");
   process.env.GEMINI_API_KEY = "test-key";
-  serpCalls = 0;
-  installFetchStub({ geminiBusy: true, onSerpApiCall: () => (serpCalls += 1) });
-  const degraded = await search("samsonite carry on luggage");
-  check(
-    "search still returns real products when Gemini is down",
-    degraded.products.length > 0,
-    `${degraded.products.length} products`,
-  );
-  check("SerpAPI was still called exactly once", serpCalls === 1, `${serpCalls} calls`);
-  checkProductInvariants(degraded.products, "gemini-down");
+  process.env.SEARCH_BUDGET_MS = "50000";
+  installStub({ geminiHangs: true });
+  {
+    const started = Date.now();
+    const r = await search("Samsonite Rhapsody 360");
+    const elapsed = Date.now() - started;
+    check("research still returned real prices", r.products.length > 0);
+    check("Gemini tried once, not once per model", calls.gemini === 1, `${calls.gemini}`);
+    check("finished inside the budget", elapsed < 20_000, `${elapsed}ms`);
+    const { geminiCircuitOpen } = await import("../src/lib/gemini");
+    check("Gemini breaker opened", geminiCircuitOpen());
+  }
+  delete process.env.SEARCH_BUDGET_MS;
+  delete process.env.GEMINI_API_KEY;
+
+  section("C13. A hanging database never blocks research");
+  process.env.SEARCH_DB_TIMEOUT_MS = "300";
+  installStub();
+  {
+    const never = () => new Promise(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hangingDb = { rpc: never, from: () => ({ select: () => ({ eq: () => ({ maybeSingle: never, eq: () => ({ maybeSingle: never }) }) }), upsert: never }) } as any;
+    const started = Date.now();
+    const r = await search("samsonite carry on luggage", { db: hangingDb });
+    const elapsed = Date.now() - started;
+    check("completed despite the database hanging", r.products.length > 0);
+    check("wasn't held up by it", elapsed < 3_000, `${elapsed}ms`);
+  }
+  delete process.env.SEARCH_DB_TIMEOUT_MS;
+
+  section("C14. No provider key → clear setup message");
+  delete process.env.TAVILY_API_KEY;
+  installStub();
+  {
+    const msg = await search("anything").then(() => "", (e: Error) => e.message);
+    check("tells you to add TAVILY_API_KEY", /TAVILY_API_KEY/.test(msg), msg);
+    check("no call attempted", calls.search === 0);
+  }
+  process.env.TAVILY_API_KEY = "tvly-test-key";
+
+  /* ============ D. Separation from the Add Product workflow ========= */
+
+  section("D1. Research never creates, imports or stores products");
+  {
+    const files = [
+      "src/lib/tavily.ts",
+      "src/lib/search/providers/tavily.ts",
+      "src/lib/search/extract.ts",
+      "src/lib/search/index.ts",
+    ];
+    for (const f of files) {
+      const src = readFileSync(resolve(f), "utf8");
+      check(`${f} doesn't import the product store`, !/@\/lib\/db\/products|lib\/db\/products/.test(src));
+      check(`${f} writes no product/offer/tracking tables`, !/from\(\s*["'](?:products|offers|price_history|tracked_products)["']\s*\)/.test(src));
+    }
+  }
 
   /* ---------------- Summary --------------------------------------- */
   console.log(`\n\x1b[1m${passed} passed, ${failures.length} failed\x1b[0m`);
@@ -1031,7 +933,7 @@ async function main() {
     for (const f of failures) console.log(`  \x1b[31m✗\x1b[0m ${f}`);
     process.exit(1);
   }
-  console.log("\x1b[32mSearch pipeline verified end to end.\x1b[0m\n");
+  console.log("\x1b[32mResearch pipeline verified end to end.\x1b[0m\n");
 }
 
 main().catch((err) => {

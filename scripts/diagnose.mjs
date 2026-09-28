@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /* ------------------------------------------------------------------ */
 /*  npm run diagnose          — check every moving part, in order      */
-/*  npm run diagnose -- --live  — also spend ONE real SerpAPI search   */
+/*  npm run diagnose -- --live "<query>"  — also run ONE real research */
+/*                              call (1 Tavily credit) via the app    */
 /*                                                                     */
 /*  Everything the search page depends on, timed, from this machine.   */
 /*  Without --live it costs nothing and makes no billable call.        */
@@ -63,7 +64,7 @@ async function fetchWithTimeout(url, opts = {}, ms = 30_000) {
 }
 
 console.log(`\n${B}LuggageTracker diagnostics${X}`);
-console.log(`${D}${LIVE ? "live mode — this WILL spend one SerpAPI search" : "dry run — no billable calls"}${X}\n`);
+console.log(`${D}${LIVE ? "live mode — this WILL spend one Tavily credit" : "dry run — no billable calls"}${X}\n`);
 
 /* ── 1. Keys present ───────────────────────────────────────────── */
 
@@ -72,8 +73,7 @@ const keys = [
   ["NEXT_PUBLIC_SUPABASE_URL", true],
   ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", false],
   ["NEXT_PUBLIC_SUPABASE_ANON_KEY", false],
-  ["SERPAPI_KEY", false],
-  ["SERPER_API_KEY", false],
+  ["TAVILY_API_KEY", true],
   ["GEMINI_API_KEY", false],
   ["SUPABASE_SERVICE_ROLE_KEY", false],
 ];
@@ -83,9 +83,12 @@ for (const [name, required] of keys) {
   console.log(`  ${mark} ${name.padEnd(38)} ${v ? `${D}set (${v.length} chars)${X}` : `${D}not set${X}`}`);
 }
 
-const hasShopping = !!(env.SERPAPI_KEY || env.SERPER_API_KEY);
+const hasShopping = !!env.TAVILY_API_KEY;
 if (!hasShopping) {
-  note("error", "No shopping provider key. Search cannot return prices without SERPAPI_KEY or SERPER_API_KEY.");
+  note("error", "TAVILY_API_KEY is not set. Research can't run without it (free: 1,000 credits/month, no card).");
+}
+if (env.SERPAPI_KEY || env.SERPER_API_KEY) {
+  console.log(`  ${D}(SERPAPI_KEY / SERPER_API_KEY are no longer used for product research and can be removed)${X}`);
 }
 
 /* ── 2. Supabase latency ───────────────────────────────────────── */
@@ -195,128 +198,70 @@ if (!env.GEMINI_API_KEY) {
   }
 }
 
-/* ── 4. SerpAPI ────────────────────────────────────────────────── */
+/* ── 4. Tavily ─────────────────────────────────────────────────── */
 
-console.log(`\n${B}4. SerpAPI${X}`);
-if (!env.SERPAPI_KEY) {
-  console.log(`  ${Y}–${X} SERPAPI_KEY not set.`);
-} else if (!LIVE) {
-  // Account check costs nothing.
-  const [ms, res, err] = await timed(() =>
-    fetchWithTimeout(`https://serpapi.com/account?api_key=${env.SERPAPI_KEY}`, {}, 20_000),
-  );
-  if (err) {
-    console.log(`  ${R}✗${X} couldn't reach serpapi.com after ${ms}ms — ${err.message}`);
-    note("error", `Cannot reach serpapi.com from this machine (${err.message}). Check your connection, VPN, or firewall.`);
-  } else if (res.ok) {
-    const acct = await res.json().catch(() => ({}));
-    console.log(`  ${verdict(ms, 1500, 4000)}✓${X} account reachable in ${ms}ms`);
-    if (typeof acct.total_searches_left === "number") {
-      const left = acct.total_searches_left;
-      console.log(`  ${B}searches left this month: ${left}${X}${acct.searches_per_month ? ` ${D}of ${acct.searches_per_month}${X}` : ""}`);
-      if (left <= 0) note("error", "SerpAPI allowance is used up. No search can return prices until it resets.");
-      else if (left < 20) note("warn", `Only ${left} SerpAPI searches left this month.`);
-    }
-    console.log(`  ${D}run with --live to spend one search and test the real query path${X}`);
-  } else {
-    const body = await res.text().catch(() => "");
-    console.log(`  ${R}✗${X} HTTP ${res.status} in ${ms}ms — ${body.slice(0, 120)}`);
-    if (res.status === 401) {
-      note("error", "SerpAPI rejected the key. Confirm your email at serpapi.com — a new key stays inactive until the address is verified.");
-    } else {
-      note("error", `SerpAPI returned HTTP ${res.status} for the account check: ${body.slice(0, 160)}`);
-    }
-  }
+console.log(`\n${B}4. Tavily research credits${X}`);
+if (!env.TAVILY_API_KEY) {
+  console.log(`  ${R}✗${X} TAVILY_API_KEY not set.`);
 } else {
-  const query = process.argv.slice(2).filter((a) => a !== "--live").join(" ") || "samsonite luggage";
-  const params = new URLSearchParams({
-    engine: "google_shopping",
-    q: query,
-    gl: "ca",
-    hl: "en",
-    google_domain: "google.ca",
-    num: "20",
-    api_key: env.SERPAPI_KEY,
-  });
-
-  console.log(`  ${D}query: ${query}${X}`);
+  // /usage costs no credits (rate-limited to 10 calls per 10 minutes).
   const [ms, res, err] = await timed(() =>
-    fetchWithTimeout(`https://serpapi.com/search.json?${params}`, {}, 45_000),
+    fetchWithTimeout("https://api.tavily.com/usage", {
+      headers: { Authorization: `Bearer ${env.TAVILY_API_KEY}` },
+    }, 15_000),
   );
 
   if (err) {
-    console.log(`  ${R}✗ ${err.name === "AbortError" ? "TIMED OUT" : "FAILED"}${X} after ${ms}ms — ${err.message}`);
-    note("error", `SerpAPI did not respond within 45s from this machine. This is the search's core dependency — nothing else matters until it answers.`);
+    console.log(`  ${R}✗${X} couldn't reach api.tavily.com after ${ms}ms — ${err.message}`);
+    note("error", `Can't reach api.tavily.com from this machine (${err.message}). Check your connection, VPN or firewall.`);
+  } else if (res.status === 401) {
+    console.log(`  ${R}✗${X} HTTP 401 — key rejected`);
+    note("error", "Tavily rejected TAVILY_API_KEY. Copy it again from app.tavily.com and restart the dev server.");
+  } else if (res.status === 403) {
+    const body = await res.text().catch(() => "");
+    console.log(`  ${R}✗${X} HTTP 403 — ${body.slice(0, 120)}`);
+    note("error", "Access to api.tavily.com was blocked (403). A firewall, proxy or VPN is likely in the way — this is not a key problem.");
+  } else if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.log(`  ${Y}!${X} HTTP ${res.status} in ${ms}ms — ${body.slice(0, 120)}`);
+    note("warn", `Tavily /usage answered ${res.status}. The app will fall back to counting credits itself.`);
   } else {
-    const body = await res.json().catch(() => null);
-    console.log(`  ${verdict(ms, 8000, 20000)}HTTP ${res.status} in ${B}${ms}ms${X}`);
+    const u = await res.json().catch(() => ({}));
+    const acct = u.account ?? {};
+    const key = u.key ?? {};
+    const used = Math.max(Number(acct.plan_usage) || 0, Number(key.usage) || 0);
+    const limit = Number(acct.plan_limit) || null;
+    const cap = Number(env.TAVILY_MONTHLY_CREDIT_CAP) || 950;
+    const effectiveCap = Math.min(cap, limit ?? Infinity, Number(key.limit) || Infinity);
+    const left = Math.max(0, effectiveCap - used);
 
-    if (body?.error) {
-      const noResults = /hasn'?t returned any results|no results/i.test(body.error);
-      console.log(`  ${noResults ? Y : R}${noResults ? "!" : "✗"}${X} ${body.error}`);
-      if (noResults) {
-        note("warn", `Google had no match for "${query}". This is normal for long product titles — the app now retries automatically with shorter terms.`);
-      } else {
-        note("error", `SerpAPI: ${body.error}`);
-      }
+    console.log(`  ${verdict(ms, 1500, 4000)}✓${X} reachable in ${ms}ms${acct.current_plan ? `  ${D}plan: ${acct.current_plan}${X}` : ""}`);
+    console.log(`  credits used: ${B}${used}${X}${limit ? ` of ${limit}` : ""}`);
+    console.log(`  app stops at: ${B}${effectiveCap}${X}  →  ${B}${left} research calls left${X} ${D}(1 credit each at basic depth)${X}`);
+
+    const paygo = (Number(acct.paygo_limit) || 0) > 0 || (Number(acct.paygo_usage) || 0) > 0;
+    console.log(`  ${D}pay-as-you-go fields: paygo_limit=${JSON.stringify(acct.paygo_limit ?? null)} paygo_usage=${JSON.stringify(acct.paygo_usage ?? null)}${X}`);
+    if (paygo) {
+      note("error", "Pay-as-you-go is ENABLED on the Tavily account. To guarantee $0 the app refuses ALL research while it's on. Turn pay-as-you-go off in the Tavily dashboard and research resumes automatically.");
     } else {
-      const results = body?.shopping_results ?? [];
-      const merchant = (r) => {
-        const u = r.link || r.product_link || "";
-        if (!/^https?:\/\//i.test(u)) return "";
-        try {
-          const h = new URL(u).hostname.replace(/^www\./, "");
-          return /(^|\.)google\.(com|ca)$/i.test(h) ? "" : u;
-        } catch { return ""; }
-      };
-      const usable = results.filter((r) => merchant(r) && r.extracted_price > 0);
-      const dropped = results.length - usable.length;
-
-      console.log(`  listings returned: ${results.length}`);
-      console.log(`  usable (merchant url + price): ${B}${usable.length}${X}${dropped ? `  ${D}(${dropped} unusable)${X}` : ""}`);
-      console.log("");
-      for (const r of usable.slice(0, 8)) {
-        console.log(`    ${(r.source ?? "?").padEnd(22).slice(0, 22)} $${String(r.extracted_price).padStart(8)}  ${D}${(r.title ?? "").slice(0, 44)}${X}`);
-      }
-
-      // WHY were rows rejected? Without this the app just shows nothing and
-      // there is no way to tell a dead API from a mapper that is too strict.
-      if (dropped > 0) {
-        const reasons = { noUrl: 0, googleUrl: 0, noPrice: 0, noTitle: 0 };
-        for (const r of results) {
-          const raw = r.link || r.product_link || "";
-          if (!/^https?:\/\//i.test(raw)) reasons.noUrl += 1;
-          else if (!merchant(r)) reasons.googleUrl += 1;
-          if (!(r.extracted_price > 0)) reasons.noPrice += 1;
-          if (!(r.title ?? "").trim()) reasons.noTitle += 1;
-        }
-        console.log(`  ${Y}why rows were rejected:${X}`);
-        console.log(`    no url at all .......... ${reasons.noUrl}`);
-        console.log(`    url points at Google ... ${reasons.googleUrl}`);
-        console.log(`    no numeric price ....... ${reasons.noPrice}`);
-        console.log(`    no title ............... ${reasons.noTitle}`);
-
-        console.log(`\n  ${Y}first 2 raw listings, exactly as SerpAPI sent them:${X}`);
-        for (const r of results.slice(0, 2)) {
-          console.log(`    ${D}${JSON.stringify(r, null, 2).split("\n").join("\n    ").slice(0, 1400)}${X}`);
-        }
-
-        try {
-          const { writeFileSync } = await import("node:fs");
-          writeFileSync("serpapi-response.json", JSON.stringify(body, null, 2));
-          console.log(`\n  ${D}full response written to serpapi-response.json${X}`);
-        } catch {}
-      }
-
-      if (usable.length === 0) {
-        note("error", "SerpAPI answered with listings, but NONE passed the app's filter. The API is fine — the mapping code is rejecting real data. See the rejection reasons and raw rows above.");
-      } else if (ms > 20_000) {
-        note("warn", `SerpAPI took ${ms}ms. Set SERPAPI_TIMEOUT_MS=40000 and SEARCH_BUDGET_MS=55000 in .env.local.`);
-      } else {
-        note("ok", `SerpAPI returned ${usable.length} usable listings in ${ms}ms. The search page will show results.`);
-      }
+      console.log(`  ${G}✓${X} pay-as-you-go not active ${D}(over the limit Tavily refuses with 432 — nothing is billed)${X}`);
     }
+    if (left <= 0) note("error", "The monthly research credit cap is reached. Research resumes when the allowance resets.");
+    else if (left < 50) note("warn", `Only ${left} research calls left this month.`);
+    else note("ok", `Tavily is ready: ${left} research calls left this month, $0 spend guaranteed by the cap.`);
   }
+}
+
+/* ── 5. Live research (optional) ──────────────────────────────── */
+
+if (LIVE && env.TAVILY_API_KEY) {
+  const query = process.argv.slice(2).filter((a) => a !== "--live").join(" ") || "samsonite freeform 21";
+  console.log(`\n${B}5. Live research — through the app's own code${X}`);
+  const { spawnSync } = await import("node:child_process");
+  const run = spawnSync(process.execPath, ["scripts/run-ts.mjs", "scripts/research-live.ts", query], {
+    stdio: "inherit",
+  });
+  if (run.status !== 0) note("error", "The live research call failed — see the output above.");
 }
 
 /* ── Verdict ───────────────────────────────────────────────────── */
@@ -334,8 +279,8 @@ if (errors.length === 0 && warns.length === 0) {
   console.log(`  ${G}Everything checks out.${X}`);
 }
 if (!LIVE && hasShopping) {
-  console.log(`\n${D}This was a dry run. To prove the real search path end to end:${X}`);
-  console.log(`  ${B}npm run diagnose -- --live "samsonite luggage"${X}   ${D}(costs 1 search)${X}`);
+  console.log(`\n${D}This was a dry run. To prove the real research path end to end:${X}`);
+  console.log(`  ${B}npm run diagnose -- --live "samsonite freeform 21"${X}   ${D}(costs 1 credit)${X}`);
 }
 console.log("");
 process.exit(errors.length > 0 ? 1 : 0);

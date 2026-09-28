@@ -163,13 +163,20 @@ export async function refreshProduct(
 export async function refreshProducts(
   supabase: SupabaseClient,
   products: Parameters<typeof refreshProduct>[1][],
-  opts: { allowedRetailers?: string[]; delayMs?: number; signal?: AbortSignal } = {},
+  opts: {
+    allowedRetailers?: string[];
+    delayMs?: number;
+    signal?: AbortSignal;
+    /** Checked before each product — e.g. "this run's credit budget is spent". */
+    shouldStop?: () => boolean;
+  } = {},
 ): Promise<RefreshOutcome[]> {
   const results: RefreshOutcome[] = [];
   const delay = opts.delayMs ?? 500;
 
   for (const product of products) {
     if (opts.signal?.aborted) break;
+    if (opts.shouldStop?.()) break;
     results.push(await refreshProduct(supabase, product, opts));
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));
   }

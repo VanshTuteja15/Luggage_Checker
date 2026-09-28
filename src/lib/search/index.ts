@@ -3,13 +3,17 @@
 /*                                                                     */
 /*    natural language query                                           */
 /*      → cache lookup          (free)                                 */
-/*      → parse intent          (LLM)                                  */
-/*      → fetch real offers     (serper → serpapi → grounded Gemini)   */
-/*      → cluster into products (LLM)                                  */
+/*      → parse intent          (plain queries skip the LLM)           */
+/*      → web research          (ONE Tavily search, credit-capped)     */
+/*      → cluster into products (LLM, or instant heuristic)            */
 /*      → filter + rank         (deterministic)                        */
 /*      → cache + return top N                                         */
 /*                                                                     */
-/*  Prices only ever come from the fetch step.                         */
+/*  Prices only ever come from retailer pages the research step read,  */
+/*  and each keeps the words it was read from as evidence.             */
+/*                                                                     */
+/*  Read-only: this module never creates or imports products. Tracking */
+/*  a result is a separate workflow (/api/track).                      */
 /* ------------------------------------------------------------------ */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -17,13 +21,13 @@ import { RETAILER_INFO, retailerRank } from "@/lib/retailers";
 import { broadenLadder, broadenedNotice } from "./broaden";
 import { clusterOffers } from "./cluster";
 import { parseQuery } from "./parse";
-import * as geminiProvider from "./providers/gemini-grounded";
-import * as serpProvider from "./providers/serpapi";
-import * as serperProvider from "./providers/serper";
-import { Deadline, NO_METER, type Meter } from "./deadline";
+import * as tavilyProvider from "./providers/tavily";
+import type { TavilySearchRequest, TavilySearchResponse } from "@/lib/tavily";
+import { Deadline, type Meter } from "./deadline";
 import { ProviderError } from "./errors";
 import {
   QuotaExhaustedError,
+  adjustCall,
   cacheKey,
   readCache,
   refundCall,
@@ -32,6 +36,7 @@ import {
 } from "./quota";
 import {
   NoProviderError,
+  type LuggageDetails,
   type Offer,
   type ProviderName,
   type SearchIntent,
@@ -73,8 +78,10 @@ function searchBudgetMs(): number {
  */
 function maxQueryAttempts(): number {
   const raw = Number(process.env.SEARCH_MAX_ATTEMPTS);
-  if (Number.isFinite(raw) && raw >= 1) return Math.min(raw, 5);
-  return 3;
+  if (Number.isFinite(raw) && raw >= 1) return Math.min(raw, 3);
+  // The original query plus at most one broader one — and the broader one
+  // only runs when the first returned no pages at all.
+  return 2;
 }
 
 /** Enough time left to be worth spending another call on a broader query. */
@@ -138,32 +145,25 @@ export type SearchOptions = {
    * brand's range and picking a variant to track.
    */
   mode?: SearchMode;
+  /**
+   * Diagnostics only: called with the raw research request and response.
+   * Lets the live smoke test show exactly what the app received, without
+   * a second (billable) call.
+   */
+  onResearch?: (info: { request: TavilySearchRequest; response: TavilySearchResponse }) => void;
 };
 
 /**
- * Providers in preference order.
- *
- * Serper first: its free allowance is an order of magnitude larger, so
- * spending it before SerpAPI's small recurring one leaves the renewable
- * source intact for the long run.
+ * Research providers in preference order. Tavily is the only one: SerpAPI
+ * and Serper are retired for product research, and Gemini grounding needs
+ * a billing-enabled Google project, which the $0 budget rules out.
  */
-const PROVIDER_ORDER: ProviderName[] = ["serper", "serpapi", "gemini-grounded"];
+const PROVIDER_ORDER: ProviderName[] = ["tavily"];
 
 export function providerConfigured(provider: ProviderName): boolean {
   switch (provider) {
-    case "serper":
-      return serperProvider.serperConfigured();
-    case "serpapi":
-      return serpProvider.serpApiConfigured();
-    case "gemini-grounded":
-      // Opt-in only. Grounding needs a billing-enabled Google project, so on
-      // a free key it fails every single time. Leaving it in the chain by
-      // default meant every transient SerpAPI blip produced a compound error
-      // ending in a paragraph about Google billing the user doesn't need.
-      return (
-        process.env.ENABLE_GEMINI_GROUNDED_SEARCH === "true" &&
-        geminiProvider.geminiGroundedConfigured()
-      );
+    case "tavily":
+      return tavilyProvider.tavilyProviderConfigured();
     default:
       return false;
   }
@@ -181,8 +181,9 @@ export function activeProvider(): ProviderName | null {
 
 export function providerLabel(p: ProviderName): string {
   switch (p) {
+    case "tavily":
+      return "Live web research";
     case "serper":
-      return "Google Shopping";
     case "serpapi":
       return "Google Shopping";
     case "gemini-grounded":
@@ -196,29 +197,28 @@ export function providerLabel(p: ProviderName): string {
 /*  Fetching                                                          */
 /* ------------------------------------------------------------------ */
 
+type ProviderResult = {
+  offers: Offer[];
+  warnings: string[];
+  /** Raw pages/listings returned. 0 means "nothing found", not "nothing usable". */
+  resultCount: number;
+};
+
 async function fetchFromProvider(
   provider: ProviderName,
   intent: SearchIntent,
-  ctx: { deadline: Deadline; meter: Meter },
-): Promise<{ offers: Offer[]; warnings: string[] }> {
+  ctx: {
+    deadline: Deadline;
+    meter: Meter;
+    bypassCache?: boolean;
+    onResearch?: SearchOptions["onResearch"];
+  },
+): Promise<ProviderResult> {
   switch (provider) {
-    case "serper":
-      // Serper has no internal retry, so the caller's single reservation is
-      // already exact.
-      await ctx.meter.beforeAttempt();
-      return { offers: await serperProvider.fetchOffers(intent), warnings: [] };
-    case "serpapi":
-      // Meters itself per HTTP attempt, because it retries internally.
-      return {
-        offers: await serpProvider.fetchOffers(intent, {
-          deadline: ctx.deadline,
-          meter: ctx.meter,
-        }),
-        warnings: [],
-      };
-    case "gemini-grounded":
-      await ctx.meter.beforeAttempt();
-      return geminiProvider.fetchOffers(intent);
+    case "tavily":
+      // Meters itself per HTTP attempt, in credits, and reconciles with the
+      // cost Tavily reports.
+      return tavilyProvider.fetchOffers(intent, ctx);
     default:
       throw new NoProviderError(`Unknown provider: ${provider}`);
   }
@@ -331,6 +331,57 @@ function rankProducts(products: SearchProduct[]): SearchProduct[] {
 }
 
 /**
+ * Drop prices that can't belong to the same product as the rest.
+ *
+ * Reading prices from open-web pages occasionally picks up an accessory's
+ * price or a whole set's. With three or more retailers for one product, a
+ * price under 40% or over 250% of the median is far more likely a
+ * misreading than a real deal — and a fake "lowest price" is the worst
+ * thing this tool could show.
+ */
+function dropPriceOutliers(product: SearchProduct): SearchProduct {
+  if (product.offers.length < 3) return product;
+
+  const sorted = product.offers.map((o) => o.price).sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+
+  const kept = product.offers.filter((o) => o.price >= median * 0.4 && o.price <= median * 2.5);
+  return kept.length === product.offers.length || kept.length === 0
+    ? product
+    : withRecomputedSummary({ ...product, offers: kept });
+}
+
+/**
+ * Merge the specs each retailer page listed into one set for the product.
+ * The brand's own store is trusted first, then majors, then everyone else;
+ * a field is only filled from a page that stated it.
+ */
+function attachDetails(product: SearchProduct): SearchProduct {
+  const ordered = [...product.offers].sort(
+    (a, b) => detailTrust(a) - detailTrust(b),
+  );
+
+  const merged: LuggageDetails = {};
+  for (const o of ordered) {
+    if (!o.details) continue;
+    for (const [k, v] of Object.entries(o.details) as [keyof LuggageDetails, unknown][]) {
+      if (merged[k] === undefined && v !== undefined) {
+        (merged as Record<string, unknown>)[k] = v;
+      }
+    }
+  }
+  return Object.keys(merged).length > 0 ? { ...product, details: merged } : product;
+}
+
+function detailTrust(o: Offer): number {
+  const category = o.retailerKey ? RETAILER_INFO[o.retailerKey]?.category : undefined;
+  if (category === "specialty") return 0; // brand-direct: Samsonite.ca, TUMI…
+  if (category === "major") return 1;
+  return 2;
+}
+
+/**
  * The shortest sensible query to show a user whose search found nothing:
  * brand plus the model line. Returns "" when the query is already that short.
  */
@@ -362,7 +413,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const available = configuredProviders();
   if (available.length === 0) {
     throw new NoProviderError(
-      "No price source is configured. Add a SERPER_API_KEY (2,500 free searches) or SERPAPI_KEY (250 free per month) to search live retailer prices.",
+      "No research provider is configured. Add TAVILY_API_KEY to .env.local (free: 1,000 credits a month, no card) and restart the dev server.",
     );
   }
 
@@ -373,7 +424,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
 
   // Mode changes the grouping, so it has to be part of the cache identity —
   // otherwise a compare search would serve its merged rows to a catalog one.
-  const key = cacheKey(`${trimmed}::${mode}`, allowedRetailers, limit);
+  const key = cacheKey(`${trimmed} ::mode:${mode}`, allowedRetailers, limit);
 
   if (!opts.bypassCache) {
     const hit = await readCache(opts.db, key);
@@ -403,12 +454,12 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   });
   timer.lap("parse");
 
-  // ── Try each configured provider in order ────────────────────
+  // ── Research ─────────────────────────────────────────────────
   //
-  // Within a provider, the query itself is retried in progressively
-  // broader forms: Google returning nothing for a retailer's full product
-  // title is normal, not an error, and the bag is usually right there
-  // under a shorter name.
+  // Within a provider, the query is retried in a broader form ONLY when the
+  // first found no pages at all. Pages found but no price readable is a
+  // different problem, and a broader query would just spend a credit on
+  // similar pages.
   const ladder = broadenLadder(intent.terms);
   const attemptLimit = Math.min(maxQueryAttempts(), ladder.length);
 
@@ -428,24 +479,30 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     // counter has to reflect that.
     let quotaError: QuotaExhaustedError | null = null;
     const meter: Meter = {
-      beforeAttempt: async () => {
+      beforeAttempt: async (units = 1) => {
         try {
-          await reserveCall(opts.db, provider);
+          await reserveCall(opts.db, provider, units);
         } catch (err) {
           if (err instanceof QuotaExhaustedError) quotaError = err;
           throw err;
         }
       },
-      refundAttempt: async () => refundCall(opts.db, provider),
+      refundAttempt: async (units = 1) => refundCall(opts.db, provider, units),
+      reconcile: async (delta) => adjustCall(opts.db, provider, delta),
     };
 
     try {
-      let result: { offers: Offer[]; warnings: string[] } = { offers: [], warnings: [] };
+      let result: ProviderResult = { offers: [], warnings: [], resultCount: 0 };
 
       for (let rung = 0; rung < attemptLimit; rung++) {
         const terms = ladder[rung];
 
-        result = await fetchFromProvider(provider, { ...intent, terms }, { deadline, meter });
+        result = await fetchFromProvider(provider, { ...intent, terms }, {
+          deadline,
+          meter,
+          bypassCache: opts.bypassCache,
+          onResearch: opts.onResearch,
+        });
 
         if (result.offers.length > 0) {
           usedTerms = terms;
@@ -455,8 +512,11 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
           break;
         }
 
-        // Empty, not failed. Widen — but only while there is genuinely
-        // time and another rung left worth paying for.
+        // Pages were found, just no readable price: a broader query would
+        // find similar pages and cost another credit. Stop here.
+        if (result.resultCount > 0) break;
+
+        // Genuinely nothing. Widen — but only while there's time and a rung.
         if (rung + 1 >= attemptLimit) break;
         if (!deadline.hasAtLeast(MIN_MS_FOR_ANOTHER_ATTEMPT)) break;
       }
@@ -489,27 +549,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
 
   if (!usedProvider) {
     timer.report(trimmed, `FAILED: ${failures[0] ?? "no provider"}`);
-    // Lead with the fix, not the symptom.
-    //
-    // Gemini grounding needs a billing-enabled project, so on a free key it
-    // always fails. If it was the only provider available, the useful message
-    // is "add a shopping key" — not a paragraph about Google billing, which
-    // sends people off to enable billing they don't need.
-    const hasShoppingProvider = available.some(
-      (p) => p === "serper" || p === "serpapi",
-    );
-
-    if (!hasShoppingProvider) {
-      throw new NoProviderError(
-        "No shopping price source is configured. Add SERPER_API_KEY (2,500 free searches) " +
-          "or SERPAPI_KEY (250 free per month) to .env.local and restart the dev server — " +
-          "note that Next.js only reads .env.local at startup, so a restart is required. " +
-          "Both are free and neither needs a credit card.",
-      );
-    }
-
     // One clear sentence, not a concatenation of every provider's failure.
-    throw new NoProviderError(failures[0] ?? "The price service couldn't be reached.");
+    throw new NoProviderError(failures[0] ?? "The research service couldn't be reached.");
   }
 
   // Mention any provider we had to skip past, so a silent downgrade
@@ -529,9 +570,11 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   // Cache writes are pure optimisation for the NEXT search. Awaiting one on
   // a slow connection made the user wait seconds for a result already
   // computed, so it runs in the background and its failure is ignored.
-  if (response.products.length > 0) {
-    void writeCache(opts.db, key, response, opts.cacheTtlMinutes).catch(() => undefined);
-  }
+  //
+  // Empty answers are cached too, briefly: otherwise every server instance
+  // (and every scheduled run) would pay again for the same dead end.
+  const ttl = response.products.length > 0 ? opts.cacheTtlMinutes : 30;
+  void writeCache(opts.db, key, response, ttl).catch(() => undefined);
 
   timer.report(
     trimmed,
@@ -562,10 +605,12 @@ async function finish(
     // failure — so say what was tried and what to type instead, rather than
     // surfacing a provider error string the client can do nothing with.
     const suggestion = suggestShorterQuery(intent.terms);
-    warnings.push(
+    // The provider may already have explained (e.g. "found 12 pages, none
+    // with a clear price"). Don't stack a second, contradictory hint on top.
+    if (warnings.length === 0) warnings.push(
       suggestion
-        ? `No Canadian retailer listings found for "${intent.terms}" (we also tried "${opts.broadestTried}"). Try just the brand and model — for example "${suggestion}".`
-        : `No Canadian retailer listings found for "${intent.terms}".`,
+        ? `No Canadian retailer prices found for "${intent.terms}". Try just the brand and model — for example "${suggestion}".`
+        : `No Canadian retailer prices found for "${intent.terms}".`,
     );
     return { query, intent, provider, products: [], offersFound: 0, warnings };
   }
@@ -598,7 +643,9 @@ async function finish(
     warnings.push(`Nothing found under $${intent.maxPrice.toFixed(2)}.`);
   }
 
-  // ── Rank and trim ────────────────────────────────────────────
+  // ── Sanity, specs, rank and trim ─────────────────────────────
+  products = products.map(dropPriceOutliers).map(attachDetails);
+
   products = rankProducts(products)
     .slice(0, opts.limit)
     .map((p) => withRecomputedSummary({ ...p, offers: sortOffers(capOffers(p.offers)) }));

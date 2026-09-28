@@ -105,34 +105,93 @@ export function extractSize(title: string): string {
   return "";
 }
 
-/** A rough identity signature for a listing title, used as an LLM fallback. */
-function titleSignature(title: string): string {
+/**
+ * What identifies a listing, for grouping without an LLM.
+ *
+ * Model numbers are kept ("Winfield 2" is not "Winfield 3", "Alpha 3" is not
+ * "Alpha 4"), sizes are compared separately, and colour is ignored unless
+ * the caller is browsing variants.
+ */
+type Identity = { tokens: Set<string>; brand: string; size: string; colour: string };
+
+/** Two-digit numbers in this range are almost always a size in inches. */
+function isSizeNumber(t: string): boolean {
+  const n = Number(t);
+  return /^\d{2}$/.test(t) && n >= 14 && n <= 34;
+}
+
+function identify(title: string): Identity {
   const tokens = title
     .toLowerCase()
     .replace(/[^a-z0-9\s".]/g, " ")
     .split(/\s+/)
+    .map((t) => t.replace(/["]+$/, ""))
     .filter(Boolean);
 
-  const sizeToken = tokens.find((t) => /^\d{2}(\.\d)?("|inch|in)?$/.test(t)) ?? "";
-  // Colour never identifies the product here. The eight colours that used
-  // to live in NOISE_WORDS weren't enough — "Teal" and "Burgundy" survived
-  // and split one suitcase into three, so a comparison showed one retailer
-  // per row instead of three retailers on one row.
-  const meaningful = tokens
-    .filter((t) => !NOISE_WORDS.has(t) && !isColourToken(t) && !/^\d+$/.test(t) && t.length > 2)
-    .slice(0, 4);
+  const meaningful = tokens.filter((t) => {
+    if (NOISE_WORDS.has(t) || isColourToken(t)) return false;
+    if (/^\d+$/.test(t)) return !isSizeNumber(t) && (t.length === 1 || t.length >= 3);
+    return t.length > 2;
+  });
 
-  return [...meaningful, sizeToken].filter(Boolean).join("-");
+  return {
+    tokens: new Set(meaningful),
+    brand: meaningful.find((t) => !/^\d+$/.test(t)) ?? "",
+    size: extractSize(title),
+    colour: extractColour(title).toLowerCase(),
+  };
+}
+
+/**
+ * Same physical product? Brand must match, sizes must not conflict, and the
+ * remaining words must overlap strongly — either most words shared, or one
+ * title's words (at least three) almost entirely contained in the other's,
+ * which covers a short title vs a long marketing one.
+ */
+function sameProduct(a: Identity, b: Identity, mode: SearchMode): boolean {
+  if (a.brand && b.brand && a.brand !== b.brand) return false;
+  if (a.size && b.size && a.size !== b.size) return false;
+  if (mode === "catalog" && a.colour !== b.colour) return false;
+
+  // Model numbers must agree when both titles have one.
+  const numsA = [...a.tokens].filter((t) => /^\d+$/.test(t));
+  const numsB = [...b.tokens].filter((t) => /^\d+$/.test(t));
+  if (numsA.length && numsB.length && !numsA.some((n) => numsB.includes(n))) return false;
+
+  let overlap = 0;
+  for (const t of a.tokens) if (b.tokens.has(t)) overlap++;
+  const union = new Set([...a.tokens, ...b.tokens]).size;
+  if (union === 0 || overlap === 0) return false;
+
+  const jaccard = overlap / union;
+  const containment = overlap / Math.min(a.tokens.size, b.tokens.size);
+  if (jaccard >= 0.6) return true;
+  if (overlap >= 3 && containment >= 0.85) return true;
+
+  // Same stated size, and one title (brand + model at least) sits wholly
+  // inside the other: "Samsonite Freeform 28"" vs "Samsonite Freeform
+  // Hardside Expandable Spinner 28" Large Check-In".
+  return !!a.size && a.size === b.size && overlap >= 2 && containment === 1;
 }
 
 function cleanStr(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-/** Strip a retailer's name out of a title so product names read cleanly. */
+/**
+ * Store names to strip from titles. Brand-direct retailers (Travelpro,
+ * Away, Monos, RIMOWA, TUMI, Samsonite…) are left alone: their name IS the
+ * product's brand, and stripping it turned "Away Bigger Carry-On" into a
+ * product whose brand was "Bigger".
+ */
+const STORE_NAMES = Object.entries(RETAILER_INFO)
+  .filter(([, info]) => info.category !== "specialty")
+  .map(([name]) => name);
+
+/** Strip a store's name out of a title so product names read cleanly. */
 function stripRetailerNames(title: string): string {
   let out = title;
-  for (const name of Object.keys(RETAILER_INFO)) {
+  for (const name of STORE_NAMES) {
     out = out.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), "");
   }
   return out.replace(/\s{2,}/g, " ").replace(/^[\s\-–|,]+|[\s\-–|,]+$/g, "").trim();
@@ -187,21 +246,23 @@ function buildProduct(
 /* ------------------------------------------------------------------ */
 
 export function clusterHeuristic(offers: Offer[], mode: SearchMode = "compare"): SearchProduct[] {
-  const groups = new Map<string, Offer[]>();
+  // Greedy grouping: each listing joins the first group whose founding
+  // listing is the same product, else starts a new group. Order-insensitive
+  // on words, so "Rhapsody 360 Medium Spinner – Samsonite" and "Samsonite
+  // Rhapsody 360 Spinner Medium" land together. In catalog mode colour is
+  // part of identity, so the black and navy versions stay separate rows.
+  const groups: { id: Identity; offers: Offer[] }[] = [];
 
   for (const offer of offers) {
-    const base = titleSignature(offer.title) || offer.title.toLowerCase().slice(0, 30);
-    // In catalog mode the colour is part of the product's identity, so the
-    // black and the navy version stay two rows the client can pick between.
-    const sig = mode === "catalog" ? `${base}|${extractColour(offer.title).toLowerCase()}` : base;
-    const existing = groups.get(sig);
-    if (existing) existing.push(offer);
-    else groups.set(sig, [offer]);
+    const id = identify(stripRetailerNames(offer.title));
+    const home = groups.find((g) => sameProduct(g.id, id, mode));
+    if (home) home.offers.push(offer);
+    else groups.push({ id, offers: [offer] });
   }
 
   const products: SearchProduct[] = [];
 
-  for (const group of groups.values()) {
+  for (const { offers: group } of groups) {
     const title = stripRetailerNames(group[0].title);
     const words = title.split(/\s+/);
     const brand = words[0] ?? "Unknown";

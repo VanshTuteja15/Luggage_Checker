@@ -30,55 +30,64 @@ Live luggage price monitoring across Canadian retailers.
 
 ---
 
-## 2. Price source (pick one — both free)
+## 2. Web research: Tavily (free)
 
-The app fetches real listings from a **price provider** and auto-selects
-whichever key is present, preferring the one with the larger allowance.
+All product research goes through **Tavily** — one search per lookup.
 
-| Provider | Free allowance | Card? | Get a key |
-| --- | --- | --- | --- |
-| **Serper.dev** | **2,500 searches, one-time** | No | [serper.dev](https://serper.dev) |
-| **SerpAPI** | **250/month, renews** | No | [serpapi.com](https://serpapi.com) |
+| | |
+| --- | --- |
+| Free plan | **1,000 credits a month**, no card |
+| Cost per lookup | **1 credit** (basic depth — the default) |
+| Get a key | [app.tavily.com](https://app.tavily.com) |
 
-Set `SERPER_API_KEY` and/or `SERPAPI_KEY`. Configuring both is the best
-free setup: Serper's large one-time pot gets spent first, leaving SerpAPI's
-recurring 250/month as the permanent source once it runs out.
+Put it in `.env.local` as `TAVILY_API_KEY`, restart, then run
+`npm run diagnose` — it shows credits used and left, at no cost.
 
-### Making a free allowance last
+**Keeping it at $0.** Three layers:
 
-Two mechanisms, both automatic:
+1. The app refuses any call that would take the month past
+   `TAVILY_MONTHLY_CREDIT_CAP` (default 950) — *before* the request is sent.
+   It checks Tavily's own usage figure, not just its own count.
+2. Past the free limit, Tavily refuses with HTTP 432. Nothing is billed —
+   **as long as pay-as-you-go is off** in the Tavily dashboard. `npm run
+   diagnose` warns if it looks enabled.
+3. Optional: set a per-key usage limit in the Tavily dashboard.
 
-- **Caching.** A repeated search costs nothing. Results are cached for
-  `SEARCH_CACHE_TTL_MINUTES` (default 6 hours), and price refreshes reuse a
-  recent search rather than paying twice. Cached results keep their original
-  fetch time and are labelled in the UI — a cached price never pretends to
-  be live, and there's a one-click re-check.
-- **Budget guard.** Every call is counted. Settings shows
-  "173 / 250 used this month". When the allowance is gone the app says so
-  plainly instead of failing with an opaque 429, and the cron job stops
-  early, keeping a small reserve so manual searches still work.
+To prove the real path end to end: `npm run diagnose -- --live "samsonite
+freeform 21"` (1 credit). It prints every page Tavily returned, which became a
+price and why the rest didn't, and saves the raw response to
+`tavily-response.json`.
 
-Rough budget at 250/month: ~6 tracked products on a daily cron (180/month)
-leaves ~70 for searching and manual refreshes.
+### Making 1,000 credits last
 
-### Option C — Gemini with Google Search grounding
+All automatic:
 
-**Disabled by default.** Set `ENABLE_GEMINI_GROUNDED_SEARCH=true` to opt in.
+- **One call per lookup.** Price, stock status and specs all come from the
+  same search — 20 pages with their text, for 1 credit. No per-field
+  searches, and `auto_parameters` (which can silently double the cost) is
+  never sent.
+- **Caching.** A repeated search costs nothing — for
+  `TAVILY_CACHE_TTL_MINUTES` / `SEARCH_CACHE_TTL_MINUTES` (default 6 hours).
+  Word order, casing and punctuation don't cause a miss. An empty answer is
+  cached for 30 minutes so the same dead end isn't bought twice.
+- **No duplicates in flight.** Two identical searches at the same moment
+  share one call.
+- **Broadening only when useful.** If Tavily finds *no pages at all*, one
+  broader query is tried. If it finds pages but no readable price, it stops —
+  a broader query would just buy similar pages.
+- **Scheduled refreshes are capped** at `CRON_MAX_CREDITS_PER_RUN` (25) per
+  run, and stop when credits fall to `CRON_CREDIT_RESERVE` (200), so people
+  doing research are never starved.
 
-> **Requires billing.** Google Search grounding is **not** part of the Gemini
-> API free tier. It needs a billing-enabled Google AI Studio project, which
-> then includes 5,000 grounded searches/month free, then $14 per 1,000.
-> A plain free-tier key fails with a clear message in the app.
+Rough budget at 950/month: 20 tracked products refreshed weekly (~86) leaves
+~860 lookups.
 
-Guardrails, because an LLM reporting prices needs them:
-
-- A result is discarded unless its URL is on a **recognised retailer domain**.
-- Prices outside $15–$6,000 CAD are discarded as implausible.
-- The UI labels these results and says to confirm on the retailer's page.
-
-> Whichever provider runs, **the LLM never produces a price.** It interprets
-> the query and groups listings into products; every price and URL comes from
-> the fetched listing.
+> **No invented prices.** A price is only accepted when it appears on a
+> Canadian retailer's own product page; "was", "list", "save", "per month"
+> and "orders over" amounts are rejected, and the exact words the price was
+> read from are kept as evidence (hover a price on the Search page to see
+> them). When a page doesn't show a clear price, the answer is "no price" —
+> never a guess. No LLM is involved in reading prices.
 
 ---
 
@@ -103,18 +112,19 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Database + auth |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | Browser + user-scoped API access |
 | `SUPABASE_SERVICE_ROLE_KEY` | cron only | Bypasses RLS — never sent to the browser |
-| `SERPER_API_KEY` | one of | Google Shopping — 2,500 free, one-time |
-| `SERPAPI_KEY` | one of | Google Shopping — 250 free per month |
+| `TAVILY_API_KEY` | yes | Web research — 1,000 free credits/month |
+| `TAVILY_MONTHLY_CREDIT_CAP` | no | Hard monthly credit cap, default 950 |
+| `TAVILY_SEARCH_DEPTH` | no | `basic` (1 credit, default) or `advanced` (2) |
+| `TAVILY_INCLUDE_RAW_CONTENT` | no | Page text for price + specs in one call, default true |
+| `TAVILY_TIMEOUT_MS` / `TAVILY_CACHE_TTL_MINUTES` | no | Default 15000 / 360 |
+| `CRON_CREDIT_RESERVE` / `CRON_MAX_CREDITS_PER_RUN` | no | Scheduled refresh limits, default 200 / 25 |
 | `GEMINI_API_KEY` | yes | Query parsing, product clustering, chat. Never produces a price. |
 | `GEMINI_MODEL` | no | Optional override. Leave unset — the app tries current Flash models in order and caches the first that works, so a Google retirement can't break it. |
 | `RESEND_API_KEY` | no | Daily report delivery |
 | `REPORT_FROM_EMAIL` / `REPORT_TO_EMAIL` | no | Report addresses |
 | `CRON_SECRET` | cron only | Protects the cron endpoints |
 | `NEXT_PUBLIC_APP_URL` | no | Link target in report emails |
-| `SERPER_CREDIT_LIMIT` / `SERPAPI_MONTHLY_LIMIT` | no | Raise when you leave a free plan |
 | `SEARCH_CACHE_TTL_MINUTES` | no | Cache lifetime, default 360 (6h) |
-| `SERPAPI_TIMEOUT_MS` | no | SerpAPI patience, default 25000. Raise on timeouts. |
-| `ENABLE_GEMINI_GROUNDED_SEARCH` | no | Opt into grounded Gemini. Needs Google billing. |
 
 Generate a cron secret:
 
@@ -171,7 +181,8 @@ src/
     │   ├── index.ts        ← pipeline orchestrator
     │   ├── parse.ts        ← LLM query understanding
     │   ├── cluster.ts      ← LLM groups listings into products
-    │   └── providers/      ← serpapi | gemini-grounded
+    │   ├── extract.ts      ← price / stock / specs from page text
+    │   └── providers/      ← tavily
     ├── db/                 ← persistence + refresh
     ├── retailers.ts        ← canonical retailer registry
     ├── queries.ts          ← TanStack Query hooks
@@ -183,9 +194,9 @@ src/
 ```
 "hardside carry-on under $300"
   → cache lookup      (free — a repeat search costs nothing)
-  → parse intent      (Gemini, structured JSON)
-  → fetch listings    (Serper → SerpAPI → grounded Gemini)
-                      ← the only source of prices, metered against quota
+  → parse intent      (plain product names skip the LLM)
+  → web research      (ONE Tavily search, credit-capped)
+                      ← the only source of prices, read from retailer pages
   → cluster listings  (Gemini groups them into distinct products)
   → filter + rank     (retailer settings, price ceiling, majors first)
   → top 10 products, each with every offer we found

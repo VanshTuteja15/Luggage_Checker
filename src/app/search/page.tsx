@@ -167,13 +167,12 @@ export default function SearchPage() {
         <div className="mx-auto mb-8 max-w-3xl rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
           <p className="flex items-center gap-2 font-medium text-danger">
             <AlertTriangle className="h-4 w-4" />
-            No price source is configured
+            No research provider is configured
           </p>
           <p className="mt-1 text-muted-foreground">
-            Add a <code className="rounded bg-muted px-1">SERPER_API_KEY</code> (2,500 free
-            searches) or <code className="rounded bg-muted px-1">SERPAPI_KEY</code> (250 free per
-            month) to <code className="rounded bg-muted px-1">.env.local</code>, then restart the
-            app. Both are free and neither asks for a card.
+            Add <code className="rounded bg-muted px-1">TAVILY_API_KEY</code> to{" "}
+            <code className="rounded bg-muted px-1">.env.local</code>, then restart the app. The
+            free plan gives 1,000 credits a month with no card, and the app stops before the limit.
           </p>
         </div>
       )}
@@ -370,6 +369,9 @@ function ProductResult({
             {product.color ? ` · ${product.color}` : ""}
             {product.productType ? ` · ${product.productType}` : ""}
           </p>
+          {specLine(product) && (
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground/80">{specLine(product)}</p>
+          )}
 
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
@@ -474,6 +476,24 @@ function ProductResult({
   );
 }
 
+/** Specs the retailer pages stated, as one compact line. Empty if none. */
+function specLine(product: SearchProduct): string {
+  const d = product.details;
+  if (!d) return "";
+  return [
+    d.dimensions,
+    d.weight,
+    d.capacity,
+    d.material,
+    d.wheels,
+    d.expandable ? "Expandable" : null,
+    d.tsaLock ? "TSA lock" : null,
+    d.warranty ? `${d.warranty} warranty` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function OfferRow({ offer, isBest }: { offer: Offer; isBest: boolean }) {
   return (
     <div className="flex items-center gap-3 text-sm">
@@ -487,7 +507,10 @@ function OfferRow({ offer, isBest }: { offer: Offer; isBest: boolean }) {
           Out of stock
         </span>
       )}
-      <span className={`shrink-0 tabular-nums ${isBest ? "font-semibold text-success" : ""}`}>
+      <span
+        className={`shrink-0 tabular-nums ${isBest ? "font-semibold text-success" : ""}`}
+        title={offer.evidence ? `Read from the page: ${offer.evidence}` : undefined}
+      >
         {usd(offer.price)}
       </span>
       <a

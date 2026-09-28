@@ -49,16 +49,23 @@ RETURNS INTEGER AS $$
 DECLARE
   new_total INTEGER;
 BEGIN
+  -- The app only ever moves the counter by a call's cost (1-2 credits) or
+  -- refunds one. Anything larger is refused, so a signed-in user can't
+  -- zero the meter with a single call; the total never goes negative.
+  IF p_amount < -5 OR p_amount > 5 THEN
+    RAISE EXCEPTION 'increment_provider_usage: amount % out of range', p_amount;
+  END IF;
+
   INSERT INTO provider_usage (provider, period, calls, updated_at)
-  VALUES (p_provider, p_period, p_amount, now())
+  VALUES (p_provider, p_period, GREATEST(0, p_amount), now())
   ON CONFLICT (provider, period) DO UPDATE
-    SET calls = provider_usage.calls + p_amount,
+    SET calls = GREATEST(0, provider_usage.calls + p_amount),
         updated_at = now()
   RETURNING calls INTO new_total;
 
   RETURN new_total;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ── Cache housekeeping ───────────────────────────────────────
 CREATE OR REPLACE FUNCTION purge_expired_search_cache()
@@ -70,14 +77,15 @@ BEGIN
   GET DIAGNOSTICS removed = ROW_COUNT;
   RETURN removed;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ============================================================
 -- Row Level Security
 --
 -- Both tables are shared operational infrastructure, not user data:
 -- the cache holds public retail listings and the counter holds call
--- totals. Any signed-in user may read and update them. Neither ever
+-- totals. Signed-in users may read both and use the cache; the usage
+-- counter can only be changed through its bounded function. Neither ever
 -- holds anything personal.
 -- ============================================================
 
@@ -93,11 +101,22 @@ DROP POLICY IF EXISTS "Authenticated read usage" ON provider_usage;
 CREATE POLICY "Authenticated read usage"
   ON provider_usage FOR SELECT TO authenticated USING (true);
 
+-- No direct writes: the counter only moves through increment_provider_usage
+-- (SECURITY DEFINER, bounded amounts). A table-wide write policy would let
+-- any signed-in user reset it with a plain UPDATE.
 DROP POLICY IF EXISTS "Authenticated write usage" ON provider_usage;
-CREATE POLICY "Authenticated write usage"
-  ON provider_usage FOR ALL TO authenticated
-  USING (true) WITH CHECK (true);
 
+-- Postgres lets PUBLIC execute new functions by default — which would let
+-- anyone holding the public (browser) key move the meter without signing
+-- in. Only signed-in users may.
+REVOKE EXECUTE ON FUNCTION increment_provider_usage(TEXT, TEXT, INTEGER) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION purge_expired_search_cache() FROM PUBLIC;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    EXECUTE 'REVOKE EXECUTE ON FUNCTION increment_provider_usage(TEXT, TEXT, INTEGER) FROM anon';
+    EXECUTE 'REVOKE EXECUTE ON FUNCTION purge_expired_search_cache() FROM anon';
+  END IF;
+END $$;
 GRANT EXECUTE ON FUNCTION increment_provider_usage(TEXT, TEXT, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION purge_expired_search_cache() TO authenticated;
 

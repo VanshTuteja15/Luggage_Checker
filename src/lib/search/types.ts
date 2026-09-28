@@ -7,7 +7,11 @@
 /*  source URL is dropped before it reaches the caller.                */
 /* ------------------------------------------------------------------ */
 
-export type ProviderName = "serper" | "serpapi" | "gemini-grounded";
+/**
+ * Price-research providers. Tavily is the only one in use; the others are
+ * retired and kept only so old cached responses still type-check.
+ */
+export type ProviderName = "tavily" | "serper" | "serpapi" | "gemini-grounded";
 
 /**
  * What the caller is asking for.
@@ -41,6 +45,35 @@ export type Offer = {
   reviews?: number;
   /** ISO timestamp of when this offer was fetched. */
   fetchedAt: string;
+  /**
+   * The exact words on the retailer's page the price was read from, e.g.
+   * "…Sale Price $229.99 Add to cart…". Proof the number is real, and the
+   * first thing to look at when a price seems wrong.
+   */
+  evidence?: string;
+  /** Specs read from the same page, when it listed them. */
+  details?: LuggageDetails;
+};
+
+/**
+ * Luggage specifications, read from retailer pages — never generated.
+ * Every field is optional: a page only contributes what it actually says.
+ */
+export type LuggageDetails = {
+  /** As written, e.g. "22 x 14 x 9 in" or "55 x 40 x 20 cm". */
+  dimensions?: string;
+  /** As written, e.g. "7.1 lb" or "3.2 kg". */
+  weight?: string;
+  /** e.g. "41 L". */
+  capacity?: string;
+  /** e.g. "Polycarbonate". */
+  material?: string;
+  /** e.g. "Spinner (4 wheels)" or "2 wheels". */
+  wheels?: string;
+  expandable?: boolean;
+  tsaLock?: boolean;
+  /** e.g. "10-year". */
+  warranty?: string;
 };
 
 /** A distinct physical product with every offer we found for it. */
@@ -66,6 +99,8 @@ export type SearchProduct = {
   spread: number;
   /** True when at least one offer is from a major Canadian retailer. */
   hasMajorRetailer: boolean;
+  /** Specs merged from the offers' pages. Absent when no page listed any. */
+  details?: LuggageDetails;
 };
 
 /** Structured interpretation of a natural-language query. */

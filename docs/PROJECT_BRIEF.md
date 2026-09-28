@@ -11,6 +11,13 @@
 > be found out. Section 10 is the research brief for the next phase.
 > Anything marked *(assumption)* hasn't been confirmed with the client yet.
 
+> **Update, 28 Sep 2026: research moved from SerpAPI to Tavily.** Tavily
+> returns the retailers' own pages (direct store links, which SerpAPI's
+> Google Shopping results no longer included), and one search yields price,
+> stock and specs together. Sections 8–9 below record the SerpAPI findings
+> that led to this. The Tavily design is in the decision log (section 13)
+> and in `SETUP.md`.
+
 ---
 
 ## 1. One-line summary
@@ -107,8 +114,7 @@ Each point is testable. If any one fails, the demo isn't ready.
 | UI | Tailwind v4, shadcn/ui, Recharts, lucide-react |
 | Data fetching | TanStack Query |
 | Database + auth | Supabase (Postgres, Auth, Row Level Security) |
-| Price source | SerpAPI, Google Shopping engine (Canada) |
-| Backup price source | Serper.dev (supported, not configured) |
+| Research / prices | Tavily web research (Canada), 1 credit per lookup, hard-capped at $0 |
 | AI (optional) | Google Gemini, for query parsing and product grouping; falls back to non-AI logic |
 | Email | Resend |
 | Hosting + scheduled jobs | Vercel, Vercel Cron / GitHub Actions |
@@ -254,6 +260,11 @@ Ordered by priority. For each question: why it matters, the cheapest way to answ
 | Decision | Reason |
 |---|---|
 | Zero spend on APIs | Owner's constraint |
+| **Tavily replaces SerpAPI for all product research** (28 Sep 2026) | Direct retailer pages and links; price + stock + specs from one call; 1,000 free credits/month |
+| One Tavily search per lookup, basic depth, 20 results with page text | Minimum credits: no per-field searches, `auto_parameters` never sent |
+| App-enforced monthly credit cap (950), checked against Tavily's own usage | A call that would exceed the free plan is never sent |
+| Prices only from Canadian storefront pages, with the page words kept as evidence | No fake results; USD storefronts, list/was/instalment amounts rejected |
+| Research is read-only; tracking/adding products stays in its own workflow | Keeps research and product creation separate |
 | SerpAPI as the primary price source | Free tier, real Google Shopping Canada data |
 | Gemini optional, never a price source | Free tier is unreliable; prices must be traceable |
 | Gemini grounded search disabled | Needs billing |

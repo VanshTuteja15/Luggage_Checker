@@ -155,6 +155,15 @@ export const MAJOR_RETAILERS: string[] = RETAILER_NAMES.filter(
   (n) => RETAILER_INFO[n].category === "major",
 );
 
+/**
+ * Retailers shown first wherever the app lists "who we check": the three the
+ * client named explicitly (Amazon, Walmart, Samsonite), then the other
+ * majors. The Search page's retailer chips read this.
+ */
+export const PRIORITY_RETAILERS: string[] = [
+  ...new Set(["Amazon.ca", "Walmart.ca", "Samsonite.ca", ...MAJOR_RETAILERS]),
+];
+
 /** Get a retailer's brand colour, with a fallback for unknown retailers. */
 export function retailerColor(name: string): string {
   return RETAILER_INFO[name]?.color ?? "#6B7280";
@@ -307,3 +316,107 @@ export function isMerchantUrl(url: string): boolean {
 
   return !NON_MERCHANT_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
+
+/* ------------------------------------------------------------------ */
+/*  Canadian storefronts                                              */
+/*                                                                     */
+/*  A web search returns amazon.com next to amazon.ca, and samsonite.  */
+/*  com next to samsonite.ca. The .com prices are in US dollars. Shown */
+/*  as Canadian prices they'd be wrong by ~35% — so a price is only    */
+/*  accepted from a page we can tell is a Canadian storefront.         */
+/* ------------------------------------------------------------------ */
+
+/** Storefronts that price in USD. Never a source of Canadian prices. */
+export const US_STOREFRONTS = [
+  "amazon.com",
+  "walmart.com",
+  "samsonite.com",
+  "tumi.com",
+  "ebay.com",
+  "bestbuy.com",
+  "costco.com",
+  "target.com",
+  "macys.com",
+  "kohls.com",
+  "nordstrom.com",
+  "dillards.com",
+  "jcpenney.com",
+  "zappos.com",
+  "ebags.com",
+  "luggagepros.com",
+];
+
+/** Canadian retailers whose domain isn't .ca, but whose prices are CAD. */
+const CANADIAN_DOT_COM = ["thebay.com", "hbc.com", "hudsonsbay.com", "londondrugs.com"];
+
+function hostMatches(host: string, domains: string[]): boolean {
+  return domains.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+/** A path like /en-ca/, /fr-ca/ or /ca/en/ marks a site's Canadian store. */
+const CANADIAN_LOCALE_PATH = /\/(?:en|fr)[-_]ca(?:\/|$)|\/ca\/(?:en|fr)(?:\/|$)/i;
+
+/** Explicit Canadian-dollar markers in page text. */
+const CAD_MARKER = /\bCAD\b|\bCA\$|\bC\$|\$\s?CAD\b/;
+
+/** French-Canadian price format: comma decimals, dollar sign after ("129,99 $"). */
+const FRENCH_CAD_PRICE = /\d,\d{2}\s?\$/;
+
+/**
+ * Is this page a Canadian storefront? Decided from the URL first (reliable),
+ * then from explicit currency markers in the page text (for .com retailers
+ * that serve Canada without saying so in the domain).
+ */
+export function isCanadianStorefront(url: string, pageText = ""): boolean {
+  const host = hostOf(url);
+  if (!host) return false;
+
+  if (hostMatches(host, US_STOREFRONTS)) {
+    // Some .com brands run their Canadian store under a locale path.
+    return CANADIAN_LOCALE_PATH.test(url);
+  }
+
+  if (host.endsWith(".ca")) return true;
+  if (hostMatches(host, CANADIAN_DOT_COM)) return true;
+  if (CANADIAN_LOCALE_PATH.test(url)) return true;
+
+  return CAD_MARKER.test(pageText) || FRENCH_CAD_PRICE.test(pageText);
+}
+
+/**
+ * Domains to rank first in web research: every registry retailer's own
+ * domain, excluding US storefronts. Used with "prefer", so other Canadian
+ * shops still appear — this steers, it doesn't restrict.
+ */
+export function preferredResearchDomains(): string[] {
+  const domains = new Set<string>();
+  for (const info of Object.values(RETAILER_INFO)) {
+    for (const d of [info.domain, ...(info.altDomains ?? [])]) {
+      if (!hostMatches(d, US_STOREFRONTS)) domains.add(d);
+    }
+  }
+  return [...domains];
+}
+
+/**
+ * Domains that never carry a Canadian retail price: US storefronts, social
+ * networks, video, forums and review sites. Excluding them up front means
+ * the result slots a credit buys go to pages that can actually answer.
+ */
+export const RESEARCH_EXCLUDED_DOMAINS = [
+  ...US_STOREFRONTS,
+  "reddit.com",
+  "youtube.com",
+  "facebook.com",
+  "instagram.com",
+  "tiktok.com",
+  "pinterest.com",
+  "pinterest.ca",
+  "x.com",
+  "twitter.com",
+  "quora.com",
+  "wikipedia.org",
+  "trustpilot.com",
+  "google.com",
+  "google.ca",
+];

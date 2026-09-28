@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTrackedProducts } from "@/lib/db/products";
 import { refreshProducts } from "@/lib/db/refresh";
 import { activeProvider, getBudget } from "@/lib/search";
+import { fetchTavilyUsage, processCreditsSpent } from "@/lib/tavily";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+
+function envInt(name: string, fallback: number): number {
+  const n = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -66,13 +72,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Read Tavily's own balance first (free), so a cold start or a missing
+    // usage table can't make the job think the month is untouched.
+    await fetchTavilyUsage(true);
     const budget = await getBudget(supabase, provider);
-    const RESERVE = 20;
-    const spendable = budget ? Math.max(0, budget.remaining - RESERVE) : Number.MAX_SAFE_INTEGER;
+
+    // Automatic refreshes must never crowd out people doing research. The
+    // job stops once the month's free credits fall to the reserve, and a
+    // single run is capped too, so a large tracked list can't drain the
+    // allowance overnight. Neither can push past the free plan: the
+    // research client refuses any call beyond its monthly cap.
+    const RESERVE = envInt("CRON_CREDIT_RESERVE", 200);
+    const PER_RUN_MAX = envInt("CRON_MAX_CREDITS_PER_RUN", 25);
+    const spendable = budget
+      ? Math.min(PER_RUN_MAX, Math.max(0, budget.remaining - RESERVE))
+      : PER_RUN_MAX;
 
     if (spendable === 0) {
       return NextResponse.json({
-        message: "Skipped — provider allowance exhausted",
+        message: "Skipped — monthly research credits are at the reserve kept for interactive searches",
         provider,
         budget,
         checked: 0,
@@ -80,6 +98,13 @@ export async function POST(req: NextRequest) {
     }
 
     let callsLeft = spendable;
+
+    // A refresh can cost more than one credit (a retry, a broader query), so
+    // the run is stopped on credits actually spent, not products checked.
+    // Measured with a counter that never resets, so a run that straddles
+    // midnight on the 1st can't lose track of what it has spent.
+    const creditsAtStart = processCreditsSpent();
+    const runBudgetSpent = () => processCreditsSpent() - creditsAtStart >= spendable;
 
     const { data: allSettings } = await supabase
       .from("user_settings")
@@ -100,7 +125,7 @@ export async function POST(req: NextRequest) {
     const summary: { userId: string; checked: number; updated: number; failed: number }[] = [];
 
     for (const [userId, productIds] of byUser) {
-      if (callsLeft <= 0) break;
+      if (callsLeft <= 0 || runBudgetSpent()) break;
 
       const fresh = productIds.filter((id) => !seen.has(id));
       if (fresh.length === 0) continue;
@@ -119,8 +144,9 @@ export async function POST(req: NextRequest) {
 
       const results = await refreshProducts(supabase, queue, {
         allowedRetailers: retailersByUser.get(userId) ?? [],
-        // Shopping APIs are quota-metered; pace the requests.
+        // Research credits are metered; pace the requests.
         delayMs: 1500,
+        shouldStop: runBudgetSpent,
       });
 
       summary.push({

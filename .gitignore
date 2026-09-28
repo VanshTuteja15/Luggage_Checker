@@ -34,3 +34,7 @@ next-env.d.ts
 *.njsproj
 *.sln
 *.sw?
+
+# raw research dumps from diagnostics
+tavily-response.json
+serpapi-response.json

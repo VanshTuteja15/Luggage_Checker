@@ -304,21 +304,17 @@ export default function SettingsPage() {
             <p className="font-medium">
               {provider.data?.configured
                 ? `Active source: ${provider.data.providerLabel}`
-                : "No price source configured"}
+                : "No research provider configured"}
             </p>
             <p className="mt-1 text-muted-foreground">
               {provider.data?.configured ? (
-                provider.data.provider === "gemini-grounded" ? (
-                  "Gemini with Google Search grounding. Results are restricted to recognised retailer domains, but confirm prices on the retailer's page before acting on them."
-                ) : (
-                  "Real Google Shopping merchant listings. Every price links back to the listing it came from."
-                )
+                "Tavily web research across Canadian retailers. Every price is read from the retailer's own page, with the words it came from kept as evidence, and links straight to that page."
               ) : (
                 <>
-                  Set <code className="rounded bg-muted px-1">SERPER_API_KEY</code> (2,500 free
-                  searches) or <code className="rounded bg-muted px-1">SERPAPI_KEY</code> (250 free
-                  per month) in your environment, then restart. Both are free and neither needs a
-                  card. API keys are never stored in the browser.
+                  Set <code className="rounded bg-muted px-1">TAVILY_API_KEY</code> in{" "}
+                  <code className="rounded bg-muted px-1">.env.local</code>, then restart. The free
+                  plan is 1,000 credits a month with no card, and the app stops before the limit.
+                  API keys are never stored in the browser.
                 </>
               )}
             </p>

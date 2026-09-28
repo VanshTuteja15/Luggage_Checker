@@ -8,8 +8,9 @@
     "lint": "next lint",
     "doctor": "node scripts/doctor.mjs",
     "probe": "node scripts/probe-serpapi.mjs",
-    "verify:search": "node scripts/run-verify.mjs",
-    "diagnose": "node scripts/diagnose.mjs"
+    "verify:search": "node scripts/run-ts.mjs scripts/verify-search.ts",
+    "diagnose": "node scripts/diagnose.mjs",
+    "research:live": "node scripts/run-ts.mjs scripts/research-live.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
