@@ -125,8 +125,8 @@ function identify(title: string): Identity {
     .toLowerCase()
     .replace(/[^a-z0-9\s".]/g, " ")
     .split(/\s+/)
-    .map((t) => t.replace(/["]+$/, ""))
-    .filter(Boolean);
+    .map((t) => t.replace(/["]+$/, "").replace(/^\.+|\.+$/g, ""))
+    .filter((t) => /[a-z0-9]/.test(t));
 
   const meaningful = tokens.filter((t) => {
     if (NOISE_WORDS.has(t) || isColourToken(t)) return false;

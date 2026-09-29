@@ -22,6 +22,7 @@
 /* ------------------------------------------------------------------ */
 
 import {
+  RETAILER_INFO,
   hostOf,
   isCanadianStorefront,
   isMerchantUrl,
@@ -70,6 +71,8 @@ export function cleanPageTitle(title: string): { name: string; site: string | nu
     if (/[a-z]/i.test(last) && last.length <= 40) site = last;
   }
 
+  // Search engines cut long titles: "… with Double ..." — drop the ellipsis.
+  name = name.replace(/\s*(?:\.{3,}|…)\s*$/, "");
   return { name: name.replace(/\s{2,}/g, " ").trim(), site };
 }
 
@@ -81,7 +84,7 @@ const PRODUCT_URL =
   /\/dp\/|\/gp\/product\/|\/ip\/|\/products?\/|\/pdp\/|\/p\/|\.product\.|\/item\/|\/itm\/|\/sku\/|-p-\d|\/\d{6,}(?:[/?#.]|$)|\.html(?:[?#]|$)/i;
 
 const LISTING_URL =
-  /\/search\b|[?&](?:q|query|k|keyword|keywords|text|searchterm)=|\/s\?|\/browse\/|\/category\/|\/categories\/|\/c\/[^/]+\/?$|\/collections\/[^/]+\/?(?:[?#]|$)|\/brands?\/[^/]*\/?$|\/blog\/|\/reviews?\/|\/compare\/|\/deals\/?$|\/sale\/?$/i;
+  /\/b\/|\/sch\/|\/search\b|[?&](?:q|query|k|keyword|keywords|text|searchterm)=|\/s\?|\/browse\/|\/category\/|\/categories\/|\/c\/[^/]+\/?$|\/collections\/[^/]+\/?(?:[?#]|$)|\/brands?\/[^/]*\/?$|\/blog\/|\/reviews?\/|\/compare\/|\/deals\/?$|\/sale\/?$/i;
 
 /** True when the URL shape says "one product". */
 export function looksLikeProductUrl(url: string): boolean {
@@ -91,6 +94,27 @@ export function looksLikeProductUrl(url: string): boolean {
 /** True when the URL shape says "search results, a category, a blog…". */
 export function looksLikeListingUrl(url: string): boolean {
   return LISTING_URL.test(url) && !/\/products?\/[^/]+/i.test(url);
+}
+
+/** A site's home page (samsonite.ca, samsonite.ca/en/) — never one product. */
+export function isHomePage(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.replace(/\/+$/, "");
+    return path === "" || /^\/(?:en|fr|en-ca|fr-ca|ca)$/i.test(path);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Page titles that announce a list rather than a product: "… Collection",
+ * "… for sale", "Best … 2023", "Luggage Sets", "Shop all …".
+ */
+const LISTING_TITLE =
+  /\bcollection\b|\bfor sale\b|\bbest\b[^|]*\b20\d\d\b|\bsets\s*(?:$|\|)|\bshop all\b|\bcategory\b|\bdeals? on\b/i;
+
+export function looksLikeListingTitle(title: string): boolean {
+  return LISTING_TITLE.test(title);
 }
 
 /* ------------------------------------------------------------------ */
@@ -161,11 +185,11 @@ export function findPriceCandidates(text: string): Candidate[] {
 
 /** Words right before an amount that mean "this isn't the selling price". */
 const NEGATIVE_BEFORE =
-  /(?:save|you save|savings|off|reg\.?|regular(?: price)?|was|compare at|compared at|list price|list|original price|msrp|orders?(?: of| over)?|spend|over|shipping|delivery|gift card|coupon|rebate|reward|points|deposit|as low as|up to|payments? of|installments? of|valued at|value|économisez|prix courant|prix régulier|avant)\s*[:\-–]?\s*$/i;
+  /(?:\bto|\d\s*[-–—]|save|you save|savings|off|reg\.?|regular(?: price)?|was|compare at|compared at|list price|list|original price|msrp|orders?(?: of| over)?|spend|over|shipping|delivery|gift card|coupon|rebate|reward|points|deposit|as low as|up to|payments? of|installments? of|valued at|value|économisez|prix courant|prix régulier|avant)\s*[:\-–]?\s*$/i;
 
 /** Words right after an amount that mean the same. */
 const NEGATIVE_AFTER =
-  /^\s*(?:\/\s*(?:mo|month|wk|week|yr)\b|per\s+(?:mo|month|week|year)\b|a\s+month\b|monthly\b|x\s*\d|×\s*\d|off\b|savings?\b|discount\b|or more\b|and up\b|\+|\/mois\b|par mois\b|de rabais\b)/i;
+  /^\s*(?:(?:to|[-–—])\s*(?:CA\$|C\$|CAD|\$)\s?\d|\/\s*(?:mo|month|wk|week|yr)\b|per\s+(?:mo|month|week|year)\b|a\s+month\b|monthly\b|x\s*\d|×\s*\d|off\b|savings?\b|discount\b|or more\b|and up\b|\+|\/mois\b|par mois\b|de rabais\b)/i;
 
 /** Words right before an amount that mean "this IS the selling price". */
 const POSITIVE_BEFORE =
@@ -242,15 +266,47 @@ function evidenceAround(text: string, start: number, end: number): string {
   return `${from > 0 ? "…" : ""}${text.slice(from, to).replace(/\s+/g, " ").trim()}${to < text.length ? "…" : ""}`;
 }
 
+/** A gap in a search snippet: text on either side isn't adjacent on the page. */
+const SNIPPET_GAP = /\.\.\.|…|\[\s*\.\.\.\s*\]/;
+
+/**
+ * Words that sit right next to a product's OWN price on its page (the
+ * variant picker, the buy button, stock status) — as opposed to a carousel
+ * of other items.
+ */
+const OWN_PRICE_CUE =
+  /\bselected\b|add to (?:cart|bag|basket)|\bin stock\b|\bcolou?r\s*:|\bqty\b|\bquantity\b|\bsold by\b|\bships?\b|\bpickup\b|\bajouter au panier\b|\ben stock\b/i;
+
+export type PriceOptions = {
+  /**
+   * The text is a short search-engine excerpt, not the page. Excerpts
+   * stitch fragments together ("… Spinner Large … C$ 35.00 … RFID
+   * Passport"), so a price only counts when it's contiguous with the
+   * product's name — or, on a product URL with no name in the excerpt, when
+   * it's the first amount and sits beside the page's own buy/variant UI.
+   */
+  snippet?: boolean;
+  /** The URL looks like a single product's page. */
+  productUrl?: boolean;
+};
+
 /**
  * The page's selling price, or null when it can't be told apart from the
  * other amounts on the page.
  */
-export function pickListingPrice(rawText: string, title: string): PricePick | null {
+export function pickListingPrice(
+  rawText: string,
+  title: string,
+  opts: PriceOptions = {},
+): PricePick | null {
   const text = (rawText ?? "").slice(0, MAX_TEXT);
   if (!text) return null;
 
   const anchor = findAnchor(text, title);
+
+  // Excerpt from a page that isn't recognisably a product page, and the
+  // product isn't even named in it: nothing ties any amount to the product.
+  if (opts.snippet && anchor < 0 && !opts.productUrl) return null;
 
   // Everything after a "customers also viewed" heading belongs to other
   // products. Only look for that heading after the product's own anchor.
@@ -259,11 +315,30 @@ export function pickListingPrice(rawText: string, title: string): PricePick | nu
   const cutoff = related >= 0 ? Math.max(0, anchor) + related : text.length;
 
   const scored: (Candidate & { score: number })[] = [];
+  let firstPlausible = true;
 
   for (const c of findPriceCandidates(text)) {
     if (c.index >= cutoff) continue;
     if (c.usd) continue;
     if (c.value < MIN_PLAUSIBLE_PRICE || c.value > MAX_PLAUSIBLE_PRICE) continue;
+
+    const isFirst = firstPlausible;
+    firstPlausible = false;
+
+    if (opts.snippet) {
+      if (anchor >= 0) {
+        // The excerpt jumps between the product's name and this amount —
+        // it belongs to something else on the page.
+        if (c.index < anchor || SNIPPET_GAP.test(text.slice(anchor, c.index))) continue;
+      } else {
+        // Product URL, product not named in the excerpt: accept only the
+        // first amount, and only beside the page's own buy/variant controls.
+        if (!isFirst) continue;
+        const around = text.slice(Math.max(0, c.index - 80), Math.min(text.length, c.end + 80));
+        if (!OWN_PRICE_CUE.test(around)) continue;
+        if (SNIPPET_GAP.test(text.slice(0, c.index))) continue;
+      }
+    }
 
     const before = text.slice(Math.max(0, c.index - 40), c.index);
     const after = text.slice(c.end, c.end + 30);
@@ -318,8 +393,10 @@ export function pickListingPrice(rawText: string, title: string): PricePick | nu
  * Search and category pages list many products, each with a price. Reading
  * one of those as "the" price would pair the wrong number with the title.
  */
-export function isListingPage(url: string, text: string): boolean {
+export function isListingPage(url: string, text: string, title = ""): boolean {
+  if (isHomePage(url)) return true;
   if (looksLikeListingUrl(url)) return true;
+  if (title && looksLikeListingTitle(title)) return true;
   if (looksLikeProductUrl(url)) return false;
 
   const distinct = new Set(
@@ -442,7 +519,9 @@ function prettyHost(host: string): string {
 export function analyzePage(page: PageInput, fetchedAt = new Date().toISOString()): PageAnalysis {
   const url = page.url;
   const host = hostOf(url);
-  const { name, site } = cleanPageTitle(page.title);
+  const cleaned = cleanPageTitle(page.title);
+  const site = cleaned.site;
+  let name = cleaned.name;
 
   // On the open web the DOMAIN is the retailer. A page title can end in the
   // brand instead ("… - Samsonite | Luggage Depot"), so the title is only
@@ -457,6 +536,15 @@ export function analyzePage(page: PageInput, fetchedAt = new Date().toISOString(
   if (!isMerchantUrl(url)) return { ...base, offer: null, reason: "not a retailer page" };
   if (!name) return { ...base, offer: null, reason: "page has no title" };
 
+  // Brand stores title their pages without the brand ("Freeform Carry-On
+  // Spinner" on samsonite.ca). Put it back, so the product is named properly
+  // and groups with the same bag at other retailers.
+  const info = retailerKey ? RETAILER_INFO[retailerKey] : undefined;
+  if (info?.category === "specialty") {
+    const brand = retailerKey!.replace(/\.(?:ca|com)$/i, "");
+    if (!name.toLowerCase().includes(brand.toLowerCase())) name = `${brand} ${name}`;
+  }
+
   const raw = page.rawContent ?? "";
   const pageText = `${page.content}\n${raw}`;
 
@@ -464,15 +552,22 @@ export function analyzePage(page: PageInput, fetchedAt = new Date().toISOString(
     return { ...base, offer: null, reason: "not a Canadian storefront (prices likely USD)" };
   }
 
-  if (isListingPage(url, raw || page.content)) {
+  if (isHomePage(url)) {
+    return { ...base, offer: null, reason: "home page, not a single product" };
+  }
+  if (isListingPage(url, raw || page.content, page.title)) {
     return { ...base, offer: null, reason: "search or category page, not a single product" };
   }
 
   // Read the price from the full page and from Tavily's excerpt, and keep
   // the surer reading. Full-page reads are anchored to the product and cut
-  // off before "related products", so they win ties.
-  const fromRaw = raw ? pickListingPrice(raw, name) : null;
-  const fromExcerpt = page.content ? pickListingPrice(page.content, name) : null;
+  // off before "related products", so they win ties. Excerpts get the
+  // stricter snippet rules: they stitch fragments of the page together.
+  const productUrl = looksLikeProductUrl(url);
+  const fromRaw = raw ? pickListingPrice(raw, name, { productUrl }) : null;
+  const fromExcerpt = page.content
+    ? pickListingPrice(page.content, name, { snippet: true, productUrl })
+    : null;
   const pick =
     fromRaw && fromExcerpt
       ? fromExcerpt.score > fromRaw.score

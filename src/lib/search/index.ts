@@ -620,11 +620,11 @@ async function finish(
   // heuristic grouping takes over, so we still return real prices rather
   // than nothing.
   // Grouping is the last step and the least essential: the prices are
-  // already in hand, and the heuristic grouping is instant. 22s of budget
-  // meant a hanging Gemini could add 22 seconds to a search that had
-  // everything it needed — so keep this short and fall back quickly.
+  // already in hand, and the heuristic grouping is instant. Live runs showed
+  // Tavily answering in ~2s and a busy Gemini then holding the search for
+  // 12 more — so grouping gets at most 6s before the heuristic takes over.
   let products = await clusterOffers(offers, {
-    timeoutMs: opts.deadline.budget(12_000, 1_500),
+    timeoutMs: opts.deadline.budget(6_000, 1_500),
     mode: opts.mode,
   });
 

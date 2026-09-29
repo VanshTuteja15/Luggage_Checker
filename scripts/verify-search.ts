@@ -910,6 +910,63 @@ async function main() {
   }
   process.env.TAVILY_API_KEY = "tvly-test-key";
 
+  /* ============ E. A REAL Tavily response ============================ */
+
+  section("E1. Real response (samsonite freeform 21) — page by page");
+  const realFixture = JSON.parse(
+    readFileSync(resolve("scripts/fixtures/tavily-samsonite-freeform-21.json"), "utf8"),
+  ) as { results: TavilyRow[] };
+  {
+    const { analyzeResults } = await import("../src/lib/search/providers/tavily");
+    const analysed = analyzeResults(
+      realFixture.results.map((r) => ({ title: r.title, url: r.url, content: r.content, score: r.score, rawContent: r.raw_content })),
+    );
+    const byUrl = (part: string) => analysed.find((a) => a.url.includes(part));
+
+    const expectAccepted: [string, number, string][] = [
+      ["B01M0A3BKH", 191.49, "Amazon.ca"],
+      ["B07BKLHKD9", 100.24, "Amazon.ca"],
+      ["88379XXXX", 320.0, "Samsonite.ca"],
+    ];
+    for (const [part, price, retailer] of expectAccepted) {
+      const a = byUrl(part);
+      check(`${retailer} ${part} → $${price.toFixed(2)}`, a?.offer?.price === price && a?.offer?.retailer === retailer, `${a?.offer?.price ?? a?.reason}`);
+    }
+
+    const expectRejected: [string, string][] = [
+      ["luggageonline.com", "US store"],
+      ["luxurycheckin.com", "US review blog"],
+      ["ebay.ca/b/", "eBay browse page ($138.47 was one listing among many)"],
+      ["/en/samsonite/freeform", "collection page"],
+      ["88386XXXX", "3-piece set: $50/$16 are accessories, set's own price not in excerpt"],
+      ["88384XXXX", "Freeform Large: $35 sits after a '...' gap, beside an RFID passport"],
+      ["https://www.samsonite.ca", "home page"],
+      ["https://www.samsonite.ca/en/luggage/carry-on", "category page"],
+      ["/en/luggage/sets", "category page with a '$150 - $299.99' price filter"],
+      ["lock-instructions", "help page"],
+      ["travelpro.com", "US site"],
+    ];
+    for (const [part, why] of expectRejected) {
+      const a = part.startsWith("https://") ? analysed.find((x) => x.url.replace(/\/$/, "") === part) : byUrl(part);
+      check(`rejected: ${why}`, !!a && a.offer === null, a?.offer ? `accepted at $${a.offer.price}` : "not found");
+    }
+
+    const samsonite = byUrl("88379XXXX")?.offer;
+    check("brand store title gets its brand back", samsonite?.title.startsWith("Samsonite ") === true, samsonite?.title);
+  }
+
+  section("E2. Real response through the whole pipeline");
+  installStub({ search: () => tavilyJson(realFixture.results) });
+  {
+    const r = await search("samsonite freeform 21");
+    show(r.products);
+    check("the three real listings group into ONE product", r.products.length === 1, `${r.products.length} products`);
+    const p = r.products[0];
+    check("…carried by Amazon.ca and Samsonite.ca", !!p && p.offers.some((o) => o.retailer === "Amazon.ca") && p.offers.some((o) => o.retailer === "Samsonite.ca"));
+    check("no $35 / $50 / $150 accessory or filter prices anywhere", r.products.every((x) => x.offers.every((o) => o.price >= 90)));
+    checkProductInvariants(r.products, "real");
+  }
+
   /* ============ D. Separation from the Add Product workflow ========= */
 
   section("D1. Research never creates, imports or stores products");
