@@ -62,3 +62,59 @@ export async function apiFetch<T>(
 
   return payload as T;
 }
+
+/**
+ * POST a JSON body and read a newline-delimited JSON stream, calling
+ * `onLine` for each object as it arrives. Rejects with ApiRequestError when
+ * the request itself fails (before any streaming starts).
+ */
+export async function apiStream(
+  path: string,
+  json: unknown,
+  onLine: (line: unknown) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = await accessToken();
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(path, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(json),
+    cache: "no-store",
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const payload = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+    throw new ApiRequestError(res.status, payload?.error ?? `Request failed (${res.status})`, payload?.code);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const emit = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    try {
+      onLine(JSON.parse(trimmed));
+    } catch {
+      /* ignore a malformed line */
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl = buffer.indexOf("\n");
+    while (nl >= 0) {
+      emit(buffer.slice(0, nl));
+      buffer = buffer.slice(nl + 1);
+      nl = buffer.indexOf("\n");
+    }
+  }
+  emit(buffer + decoder.decode());
+}

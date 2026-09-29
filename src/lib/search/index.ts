@@ -4,9 +4,11 @@
 /*    natural language query                                           */
 /*      → cache lookup          (free)                                 */
 /*      → parse intent          (plain queries skip the LLM)           */
-/*      → web research          (ONE Tavily search, credit-capped)     */
-/*      → cluster into products (LLM, or instant heuristic)            */
-/*      → filter + rank         (deterministic)                        */
+/*      → web research          (2 Tavily searches in parallel)        */
+/*      → first results         (streamed to the page right away)      */
+/*      → read store pages      (product pages that had no price)      */
+/*      → group into products   (instant heuristic; AI opt-in)         */
+/*      → filter + rank         (best match first, then lowest price)  */
 /*      → cache + return top N                                         */
 /*                                                                     */
 /*  Prices only ever come from retailer pages the research step read,  */
@@ -20,9 +22,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { RETAILER_INFO, retailerRank } from "@/lib/retailers";
 import { broadenLadder, broadenedNotice } from "./broaden";
 import { clusterOffers } from "./cluster";
+import { isAccessoryTitle, queryMatch } from "./extract";
 import { parseQuery } from "./parse";
 import * as tavilyProvider from "./providers/tavily";
-import type { TavilySearchRequest, TavilySearchResponse } from "@/lib/tavily";
+import type { TavilyExtractResponse, TavilySearchRequest, TavilySearchResponse } from "@/lib/tavily";
 import { Deadline, type Meter } from "./deadline";
 import { ProviderError } from "./errors";
 import {
@@ -36,6 +39,7 @@ import {
 } from "./quota";
 import {
   NoProviderError,
+  type AlsoCheck,
   type LuggageDetails,
   type Offer,
   type ProviderName,
@@ -151,6 +155,20 @@ export type SearchOptions = {
    * a second (billable) call.
    */
   onResearch?: (info: { request: TavilySearchRequest; response: TavilySearchResponse }) => void;
+  /** Diagnostics only: the page-reading request and what came back. */
+  onExtract?: (info: { urls: string[]; response: TavilyExtractResponse }) => void;
+  /**
+   * Called with the first results while store pages are still being read,
+   * so the page can show them immediately. Not called for cache hits or
+   * when there's nothing left to read.
+   */
+  onPartial?: (response: SearchResponse) => void;
+  /**
+   * "full" (default): general search + major-chains search + page reading.
+   * "lite": one search and at most 3 pages read — for scheduled price
+   * checks, where every tracked product costs credits every day.
+   */
+  depth?: "full" | "lite";
 };
 
 /**
@@ -202,6 +220,9 @@ type ProviderResult = {
   warnings: string[];
   /** Raw pages/listings returned. 0 means "nothing found", not "nothing usable". */
   resultCount: number;
+  creditsUsed: number;
+  /** Store product pages found without a price in their excerpt. */
+  unread: tavilyProvider.UnreadPage[];
 };
 
 async function fetchFromProvider(
@@ -212,6 +233,8 @@ async function fetchFromProvider(
     meter: Meter;
     bypassCache?: boolean;
     onResearch?: SearchOptions["onResearch"];
+    sweep?: boolean;
+    maxReads?: number;
   },
 ): Promise<ProviderResult> {
   switch (provider) {
@@ -315,19 +338,34 @@ function applyPriceFilter(products: SearchProduct[], intent: SearchIntent): Sear
 }
 
 /**
- * Rank products for display.
- *
- * A product carried by a major retailer outranks one that isn't; among
- * those, wider retailer coverage wins (that's what makes a price
- * comparison useful); then the lowest price.
+ * Rank products for display: the products that match what was searched
+ * come first, and within those the LOWEST PRICE leads. Accessories that
+ * merely mention the model ("… luggage cover") and partial matches follow.
  */
-function rankProducts(products: SearchProduct[]): SearchProduct[] {
+function rankProducts(products: SearchProduct[], terms: string): SearchProduct[] {
+  const wantsAccessory = isAccessoryTitle(terms);
+  const tier = (p: SearchProduct): number => {
+    const accessory = !wantsAccessory && isAccessoryTitle(p.name);
+    const full = (p.relevance ?? 1) >= 0.99;
+    return accessory ? 2 : full ? 0 : 1;
+  };
+
   return [...products].sort((a, b) => {
-    if (a.hasMajorRetailer !== b.hasMajorRetailer) return a.hasMajorRetailer ? -1 : 1;
-    if (a.retailerCount !== b.retailerCount) return b.retailerCount - a.retailerCount;
+    const ta = tier(a);
+    const tb = tier(b);
+    if (ta !== tb) return ta - tb;
     if (a.lowestPrice !== b.lowestPrice) return a.lowestPrice - b.lowestPrice;
+    if (a.retailerCount !== b.retailerCount) return b.retailerCount - a.retailerCount;
     return a.name.localeCompare(b.name);
   });
+}
+
+/** How well a product's name (and brand) covers the searched words. */
+function withRelevance(product: SearchProduct, terms: string): SearchProduct {
+  return {
+    ...product,
+    relevance: Math.round(queryMatch(`${product.brand} ${product.name}`, terms) * 100) / 100,
+  };
 }
 
 /**
@@ -424,7 +462,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
 
   // Mode changes the grouping, so it has to be part of the cache identity —
   // otherwise a compare search would serve its merged rows to a catalog one.
-  const key = cacheKey(`${trimmed} ::mode:${mode}`, allowedRetailers, limit);
+  const lite = opts.depth === "lite";
+  const key = cacheKey(`${trimmed} ::mode:${mode}${lite ? " ::lite" : ""}`, allowedRetailers, limit);
 
   if (!opts.bypassCache) {
     const hit = await readCache(opts.db, key);
@@ -464,6 +503,10 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const attemptLimit = Math.min(maxQueryAttempts(), ladder.length);
 
   let offers: Offer[] = [];
+  let unread: tavilyProvider.UnreadPage[] = [];
+  let resultCount = 0;
+  let creditsUsed = 0;
+  let usedMeter: Meter | undefined;
   let usedProvider: ProviderName | null = null;
   let usedTerms = intent.terms;
   const failures: string[] = [];
@@ -492,7 +535,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     };
 
     try {
-      let result: ProviderResult = { offers: [], warnings: [], resultCount: 0 };
+      let result: ProviderResult = { offers: [], warnings: [], resultCount: 0, creditsUsed: 0, unread: [] };
 
       for (let rung = 0; rung < attemptLimit; rung++) {
         const terms = ladder[rung];
@@ -502,9 +545,11 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
           meter,
           bypassCache: opts.bypassCache,
           onResearch: opts.onResearch,
+          ...(lite ? { sweep: false, maxReads: 3 } : {}),
         });
+        creditsUsed += result.creditsUsed;
 
-        if (result.offers.length > 0) {
+        if (result.offers.length > 0 || result.unread.length > 0) {
           usedTerms = terms;
           // Say so plainly. A price comparison the client didn't ask for is
           // worse than no result if they don't realise the words changed.
@@ -522,6 +567,9 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
       }
 
       offers = result.offers;
+      unread = result.unread;
+      resultCount = result.resultCount;
+      usedMeter = meter;
       warnings.push(...result.warnings);
       usedProvider = provider;
       break;
@@ -545,7 +593,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     }
   }
 
-  timer.lap("fetch");
+  timer.lap("search");
 
   if (!usedProvider) {
     timer.report(trimmed, `FAILED: ${failures[0] ?? "no provider"}`);
@@ -557,15 +605,50 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   // (or an exhausted allowance) is visible rather than mysterious.
   if (failures.length > 0) warnings.unshift(...failures);
 
-  const response = await finish(trimmed, intent, usedProvider, offers, warnings, {
+  const finishOpts = {
     allowedRetailers,
     limit,
     deadline,
     mode,
     broadestTried: ladder[Math.min(attemptLimit, ladder.length) - 1] ?? usedTerms,
-  });
+  };
+  const provider = usedProvider;
 
-  timer.lap("cluster");
+  // ── First results, then read the pages that had no price ─────
+  let alsoCheckPages = unread;
+  if (unread.length > 0) {
+    if (opts.onPartial && offers.length > 0) {
+      const partial = await finish(trimmed, intent, provider, offers, [...warnings], finishOpts);
+      opts.onPartial({ ...partial, phase: "partial", creditsUsed });
+    }
+
+    const read = await tavilyProvider.readPages(unread, {
+      deadline,
+      meter: usedMeter,
+      bypassCache: opts.bypassCache,
+      onExtract: opts.onExtract,
+    });
+    offers = [...offers, ...read.offers];
+    creditsUsed += read.creditsUsed;
+    alsoCheckPages = read.stillUnread;
+    timer.lap("read");
+  }
+
+  if (offers.length === 0 && resultCount > 0) {
+    warnings.push(
+      `Found ${resultCount} pages, but none showed a clear Canadian price for this item. ` +
+        "Try the exact model name (for example “Samsonite Freeform 21”).",
+    );
+  }
+
+  const response: SearchResponse = {
+    ...(await finish(trimmed, intent, provider, offers, warnings, finishOpts)),
+    alsoCheck: alsoCheckLinks(alsoCheckPages, intent.terms),
+    phase: "final",
+    creditsUsed,
+  };
+
+  timer.lap("group");
 
   // Cache writes are pure optimisation for the NEXT search. Awaiting one on
   // a slow connection made the user wait seconds for a result already
@@ -574,14 +657,31 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   // Empty answers are cached too, briefly: otherwise every server instance
   // (and every scheduled run) would pay again for the same dead end.
   const ttl = response.products.length > 0 ? opts.cacheTtlMinutes : 30;
-  void writeCache(opts.db, key, response, ttl).catch(() => undefined);
+  void writeCache(opts.db, key, { ...response, creditsUsed: 0 }, ttl).catch(() => undefined);
 
   timer.report(
     trimmed,
-    `${usedProvider} offers=${response.offersFound} products=${response.products.length}`,
+    `${provider} credits=${creditsUsed} offers=${response.offersFound} products=${response.products.length} read=${unread.length}`,
   );
 
   return response;
+}
+
+/**
+ * Store pages for the product that we couldn't read a price from — shown
+ * as links, never as prices. Known stores only, closest matches first.
+ */
+function alsoCheckLinks(pages: tavilyProvider.UnreadPage[], terms: string): AlsoCheck[] {
+  const seen = new Set<string>();
+  const out: AlsoCheck[] = [];
+  for (const u of pages) {
+    if (!u.retailerKey || seen.has(u.retailer)) continue;
+    if (queryMatch(`${u.retailer} ${u.page.title}`, terms) < 0.99) continue;
+    seen.add(u.retailer);
+    out.push({ retailer: u.retailer, url: u.page.url, title: u.page.title.slice(0, 120) });
+    if (out.length >= 4) break;
+  }
+  return out;
 }
 
 async function finish(
@@ -615,17 +715,13 @@ async function finish(
     return { query, intent, provider, products: [], offersFound: 0, warnings };
   }
 
-  // ── Cluster into products ────────────────────────────────────
-  // Whatever time is left is the clustering budget. If it runs out the
-  // heuristic grouping takes over, so we still return real prices rather
-  // than nothing.
-  // Grouping is the last step and the least essential: the prices are
-  // already in hand, and the heuristic grouping is instant. Live runs showed
-  // Tavily answering in ~2s and a busy Gemini then holding the search for
-  // 12 more — so grouping gets at most 6s before the heuristic takes over.
+  // ── Group into products ──────────────────────────────────────
+  // The heuristic is instant. AI grouping (opt-in) gets at most 6s before
+  // the heuristic takes over.
   let products = await clusterOffers(offers, {
     timeoutMs: opts.deadline.budget(6_000, 1_500),
     mode: opts.mode,
+    brandHint: intent.brand ? titleCase(intent.brand) : null,
   });
 
   // ── Filter ───────────────────────────────────────────────────
@@ -644,13 +740,20 @@ async function finish(
   }
 
   // ── Sanity, specs, rank and trim ─────────────────────────────
-  products = products.map(dropPriceOutliers).map(attachDetails);
+  products = products
+    .map(dropPriceOutliers)
+    .map(attachDetails)
+    .map((p) => withRelevance(p, intent.terms));
 
-  products = rankProducts(products)
+  products = rankProducts(products, intent.terms)
     .slice(0, opts.limit)
     .map((p) => withRecomputedSummary({ ...p, offers: sortOffers(capOffers(p.offers)) }));
 
   return { query, intent, provider, products, offersFound, warnings };
+}
+
+function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export { getBudget, getAllBudgets, QuotaExhaustedError } from "./quota";

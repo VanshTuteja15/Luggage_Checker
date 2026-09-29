@@ -42,10 +42,15 @@ type State = {
   signIn: (email: string, userId?: string) => void;
   signOut: () => Promise<void>;
 
+  /** Newest first, up to MAX_RECENT_SEARCHES. Per device. */
   recentSearches: string[];
   addSearch: (query: string) => void;
+  removeSearch: (query: string) => void;
   clearSearches: () => void;
 };
+
+/** How many past searches the search bar remembers. */
+const MAX_RECENT_SEARCHES = 15;
 
 const Ctx = createContext<State | null>(null);
 
@@ -57,7 +62,7 @@ function readPersisted(): Persisted {
     const parsed = JSON.parse(raw) as Partial<Persisted>;
     return {
       recentSearches: Array.isArray(parsed.recentSearches)
-        ? parsed.recentSearches.filter((s): s is string => typeof s === "string").slice(0, 8)
+        ? parsed.recentSearches.filter((s): s is string => typeof s === "string").slice(0, MAX_RECENT_SEARCHES)
         : [],
     };
   } catch {
@@ -170,7 +175,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addSearch = useCallback((query: string) => {
     const q = query.trim();
     if (!q) return;
-    setRecentSearches((prev) => [q, ...prev.filter((x) => x !== q)].slice(0, 6));
+    // Same words in different case are one search, shown as last typed.
+    setRecentSearches((prev) =>
+      [q, ...prev.filter((x) => x.toLowerCase() !== q.toLowerCase())].slice(0, MAX_RECENT_SEARCHES),
+    );
+  }, []);
+
+  const removeSearch = useCallback((query: string) => {
+    setRecentSearches((prev) => prev.filter((x) => x !== query));
   }, []);
 
   const clearSearches = useCallback(() => setRecentSearches([]), []);
@@ -186,9 +198,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       signOut,
       recentSearches,
       addSearch,
+      removeSearch,
       clearSearches,
     }),
-    [ready, authed, email, userId, recentSearches, signIn, signOut, addSearch, clearSearches],
+    [ready, authed, email, userId, recentSearches, signIn, signOut, addSearch, removeSearch, clearSearches],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -88,6 +88,9 @@ export async function refreshProduct(
       // Meter refreshes against the same allowance, and let them reuse a
       // recent cached search rather than paying for the same query twice.
       db: supabase,
+      // One search + a few page reads: a daily check runs for every tracked
+      // product, so it uses the economical depth.
+      depth: "lite",
     });
 
     if (result.products.length === 0) {

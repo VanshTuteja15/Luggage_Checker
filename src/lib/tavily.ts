@@ -494,6 +494,8 @@ export function resetTavilyState(): void {
   localLedger = { period: currentPeriod(), credits: 0 };
   processCredits = 0;
   exhaustedUntil = 0;
+  pageCache.clear();
+  extractSuccessCarry = 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -826,4 +828,226 @@ function extractErrorMessage(body: string): string {
     // not JSON
   }
   return body.slice(0, 200) || "no detail";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Extract — read specific pages                                     */
+/*                                                                     */
+/*  A search returns each store page as a ~150-character excerpt. When */
+/*  the price isn't in that excerpt, the page itself has to be read.   */
+/*  /extract does that for up to 20 URLs in one request.               */
+/*                                                                     */
+/*  Cost (docs.tavily.com): basic = 1 credit per 5 SUCCESSFUL pages,   */
+/*  advanced = 2 per 5. Pages that fail to load aren't charged.        */
+/*  The same cap, reservation and pay-as-you-go refusal as search      */
+/*  apply — an extract that could cross the cap is never sent.         */
+/* ------------------------------------------------------------------ */
+
+export type TavilyExtractRequest = {
+  /** 1–20 page URLs. */
+  urls: string[];
+  depth?: "basic" | "advanced";
+  format?: "text" | "markdown";
+  /** Seconds Tavily may spend fetching, 1–60. */
+  timeoutSeconds?: number;
+};
+
+export type TavilyExtractResponse = {
+  /** Pages read, with their full text. Order is not guaranteed. */
+  results: { url: string; rawContent: string }[];
+  /** Pages Tavily couldn't read (not charged). */
+  failed: { url: string; error: string }[];
+  /** Credits this call cost, per Tavily (or our conservative estimate). */
+  creditsUsed: number;
+  /** Pages served from this process's cache — no request made for them. */
+  cachedCount: number;
+};
+
+/** Upper bound on what an extract of `pages` pages can cost. */
+export function expectedExtractCredits(pages: number, depth: "basic" | "advanced" = "basic"): number {
+  if (pages <= 0) return 0;
+  return Math.ceil(pages / 5) * (depth === "advanced" ? 2 : 1);
+}
+
+type PageCacheEntry = { expiresAt: number; rawContent: string | null };
+const pageCache = new Map<string, PageCacheEntry>();
+const MAX_PAGE_CACHE_ENTRIES = 500;
+/** A page that failed to load is skipped for a while rather than retried at once. */
+const FAILED_PAGE_TTL_MS = 30 * 60_000;
+/**
+ * Tavily bills 1 credit per 5 successful pages, carried across calls. When
+ * a response doesn't state its cost, this carry reproduces Tavily's count.
+ */
+let extractSuccessCarry = 0;
+
+function pageKey(url: string, depth: string, format: string): string {
+  return `${depth}:${format}:${url.split("#")[0]}`;
+}
+
+function rememberPage(key: string, rawContent: string | null): void {
+  pageCache.set(key, {
+    expiresAt: Date.now() + (rawContent ? cacheTtlMs() : FAILED_PAGE_TTL_MS),
+    rawContent,
+  });
+  while (pageCache.size > MAX_PAGE_CACHE_ENTRIES) {
+    const oldest = pageCache.keys().next().value;
+    if (oldest === undefined) break;
+    pageCache.delete(oldest);
+  }
+}
+
+/**
+ * Read pages' full text. Never throws for an ordinary failure — reading is
+ * an enrichment step, so a timeout or a refused budget returns what it has
+ * (possibly nothing) with the reason in `failed`.
+ */
+export async function tavilyExtract(
+  req: TavilyExtractRequest,
+  opts: TavilyCallOptions = {},
+): Promise<TavilyExtractResponse> {
+  const depth = req.depth ?? "basic";
+  const format = req.format ?? "text";
+  const out: TavilyExtractResponse = { results: [], failed: [], creditsUsed: 0, cachedCount: 0 };
+
+  // De-duplicate, serve what we already read, skip recent failures.
+  const toFetch: string[] = [];
+  for (const url of [...new Set(req.urls.filter((u) => /^https?:\/\//i.test(u)))]) {
+    const key = pageKey(url, depth, format);
+    const hit = opts.bypassCache ? undefined : pageCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) {
+      out.cachedCount++;
+      if (hit.rawContent) out.results.push({ url, rawContent: hit.rawContent });
+      else out.failed.push({ url, error: "failed recently; skipped" });
+      continue;
+    }
+    toFetch.push(url);
+  }
+  const urls = toFetch.slice(0, 20);
+  if (urls.length === 0) return out;
+
+  const deadline = opts.deadline;
+  const MIN_EXTRACT_MS = 3_000;
+  if (deadline && !deadline.hasAtLeast(MIN_EXTRACT_MS)) {
+    for (const url of urls) out.failed.push({ url, error: "no time left to read this page" });
+    return out;
+  }
+
+  const expected = expectedExtractCredits(urls.length, depth);
+  let release: () => void;
+  try {
+    release = await reserveCredits(expected);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "credit check failed";
+    for (const url of urls) out.failed.push({ url, error: message });
+    return out;
+  }
+
+  try {
+    try {
+      await opts.meter?.beforeAttempt(expected);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "allowance check failed";
+      for (const url of urls) out.failed.push({ url, error: message });
+      return out;
+    }
+
+    // Tavily's own fetch timeout, and ours a little longer so its answer
+    // (with partial results) arrives before we give up on it.
+    const budgetMs = deadline ? deadline.budget(12_000, 500) : 12_000;
+    const tavilySeconds = Math.max(1, Math.min(req.timeoutSeconds ?? 8, Math.floor((budgetMs - 1_500) / 1000)));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), tavilySeconds * 1000 + 1_500);
+
+    let raw: {
+      results?: { url?: string; raw_content?: string | null }[];
+      failed_results?: { url?: string; error?: string }[];
+      usage?: { credits?: number };
+    } | null = null;
+    let status = 0;
+    let detail = "";
+
+    try {
+      const res = await fetch(`${API_BASE}/extract`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls,
+          extract_depth: depth,
+          format,
+          include_images: false,
+          include_usage: true,
+          timeout: tavilySeconds,
+        }),
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      status = res.status;
+      if (res.ok) raw = await res.json().catch(() => null);
+      else detail = await res.text().catch(() => "");
+    } catch (err) {
+      const timedOut = err instanceof Error && err.name === "AbortError";
+      if (timedOut) {
+        // Tavily may have read (and billed) pages before we gave up, so
+        // the whole reservation counts as spent.
+        recordLocalCredits(expected);
+        out.creditsUsed = expected;
+      } else {
+        // The request never got an answer — nothing was read or billed.
+        await opts.meter?.refundAttempt(expected);
+      }
+      for (const url of urls) out.failed.push({ url, error: timedOut ? "timed out" : "network error" });
+      return out;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!raw) {
+      if (status === 432 || status === 433) {
+        exhaustedUntil = status === 433 ? endOfMonthUtc() : Date.now() + 30 * 60_000;
+      }
+      // Refused requests aren't billed.
+      await opts.meter?.refundAttempt(expected);
+      const message = status ? `Tavily error ${status}: ${extractErrorMessage(detail)}` : "unreadable response";
+      for (const url of urls) out.failed.push({ url, error: message });
+      return out;
+    }
+
+    const ok = (raw.results ?? []).filter(
+      (r): r is { url: string; raw_content: string } =>
+        typeof r.url === "string" && typeof r.raw_content === "string" && r.raw_content.trim().length > 0,
+    );
+    for (const r of ok) {
+      out.results.push({ url: r.url, rawContent: r.raw_content });
+      rememberPage(pageKey(r.url, depth, format), r.raw_content);
+    }
+    const okUrls = new Set(ok.map((r) => r.url));
+    for (const f of raw.failed_results ?? []) {
+      if (typeof f.url !== "string") continue;
+      out.failed.push({ url: f.url, error: f.error ?? "failed" });
+      rememberPage(pageKey(f.url, depth, format), null);
+    }
+    for (const url of urls) {
+      if (!okUrls.has(url) && !out.failed.some((f) => f.url === url)) {
+        out.failed.push({ url, error: "no content returned" });
+      }
+    }
+
+    // Cost: Tavily's figure when stated; otherwise its 1-per-5 rule applied
+    // to the pages actually read, carried across calls like Tavily does.
+    const reported = numberOrNull(raw.usage?.credits);
+    let credits: number;
+    if (reported !== null) {
+      credits = reported;
+    } else {
+      extractSuccessCarry += ok.length;
+      credits = Math.floor(extractSuccessCarry / 5) * (depth === "advanced" ? 2 : 1);
+      extractSuccessCarry %= 5;
+    }
+    recordLocalCredits(credits);
+    if (credits !== expected) await opts.meter?.reconcile?.(credits - expected);
+    out.creditsUsed = credits;
+    return out;
+  } finally {
+    release();
+  }
 }

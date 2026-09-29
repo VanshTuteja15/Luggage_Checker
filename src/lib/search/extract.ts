@@ -28,6 +28,7 @@ import {
   isMerchantUrl,
   matchRetailer,
 } from "@/lib/retailers";
+import { extractColour, findColourOptions } from "./colours";
 import type { LuggageDetails, Offer } from "./types";
 
 /** Plausible single-item luggage prices in CAD. Outside this, we don't believe it. */
@@ -73,6 +74,8 @@ export function cleanPageTitle(title: string): { name: string; site: string | nu
 
   // Search engines cut long titles: "… with Double ..." — drop the ellipsis.
   name = name.replace(/\s*(?:\.{3,}|…)\s*$/, "");
+  // Amazon appends catalogue fields: "…Carry-On, Model Number: 123-456".
+  name = name.replace(/[,\s]*\b(?:model\s*(?:number|no\.?|#)|item\s*model\s*number)\b.*$/i, "");
   return { name: name.replace(/\s{2,}/g, " ").trim(), site };
 }
 
@@ -477,6 +480,9 @@ export function extractDetails(rawText: string, title: string): LuggageDetails |
   if (/\bexpandable\b|\bexpansion\b|\bextensible\b/i.test(text)) d.expandable = true;
   if (/\bTSA\b/.test(text)) d.tsaLock = true;
 
+  const colours = findColourOptions(text);
+  if (colours.length > 0) d.colours = colours;
+
   const warranty = text.match(/\b(\d{1,2})[- ]year\b[^.\n]{0,25}warrant(?:y|ie)|\b(limited lifetime|lifetime)\s+warrant(?:y|ie)/i);
   if (warranty) d.warranty = warranty[1] ? `${warranty[1]}-year` : titleCase(warranty[2]);
 
@@ -592,7 +598,68 @@ export function analyzePage(page: PageInput, fetchedAt = new Date().toISOString(
       fetchedAt,
       evidence: pick.evidence,
       details: extractDetails(detailSource, name),
+      ...(extractColour(name) ? { colour: extractColour(name) } : {}),
     },
     reason: null,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Accessories                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Accessories whose titles name a luggage model without being the luggage. */
+export const ACCESSORY_WORDS =
+  /\b(?:cover|covers|tag|tags|strap|straps|organi[sz]er|packing cubes?|toiletry|pouch|scale|adapter|pillow|wallet|passport holder|replacement|wheel kit|handle kit|garment sleeve|lock|locks)\b/i;
+
+/** "Samsonite Outline Pro Luggage Cover" is a cover, not a suitcase. */
+export function isAccessoryTitle(title: string): boolean {
+  // "TSA lock" is a suitcase feature, not an accessory.
+  return ACCESSORY_WORDS.test(title.replace(/\bTSA[- ]?(?:approved )?locks?\b/gi, ""));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Relevance to the search                                           */
+/* ------------------------------------------------------------------ */
+
+/** Words that don't say WHICH product was asked for. */
+const QUERY_STOPWORDS = new Set([
+  "luggage", "suitcase", "suitcases", "bag", "bags", "price", "prices", "cheap", "cheapest",
+  "best", "buy", "the", "a", "an", "for", "with", "and", "or", "under", "over", "below", "above",
+  "canada", "canadian", "sale", "deal", "deals", "in", "on", "of", "inch", "inches", "new", "online",
+  "shop", "store", "lowest", "compare",
+]);
+
+/** The words in a search that identify the product (brand, model, size). */
+export function queryTokens(terms: string): string[] {
+  return [
+    ...new Set(
+      terms
+        .toLowerCase()
+        .replace(/\$\s?\d[\d,.]*/g, " ")
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((t) => t && !QUERY_STOPWORDS.has(t) && (t.length >= 2 || /\d/.test(t))),
+    ),
+  ];
+}
+
+/**
+ * Share of the searched words a title contains, 0–1. "Samsonite Outline
+ * Pro Carry-On" scores 1 for "samsonite outline pro"; a Freeform page
+ * scores 1/3 (brand only).
+ */
+export function queryMatch(title: string, terms: string): number {
+  const wanted = queryTokens(terms);
+  if (wanted.length === 0) return 1;
+  const have = new Set(
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+  let hits = 0;
+  for (const t of wanted) if (have.has(t)) hits++;
+  return hits / wanted.length;
 }

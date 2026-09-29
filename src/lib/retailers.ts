@@ -399,6 +399,37 @@ export function preferredResearchDomains(): string[] {
 }
 
 /**
+ * The big Canadian chains, as research domains. A second search is
+ * restricted to these, so a brand's own store (which tends to fill a
+ * general search's results) can't crowd Amazon, Walmart & co. out.
+ */
+export function majorResearchDomains(): string[] {
+  const domains = new Set<string>();
+  for (const info of Object.values(RETAILER_INFO)) {
+    if (info.category !== "major") continue;
+    for (const d of [info.domain, ...(info.altDomains ?? [])]) {
+      if (!hostMatches(d, US_STOREFRONTS)) domains.add(d);
+    }
+  }
+  return [...domains];
+}
+
+/**
+ * The brand's own store, when the query names a brand we know
+ * ("samsonite outline pro" → Samsonite.ca). Null otherwise.
+ */
+export function brandStoreFor(query: string): string | null {
+  const q = ` ${query.toLowerCase().replace(/[^a-z0-9&\s]/g, " ").replace(/\s+/g, " ")} `;
+  for (const [name, info] of Object.entries(RETAILER_INFO)) {
+    if (info.category !== "specialty") continue;
+    const brand = name.replace(/\.(?:ca|com)$/i, "").toLowerCase();
+    const first = brand.split(/\s+/)[0];
+    if (q.includes(` ${brand} `) || (first.length >= 5 && q.includes(` ${first} `))) return name;
+  }
+  return null;
+}
+
+/**
  * Domains that never carry a Canadian retail price: US storefronts, social
  * networks, video, forums and review sites. Excluding them up front means
  * the result slots a credit buys go to pages that can actually answer.

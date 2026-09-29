@@ -1,18 +1,21 @@
 /* ------------------------------------------------------------------ */
 /*  Provider: Tavily web research (Canada)                            */
 /*                                                                     */
-/*  ONE search per lookup. That single call has to answer everything a */
-/*  luggage lookup needs — which retailers sell it, at what price,     */
-/*  whether it's in stock, and its specs — so it's built to:           */
+/*  One lookup = two searches sent AT THE SAME TIME (so no slower than */
+/*  one), then one page-reading call for store pages that came back    */
+/*  without a price:                                                   */
 /*                                                                     */
-/*    • ask for 20 results (the cost is per call, not per result)      */
-/*    • include each page's text, so price AND specs come from the     */
-/*      same pages instead of separate searches per field              */
-/*    • rank Canadian retailer domains first ("prefer", not "restrict" */
-/*      — independent Canadian shops still come through)               */
-/*    • exclude domains that can't carry a Canadian price (US stores,  */
-/*      social, video, forums) so no result slot is wasted             */
-/*    • target Canada with Tavily's country setting                    */
+/*    1. general    — every Canadian store, registry domains ranked    */
+/*                    first. Tends to be led by the brand's own store. */
+/*    2. major sweep — restricted to the big Canadian chains (Amazon,  */
+/*                    Walmart, Costco, The Bay, Best Buy…), so they    */
+/*                    can't be crowded out of the results.             */
+/*    3. read pages — product pages whose search excerpt had no price  */
+/*                    are read in full (1 credit per 5 pages read).    */
+/*                                                                     */
+/*  Typical cost: 2 credits for the searches + 1–2 for reading, all    */
+/*  inside the same free-plan cap. Repeat searches are served from     */
+/*  cache for free.                                                    */
 /*                                                                     */
 /*  Nothing here creates, imports or stores products. It returns       */
 /*  offers; tracking a product is a separate workflow (/api/track).    */
@@ -20,15 +23,30 @@
 
 import {
   tavilyConfigured,
+  tavilyExtract,
   tavilySearch,
   type TavilyDepth,
+  type TavilyExtractResponse,
   type TavilyResult,
   type TavilySearchRequest,
   type TavilySearchResponse,
 } from "@/lib/tavily";
-import { RESEARCH_EXCLUDED_DOMAINS, preferredResearchDomains } from "@/lib/retailers";
+import {
+  RESEARCH_EXCLUDED_DOMAINS,
+  RETAILER_INFO,
+  majorResearchDomains,
+  preferredResearchDomains,
+} from "@/lib/retailers";
 import type { Deadline, Meter } from "../deadline";
-import { analyzePage, type PageAnalysis } from "../extract";
+import { ProviderError } from "../errors";
+import {
+  analyzePage,
+  looksLikeProductUrl,
+  queryMatch,
+  queryTokens,
+  type PageAnalysis,
+  type PageInput,
+} from "../extract";
 import type { Offer, SearchIntent } from "../types";
 
 export function tavilyProviderConfigured(): boolean {
@@ -50,14 +68,29 @@ function rawContentEnabled(): boolean {
   return process.env.TAVILY_INCLUDE_RAW_CONTENT !== "false";
 }
 
-/** The single request that answers a luggage lookup. */
-export function buildLuggageRequest(intent: SearchIntent): TavilySearchRequest {
-  const terms = intent.terms.trim();
-  // "price" steers the search toward shop pages rather than reviews.
-  const query = /\bprice\b|\bprix\b/i.test(terms) ? terms : `${terms} price`;
+/** The second, major-chains-only search. On unless SEARCH_RETAILER_SWEEP=false. */
+function sweepEnabled(): boolean {
+  return process.env.SEARCH_RETAILER_SWEEP !== "false";
+}
 
+/** Most store pages read per search (0 turns page reading off). Max 20. */
+export function maxPagesToRead(): number {
+  const raw = process.env.TAVILY_EXTRACT_MAX_PAGES;
+  if (raw === undefined || raw.trim() === "") return 10;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.min(20, Math.floor(n)) : 10;
+}
+
+function researchQuery(terms: string): string {
+  const t = terms.trim();
+  // "price" steers the search toward shop pages rather than reviews.
+  return /\bprice\b|\bprix\b/i.test(t) ? t : `${t} price`;
+}
+
+/** Search 1: every Canadian store, registry domains ranked first. */
+export function buildLuggageRequest(intent: SearchIntent): TavilySearchRequest {
   return {
-    query,
+    query: researchQuery(intent.terms),
     searchDepth: searchDepth(),
     maxResults: 20,
     chunksPerSource: 3,
@@ -70,14 +103,30 @@ export function buildLuggageRequest(intent: SearchIntent): TavilySearchRequest {
   };
 }
 
+/** Search 2: only the big Canadian chains. */
+export function buildRetailerSweepRequest(intent: SearchIntent): TavilySearchRequest | null {
+  const domains = majorResearchDomains();
+  if (domains.length === 0) return null;
+  return {
+    query: researchQuery(intent.terms),
+    searchDepth: searchDepth(),
+    maxResults: 20,
+    chunksPerSource: 3,
+    includeRawContent: rawContentEnabled() ? "text" : false,
+    includeDomains: domains,
+    includeDomainsMode: "restrict",
+    country: "canada",
+    topic: "general",
+  };
+}
+
 /** Every result, analysed — offers where possible, reasons where not. */
 export function analyzeResults(results: TavilyResult[], fetchedAt = new Date().toISOString()): PageAnalysis[] {
   const seen = new Set<string>();
   const out: PageAnalysis[] = [];
 
   for (const r of results) {
-    // The same page can come back twice with tracking parameters.
-    const canonical = r.url.split("#")[0].replace(/[?&](?:utm_[^&]+|ref=[^&]+)/g, "");
+    const canonical = canonicalUrl(r.url);
     if (seen.has(canonical)) continue;
     seen.add(canonical);
 
@@ -91,12 +140,71 @@ export function analyzeResults(results: TavilyResult[], fetchedAt = new Date().t
   return out;
 }
 
+/** The same page can come back twice with tracking parameters. */
+function canonicalUrl(url: string): string {
+  return url.split("#")[0].replace(/[?&](?:utm_[^&]+|ref=[^&]+)/g, "");
+}
+
+/** A store product page found without a readable price. */
+export type UnreadPage = {
+  page: PageInput;
+  retailer: string;
+  retailerKey: string | null;
+};
+
+/**
+ * Which pages are worth paying to read in full: Canadian product pages
+ * about the searched product whose excerpt had no clear price. The brand's
+ * own store first, then the big chains, then everyone else.
+ */
+export function pagesWorthReading(
+  analysed: PageAnalysis[],
+  pages: Map<string, PageInput>,
+  terms: string,
+  max = maxPagesToRead(),
+): UnreadPage[] {
+  if (max <= 0) return [];
+  const wanted = queryTokens(terms);
+  // At least the model words must be on the page title — a page that only
+  // shares the brand is another product.
+  const minMatch = wanted.length <= 1 ? 1 : Math.min(1, 2 / wanted.length);
+
+  const candidates = analysed
+    .filter((a) => a.offer === null && a.reason === "no clear price on the page")
+    .map((a) => ({ a, page: pages.get(a.url) }))
+    .filter((x): x is { a: PageAnalysis; page: PageInput } => !!x.page)
+    // A brand store's titles leave out the brand ("Outline Pro Spinner" on
+    // samsonite.ca), so the store's name counts toward the match.
+    .filter(({ a, page }) => queryMatch(`${a.retailer} ${page.title}`, terms) >= minMatch)
+    // Product pages first, then anything else that named the product.
+    .sort((x, y) => Number(looksLikeProductUrl(y.a.url)) - Number(looksLikeProductUrl(x.a.url)));
+
+  const rank = (retailer: string): number => {
+    const category = RETAILER_INFO[retailer]?.category;
+    return category === "specialty" ? 0 : category === "major" ? 1 : 2;
+  };
+
+  // Stable sort: keeps product-pages-first within each retailer tier.
+  return candidates
+    .sort((x, y) => rank(x.a.retailer) - rank(y.a.retailer))
+    .slice(0, max)
+    .map(({ a, page }) => ({
+      page,
+      retailer: a.retailer,
+      retailerKey: RETAILER_INFO[a.retailer] ? a.retailer : null,
+    }));
+}
+
+type ResearchHook = (info: { request: TavilySearchRequest; response: TavilySearchResponse }) => void;
+
 export type TavilyOffersResult = {
   offers: Offer[];
   warnings: string[];
   /** Pages Tavily returned, before any were rejected. 0 means "no results". */
   resultCount: number;
   creditsUsed: number;
+  /** Product pages worth reading in full (no price in their excerpt). */
+  unread: UnreadPage[];
 };
 
 export async function fetchOffers(
@@ -105,28 +213,120 @@ export async function fetchOffers(
     deadline?: Deadline;
     meter?: Meter;
     bypassCache?: boolean;
-    /** Diagnostics hook: sees the exact request and raw response. */
-    onResearch?: (info: { request: TavilySearchRequest; response: TavilySearchResponse }) => void;
+    /** Diagnostics hook: sees each exact request and raw response. */
+    onResearch?: ResearchHook;
+    /** Run the major-chains search too (default: SEARCH_RETAILER_SWEEP). */
+    sweep?: boolean;
+    /** Most pages to read afterwards (default: TAVILY_EXTRACT_MAX_PAGES). */
+    maxReads?: number;
   } = {},
 ): Promise<TavilyOffersResult> {
-  const request = buildLuggageRequest(intent);
-  const response = await tavilySearch(request, opts);
-  opts.onResearch?.({ request, response });
-  const analysed = analyzeResults(response.results);
+  const requests: TavilySearchRequest[] = [buildLuggageRequest(intent)];
+  if (opts.sweep ?? sweepEnabled()) {
+    const sweep = buildRetailerSweepRequest(intent);
+    if (sweep) requests.push(sweep);
+  }
+
+  // Sent together: two searches take as long as one.
+  const settled = await Promise.allSettled(requests.map((r) => tavilySearch(r, opts)));
+
+  const results: TavilyResult[] = [];
+  const warnings: string[] = [];
+  let creditsUsed = 0;
+  let firstError: unknown = null;
+  let succeeded = 0;
+
+  settled.forEach((s, i) => {
+    if (s.status === "fulfilled") {
+      succeeded++;
+      opts.onResearch?.({ request: requests[i], response: s.value });
+      results.push(...s.value.results);
+      creditsUsed += s.value.creditsUsed;
+    } else if (!firstError) {
+      firstError = s.reason;
+    }
+  });
+
+  if (succeeded === 0) throw firstError ?? new ProviderError("tavily", "unknown", "Research failed");
+  if (firstError && requests.length > 1) {
+    warnings.push(
+      firstError instanceof ProviderError && firstError.kind === "quota"
+        ? firstError.userMessage
+        : "One of the two searches didn't complete, so fewer stores may be listed.",
+    );
+  }
+
+  const fetchedAt = new Date().toISOString();
+  const analysed = analyzeResults(results, fetchedAt);
   const offers = analysed.map((a) => a.offer).filter((o): o is Offer => o !== null);
 
-  const warnings: string[] = [];
-  if (response.results.length > 0 && offers.length === 0) {
-    warnings.push(
-      `Found ${response.results.length} pages, but none showed a clear Canadian price for this item. ` +
-        "Try the exact model name (for example “Samsonite Freeform 21”).",
-    );
+  const pages = new Map<string, PageInput>();
+  for (const r of results) {
+    if (!pages.has(r.url)) {
+      pages.set(r.url, { url: r.url, title: r.title, content: r.content, rawContent: r.rawContent });
+    }
   }
 
   return {
     offers,
     warnings,
-    resultCount: response.results.length,
-    creditsUsed: response.creditsUsed,
+    resultCount: results.length,
+    creditsUsed,
+    unread: pagesWorthReading(
+      analysed,
+      pages,
+      intent.terms,
+      Math.min(maxPagesToRead(), opts.maxReads ?? Number.POSITIVE_INFINITY),
+    ),
   };
+}
+
+export type ReadPagesResult = {
+  offers: Offer[];
+  /** Pages still without a price after reading (or that couldn't be read). */
+  stillUnread: UnreadPage[];
+  creditsUsed: number;
+};
+
+/**
+ * Read store pages in full and try again for a price. Never throws: this
+ * only ever adds offers to a search that already has results.
+ */
+export async function readPages(
+  unread: UnreadPage[],
+  opts: {
+    deadline?: Deadline;
+    meter?: Meter;
+    bypassCache?: boolean;
+    onExtract?: (info: { urls: string[]; response: TavilyExtractResponse }) => void;
+  } = {},
+): Promise<ReadPagesResult> {
+  if (unread.length === 0) return { offers: [], stillUnread: [], creditsUsed: 0 };
+
+  const urls = unread.map((u) => u.page.url);
+  let response: TavilyExtractResponse;
+  try {
+    response = await tavilyExtract({ urls, depth: "basic", format: "text" }, opts);
+  } catch {
+    return { offers: [], stillUnread: unread, creditsUsed: 0 };
+  }
+  opts.onExtract?.({ urls, response });
+
+  const text = new Map(response.results.map((r) => [canonicalUrl(r.url), r.rawContent]));
+  const fetchedAt = new Date().toISOString();
+  const offers: Offer[] = [];
+  const stillUnread: UnreadPage[] = [];
+
+  for (const u of unread) {
+    const raw = text.get(canonicalUrl(u.page.url));
+    if (!raw) {
+      stillUnread.push(u);
+      continue;
+    }
+    const analysis = analyzePage({ ...u.page, rawContent: raw }, fetchedAt);
+    if (analysis.offer) offers.push(analysis.offer);
+    else stillUnread.push(u);
+  }
+
+  return { offers, stillUnread, creditsUsed: response.creditsUsed };
 }

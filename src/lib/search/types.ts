@@ -53,6 +53,8 @@ export type Offer = {
   evidence?: string;
   /** Specs read from the same page, when it listed them. */
   details?: LuggageDetails;
+  /** The colour this listing names, when its title names one. */
+  colour?: string;
 };
 
 /**
@@ -74,6 +76,8 @@ export type LuggageDetails = {
   tsaLock?: boolean;
   /** e.g. "10-year". */
   warranty?: string;
+  /** Colours the page's variant picker offers, e.g. ["Black", "Ice Blue"]. */
+  colours?: string[];
 };
 
 /** A distinct physical product with every offer we found for it. */
@@ -101,6 +105,23 @@ export type SearchProduct = {
   hasMajorRetailer: boolean;
   /** Specs merged from the offers' pages. Absent when no page listed any. */
   details?: LuggageDetails;
+  /** Every colour seen for this product across its listings and pages. */
+  colours?: string[];
+  /**
+   * How closely the product matches the words searched, 0–1. Products that
+   * match every word are listed before partial matches.
+   */
+  relevance?: number;
+};
+
+/**
+ * A retailer page for the product that we found but couldn't read a price
+ * from. Shown as a link ("check price on Samsonite.ca"), never as a price.
+ */
+export type AlsoCheck = {
+  retailer: string;
+  url: string;
+  title: string;
 };
 
 /** Structured interpretation of a natural-language query. */
@@ -132,6 +153,15 @@ export type SearchResponse = {
    * to be newer than it is.
    */
   cached?: { fetchedAt: string; ageMinutes: number };
+  /** Store pages found without a readable price — links only. */
+  alsoCheck?: AlsoCheck[];
+  /**
+   * "partial" while store pages are still being read, "final" once done.
+   * Streamed searches send a partial first so results appear sooner.
+   */
+  phase?: "partial" | "final";
+  /** Research credits this search spent (0 when served from cache). */
+  creditsUsed?: number;
 };
 
 /** Thrown when no price provider is usable. Surfaced to the user as-is. */

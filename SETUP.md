@@ -32,12 +32,17 @@ Live luggage price monitoring across Canadian retailers.
 
 ## 2. Web research: Tavily (free)
 
-All product research goes through **Tavily** — one search per lookup.
+All product research goes through **Tavily**. A new search sends two
+searches at once — every Canadian store, and the big chains only — then reads
+the store pages whose excerpt had no price. First results show in a few
+seconds; the rest fill in as pages are read.
 
 | | |
 | --- | --- |
 | Free plan | **1,000 credits a month**, no card |
-| Cost per lookup | **1 credit** (basic depth — the default) |
+| Cost per new search | **2 credits** for the two searches + **~1–2** for reading pages (1 per 5 pages) |
+| Repeat search (6 h) | **free** — served from cache |
+| Daily price check | **~1–2 credits** per tracked product (one search, ≤ 3 pages) |
 | Get a key | [app.tavily.com](https://app.tavily.com) |
 
 Put it in `.env.local` as `TAVILY_API_KEY`, restart, then run
@@ -54,7 +59,7 @@ Put it in `.env.local` as `TAVILY_API_KEY`, restart, then run
 3. Optional: set a per-key usage limit in the Tavily dashboard.
 
 To prove the real path end to end: `npm run diagnose -- --live "samsonite
-freeform 21"` (1 credit). It prints every page Tavily returned, which became a
+freeform 21"` (~3–4 credits). It prints every page Tavily returned, which became a
 price and why the rest didn't, and saves the raw response to
 `tavily-response.json`.
 

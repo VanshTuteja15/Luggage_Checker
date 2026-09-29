@@ -1,8 +1,9 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiFetch, ApiRequestError } from "@/lib/api-client";
+import { apiFetch, apiStream, ApiRequestError } from "@/lib/api-client";
 import type { ProviderBudget } from "@/lib/search/quota";
 import type { SearchProduct, SearchResponse } from "@/lib/search/types";
 import type { TrackedProduct, UserSettings } from "@/lib/types";
@@ -211,6 +212,84 @@ export function useSearch() {
       void qc.invalidateQueries({ queryKey: keys.provider });
     },
   });
+}
+
+export type SearchStatus = "idle" | "searching" | "reading" | "done" | "error";
+
+type StreamLine =
+  | { type: "partial" | "final"; data: SearchApiResponse }
+  | { type: "error"; error: string; status?: number };
+
+/**
+ * Search with progressive results: the first results arrive while store
+ * pages are still being read ("reading"), then the complete answer
+ * ("done"). A new search cancels the one in flight.
+ */
+export function useStreamingSearch() {
+  const qc = useQueryClient();
+  const [status, setStatus] = useState<SearchStatus>("idle");
+  const [data, setData] = useState<SearchApiResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const run = useCallback(
+    async (input: { query: string; refresh?: boolean; allRetailers?: boolean }) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      setStatus("searching");
+      setData(null);
+      setError(null);
+
+      let finished = false;
+      try {
+        await apiStream(
+          "/api/search",
+          { ...input, mode: "compare", stream: true },
+          (raw) => {
+            if (controller.signal.aborted) return;
+            const line = raw as StreamLine;
+            if (line.type === "partial") {
+              setData(line.data);
+              setStatus("reading");
+            } else if (line.type === "final") {
+              finished = true;
+              setData(line.data);
+              setStatus("done");
+            } else if (line.type === "error") {
+              finished = true;
+              setError(line.error || "Search failed.");
+              setStatus("error");
+            }
+          },
+          controller.signal,
+        );
+        if (!finished && !controller.signal.aborted) {
+          setError("The connection closed before the search finished. Try again.");
+          setStatus("error");
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError(errorMessage(err, "Search failed."));
+        setStatus("error");
+      } finally {
+        if (!controller.signal.aborted) void qc.invalidateQueries({ queryKey: keys.provider });
+      }
+    },
+    [qc],
+  );
+
+  return {
+    run,
+    status,
+    data,
+    error,
+    /** True until the final answer (or an error) arrives. */
+    isPending: status === "searching" || status === "reading",
+  };
 }
 
 export function useSearchProvider(enabled = true) {

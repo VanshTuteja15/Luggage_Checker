@@ -28,7 +28,8 @@ import {
   pickListingPrice,
 } from "../src/lib/search/extract";
 import { ProviderError } from "../src/lib/search/errors";
-import { resetTavilyState, tavilyCreditStatus, tavilySearch } from "../src/lib/tavily";
+import { resetTavilyState, tavilyCreditStatus, tavilyExtract, tavilySearch } from "../src/lib/tavily";
+import { brandStoreFor } from "../src/lib/retailers";
 import type { SearchProduct } from "../src/lib/search/types";
 
 /* ------------------------------------------------------------------ */
@@ -144,9 +145,32 @@ type StubOpts = {
   geminiBusy?: boolean;
   /** Emulate Gemini hanging until aborted. */
   geminiHangs?: boolean;
+  /** Handles POST api.tavily.com/extract. Default: every page fails (free). */
+  extract?: (body: Record<string, unknown>, init?: RequestInit) => Response | Promise<Response>;
 };
 
-const calls = { search: 0, usage: 0, gemini: 0, bodies: [] as Record<string, unknown>[], headers: [] as Headers[] };
+const calls = {
+  search: 0,
+  usage: 0,
+  gemini: 0,
+  extract: 0,
+  bodies: [] as Record<string, unknown>[],
+  headers: [] as Headers[],
+  extractBodies: [] as Record<string, unknown>[],
+};
+
+function extractJson(ok: { url: string; text: string }[], failed: string[] = [], credits?: number): Response {
+  return new Response(
+    JSON.stringify({
+      results: ok.map((r) => ({ url: r.url, raw_content: r.text })),
+      failed_results: failed.map((url) => ({ url, error: "blocked" })),
+      response_time: 0.8,
+      ...(credits === undefined ? {} : { usage: { credits } }),
+      request_id: "ext-test",
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
 
 function tavilyJson(results: TavilyRow[], credits = 1): Response {
   return new Response(
@@ -197,8 +221,10 @@ function installStub(opts: StubOpts = {}) {
   calls.search = 0;
   calls.usage = 0;
   calls.gemini = 0;
+  calls.extract = 0;
   calls.bodies = [];
   calls.headers = [];
+  calls.extractBodies = [];
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -214,6 +240,14 @@ function installStub(opts: StubOpts = {}) {
       calls.bodies.push(body);
       calls.headers.push(new Headers(init?.headers));
       return opts.search ? opts.search(body, init) : tavilyJson(PAGES);
+    }
+
+    if (url === "https://api.tavily.com/extract") {
+      calls.extract += 1;
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      calls.extractBodies.push(body);
+      if (opts.extract) return opts.extract(body, init);
+      return extractJson([], (body.urls as string[]) ?? []);
     }
 
     if (url.includes("generativelanguage.googleapis.com")) {
@@ -258,6 +292,10 @@ function geminiJson(payload: unknown): Response {
 
 let passed = 0;
 const failures: string[] = [];
+
+function isAscending(values: number[]): boolean {
+  return values.every((v, i) => i === 0 || values[i - 1] <= v);
+}
 
 function check(label: string, condition: boolean, detail = "") {
   if (condition) {
@@ -480,9 +518,15 @@ async function main() {
   installStub();
   await search("samsonite carry on luggage");
   {
-    const body = calls.bodies[0] ?? {};
+    const body = calls.bodies.find((b) => b.include_domains_mode === "prefer") ?? {};
     const headers = calls.headers[0];
-    check("exactly one Tavily call for one search", calls.search === 1, `${calls.search}`);
+    check("two searches for one lookup (general + major chains), sent together", calls.search === 2, `${calls.search}`);
+    const sweep = calls.bodies.find((b) => b.include_domains_mode === "restrict");
+    const sweepDomains = (sweep?.include_domains as string[] | undefined) ?? [];
+    check("second search is restricted to the big chains", sweepDomains.includes("walmart.ca") && sweepDomains.includes("amazon.ca") && sweepDomains.includes("bestbuy.ca"), sweepDomains.join(","));
+    check("…without the brand store (it leads the general search already)", !sweepDomains.includes("samsonite.ca"));
+    check("…and without any US storefront", !sweepDomains.some((d) => d.endsWith(".com") && !["thebay.com", "hbc.com", "hudsonsbay.com", "londondrugs.com"].includes(d)), sweepDomains.join(","));
+    check("…at the same 1-credit depth", sweep?.search_depth === "basic" && sweep?.auto_parameters === false);
     check("search_depth is basic (1 credit)", body.search_depth === "basic", String(body.search_depth));
     check("auto_parameters is off (it can silently double the cost)", body.auto_parameters === false);
     check("include_usage is on (real cost is metered)", body.include_usage === true);
@@ -508,10 +552,10 @@ async function main() {
   installStub();
   await search("samsonite luggage");
   await search("samsonite luggage");
-  check("same search twice → 1 HTTP call", calls.search === 1, `${calls.search}`);
+  check("same search twice → the 2 searches are sent once", calls.search === 2, `${calls.search}`);
   await search("Luggage  SAMSONITE!");
-  check("different word order / casing / punctuation → still 1 call", calls.search === 1, `${calls.search}`);
-  check("credits spent: 1", tavilyCreditStatus().usedEstimate === 1, `${tavilyCreditStatus().usedEstimate}`);
+  check("different word order / casing / punctuation → still no new call", calls.search === 2, `${calls.search}`);
+  check("credits spent: 2", tavilyCreditStatus().usedEstimate === 2, `${tavilyCreditStatus().usedEstimate}`);
 
   section("B4. Two identical searches at once share one call");
   installStub({
@@ -521,7 +565,7 @@ async function main() {
     },
   });
   await Promise.all([search("travelpro maxlite"), search("travelpro maxlite")]);
-  check("concurrent duplicates → 1 HTTP call", calls.search === 1, `${calls.search}`);
+  check("concurrent duplicates → sent once (2 searches, not 4)", calls.search === 2, `${calls.search}`);
 
   section("B5. An empty answer isn't bought twice");
   installStub({ search: () => tavilyJson([]) });
@@ -705,7 +749,7 @@ async function main() {
   installStub();
   const heuristic = await search("samsonite carry on luggage");
   show(heuristic.products);
-  check("one Tavily call", calls.search === 1, `${calls.search}`);
+  check("two Tavily searches, nothing else", calls.search === 2, `${calls.search}`);
   check("provider reported as tavily", heuristic.provider === "tavily");
   check("16 of 22 pages became offers (6 junk pages rejected)", heuristic.offersFound === 16, `got ${heuristic.offersFound}`);
   check("returned products", heuristic.products.length > 0);
@@ -719,8 +763,9 @@ async function main() {
     check("…and the 28\" listings into one product", ff28.length === 1 && ff28[0].retailerCount === 3, `${ff28.length} products`);
   }
 
-  section("C2. Full pipeline — Gemini grouping");
+  section("C2. Full pipeline — Gemini grouping (opt-in)");
   process.env.GEMINI_API_KEY = "test-key";
+  process.env.SEARCH_AI_GROUPING = "true";
   installStub({ gemini: true });
   const llm = await search("samsonite carry on luggage");
   show(llm.products);
@@ -736,8 +781,9 @@ async function main() {
   check("the listing Gemini forgot (Travelpro) was recovered", llm.products.some((p) => p.offers.some((o) => o.retailerKey === "Travelpro")));
   const shown = llm.products.reduce((n, p) => n + p.offers.length, 0);
   check("no real listing vanished", shown === 15, `${shown} shown (16 found, 1 Amazon duplicate)`);
-  check("a major-retailer product ranks first", llm.products[0]?.hasMajorRetailer === true);
+  check("full matches ranked cheapest first", isAscending(llm.products.filter((p) => (p.relevance ?? 1) >= 0.99).map((p) => p.lowestPrice)));
   delete process.env.GEMINI_API_KEY;
+  delete process.env.SEARCH_AI_GROUPING;
 
   section("C3. Retailer settings filter");
   installStub();
@@ -766,7 +812,7 @@ async function main() {
   const omni = withSpecs.products[0];
   check("one product, two retailers", withSpecs.products.length === 1 && omni?.retailerCount === 2);
   check("specs merged onto the product", omni?.details?.dimensions === "27 x 18.5 x 11 in" && omni?.details?.weight === "9.5 lb", JSON.stringify(omni?.details));
-  check("specs cost no extra call", calls.search === 1);
+  check("specs cost no extra call", calls.search === 2 && calls.extract === 0, `${calls.search} searches, ${calls.extract} reads`);
 
   section("C6. Nothing found → ONE broader query, then stop");
   {
@@ -783,7 +829,7 @@ async function main() {
     });
     const r = await search("Samsonite Rhapsody 360 Spinner Expandable Medium Luggage Black");
     check("recovered with a broader query", r.products.length > 0);
-    check("2 calls at most", calls.search === 2, `${calls.search}`);
+    check("one broader rung at most (2 searches per rung)", calls.search === 4, `${calls.search}`);
     check("the user is told the wording changed", r.warnings.some((w) => /instead/i.test(w)), r.warnings.join(" | "));
     checkProductInvariants(r.products, "broadened");
   }
@@ -798,7 +844,7 @@ async function main() {
   });
   {
     const r = await search("samsonite freeform review");
-    check("no broadening when pages exist", calls.search === 1, `${calls.search}`);
+    check("no broadening when pages exist", calls.search === 2, `${calls.search}`);
     check("explains what happened", r.warnings.some((w) => /none showed a clear Canadian price/i.test(w)), r.warnings.join(" | "));
     check("returns empty, not fake", r.products.length === 0);
   }
@@ -808,7 +854,7 @@ async function main() {
   {
     const r = await search("Zzzqx Nonexistent 9000 Spinner Purple");
     check("empty result, not an error", r.products.length === 0);
-    check("never more than 2 calls", calls.search <= 2, `${calls.search}`);
+    check("never more than 2 rungs (4 searches)", calls.search <= 4, `${calls.search}`);
     check("tells the user what to type", r.warnings.some((w) => /Try just the brand and model/i.test(w)), r.warnings.join(" | "));
   }
 
@@ -870,6 +916,7 @@ async function main() {
 
   section("C12. Gemini hanging never starves the research call");
   process.env.GEMINI_API_KEY = "test-key";
+  process.env.SEARCH_AI_GROUPING = "true";
   process.env.SEARCH_BUDGET_MS = "50000";
   installStub({ geminiHangs: true });
   {
@@ -884,6 +931,7 @@ async function main() {
   }
   delete process.env.SEARCH_BUDGET_MS;
   delete process.env.GEMINI_API_KEY;
+  delete process.env.SEARCH_AI_GROUPING;
 
   section("C13. A hanging database never blocks research");
   process.env.SEARCH_DB_TIMEOUT_MS = "300";
@@ -968,6 +1016,142 @@ async function main() {
   }
 
   /* ============ D. Separation from the Add Product workflow ========= */
+
+  /* ============ F. More stores: brand store, big chains, page reading = */
+
+  const OUTLINE_SAMSONITE = "https://www.samsonite.ca/en/luggage/carry-on/outline-pro-carry-on-spinner/1330471041.html";
+  const OUTLINE_WALMART = "https://www.walmart.ca/en/ip/samsonite-outline-pro-carry-on/6000205";
+  const OUTLINE_HELP = "https://www.samsonite.ca/en/lock-instructions.html";
+  const outlinePages = (): TavilyRow[] => [
+    productPage({ name: "Samsonite Outline Pro Spinner Carry-On", site: "Amazon.ca", url: "https://www.amazon.ca/dp/OUTLINE1", price: "$289.95" }),
+    { title: "Outline Pro Carry-On Spinner | Samsonite Canada", url: OUTLINE_SAMSONITE, content: "Outline Pro Carry-On Spinner. Ultra-light Roxkin shell with a 10-year warranty.", score: 0.9, raw_content: null },
+    { title: "Samsonite Outline Pro Carry-On Spinner - Walmart.ca", url: OUTLINE_WALMART, content: "Samsonite Outline Pro Carry-On Spinner, hardside.", score: 0.8, raw_content: null },
+    { title: "Lock instructions | Samsonite", url: OUTLINE_HELP, content: "How to set your TSA lock combination.", score: 0.4, raw_content: null },
+    productPage({ name: "Samsonite Outline Pro Luggage Cover Carry-On", site: "Amazon.ca", url: "https://www.amazon.ca/dp/COVER1", price: "$39.99" }),
+    productPage({ name: "Samsonite Freeform Carry-On Spinner", site: "Walmart Canada", url: "https://www.walmart.ca/en/ip/freeform/600099", price: "$199.99" }),
+  ];
+  const samsoniteProductText = [
+    "Home / Luggage / Carry-On",
+    "Outline Pro Carry-On Spinner",
+    "$339.99",
+    "Colour: Black Ice Blue Sage",
+    "Add to cart",
+    "10-year warranty",
+    "You may also like",
+    "Freeform Carry-On Spinner $249.99",
+  ].join("\n");
+
+  section("F1. Store pages without a price are read — brand store first");
+  installStub({
+    search: () => tavilyJson(outlinePages()),
+    extract: () => extractJson([{ url: OUTLINE_SAMSONITE, text: samsoniteProductText }], [OUTLINE_WALMART], 0),
+  });
+  {
+    const partials: SearchProduct[][] = [];
+    const r = await search("samsonite outline pro", { onPartial: (p) => partials.push(p.products) });
+    show(r.products);
+    const urls = (calls.extractBodies[0]?.urls as string[] | undefined) ?? [];
+    check("one page-reading call", calls.extract === 1, `${calls.extract}`);
+    check("the brand store's page is read first", urls[0] === OUTLINE_SAMSONITE, urls.join(", "));
+    check("the Walmart product page is read too", urls.includes(OUTLINE_WALMART));
+    check("a help page that isn't the product is NOT read (no credit wasted)", !urls.includes(OUTLINE_HELP));
+    check("reading uses basic depth (1 credit per 5 pages)", calls.extractBodies[0]?.extract_depth === "basic");
+
+    const outline = r.products.find((p) => /outline pro/i.test(p.name) && !/cover/i.test(p.name));
+    const sam = outline?.offers.find((o) => o.retailer === "Samsonite.ca");
+    check("Samsonite.ca price read from its own page", sam?.price === 339.99, `${sam?.price}`);
+    check("…next to Amazon, cheapest first", outline?.offers[0]?.retailer === "Amazon.ca" && outline?.lowestPrice === 289.95, outline?.offers.map((o) => `${o.retailer} ${o.price}`).join(", "));
+    check("the colours Samsonite offers are listed", ["Black", "Ice Blue", "Sage"].every((c) => outline?.colours?.includes(c)), JSON.stringify(outline?.colours));
+    check("the bag is named the way the brand store names it", outline?.name === "Samsonite Outline Pro Carry-On Spinner", outline?.name);
+    check("\"You may also like\" prices are ignored", !outline?.offers.some((o) => o.price === 249.99));
+
+    check("first results were sent before the pages were read", partials.length === 1 && !partials[0].some((p) => p.offers.some((o) => o.retailer === "Samsonite.ca")));
+    check("the page that couldn't be read is offered as a link, not a price", r.alsoCheck?.some((a) => a.retailer === "Walmart.ca" && a.url === OUTLINE_WALMART) === true, JSON.stringify(r.alsoCheck));
+    check("result says it's final", r.phase === "final");
+
+    const cover = r.products.findIndex((p) => /cover/i.test(p.name));
+    const freeform = r.products.findIndex((p) => /freeform/i.test(p.name));
+    check("a $39.99 cover is NOT merged into the suitcase", !outline?.offers.some((o) => o.price === 39.99));
+    check("the searched bag is listed first", r.products[0] === outline, r.products.map((p) => p.name).join(" | "));
+    check("a different model (partial match) comes after it", freeform > 0);
+    check("the accessory comes last", cover === r.products.length - 1, `${cover} of ${r.products.length}`);
+  }
+
+  section("F2. Page reading never crosses the credit cap");
+  process.env.TAVILY_MONTHLY_CREDIT_CAP = "2";
+  installStub({ search: () => tavilyJson(outlinePages()), extract: () => extractJson([{ url: OUTLINE_SAMSONITE, text: samsoniteProductText }]) });
+  {
+    const r = await search("samsonite outline pro");
+    check("the 2 searches fit the cap and ran", calls.search === 2, `${calls.search}`);
+    check("reading would cross it → not sent at all", calls.extract === 0, `${calls.extract}`);
+    check("search results are still shown", r.products.length > 0);
+    check("the brand store is offered as a link instead", r.alsoCheck?.some((a) => a.retailer === "Samsonite.ca") === true, JSON.stringify(r.alsoCheck));
+  }
+  delete process.env.TAVILY_MONTHLY_CREDIT_CAP;
+
+  section("F3. Page reading is billed the way Tavily bills it");
+  installStub({ extract: (body) => extractJson(((body.urls as string[]) ?? []).map((url) => ({ url, text: "page" }))) });
+  {
+    const five = ["a", "b", "c", "d", "e"].map((x) => `https://shop.ca/p/${x}`);
+    const r1 = await tavilyExtract({ urls: five });
+    check("5 pages read, no usage figure → 1 credit", r1.creditsUsed === 1 && tavilyCreditStatus().usedEstimate === 1, `${r1.creditsUsed}`);
+    const r2 = await tavilyExtract({ urls: five });
+    check("the same pages again → served from cache, free", r2.creditsUsed === 0 && r2.cachedCount === 5 && calls.extract === 1, `${calls.extract} calls`);
+    const three = ["f", "g", "h"].map((x) => `https://shop.ca/p/${x}`);
+    await tavilyExtract({ urls: three });
+    check("3 more pages → carried, not yet a credit", tavilyCreditStatus().usedEstimate === 1, `${tavilyCreditStatus().usedEstimate}`);
+    await tavilyExtract({ urls: ["i", "j"].map((x) => `https://shop.ca/p/${x}`) });
+    check("…2 more make 5 → 1 more credit", tavilyCreditStatus().usedEstimate === 2, `${tavilyCreditStatus().usedEstimate}`);
+  }
+  installStub({ extract: (body) => extractJson([], (body.urls as string[]) ?? []) });
+  {
+    const r = await tavilyExtract({ urls: ["https://shop.ca/p/fail"] });
+    check("pages that fail aren't charged", r.creditsUsed === 0 && tavilyCreditStatus().usedEstimate === 0 && r.failed.length === 1);
+  }
+  installStub({ extract: (_body, init) => hangUntilAborted(init) });
+  {
+    const r = await tavilyExtract({ urls: ["https://shop.ca/p/slow"], timeoutSeconds: 1 });
+    check("a timed-out read counts as spent (Tavily may have billed it)", r.creditsUsed === 1 && tavilyCreditStatus().usedEstimate === 1, `${r.creditsUsed}`);
+  }
+  installStub({ usage: () => usageJson(0, { paygo_limit: 100 }) });
+  {
+    const r = await tavilyExtract({ urls: ["https://shop.ca/p/paygo"] });
+    check("pay-as-you-go on → page reading refused, nothing sent", calls.extract === 0 && r.failed.length === 1);
+  }
+
+  section("F4. Brand store detection and title clean-up");
+  check("samsonite outline pro → Samsonite.ca", brandStoreFor("samsonite outline pro") === "Samsonite.ca");
+  check("Briggs & Riley Baseline → Briggs & Riley", brandStoreFor("Briggs & Riley Baseline") === "Briggs & Riley");
+  check("a generic search has no brand store", brandStoreFor("hardside luggage set under $400") === null);
+  check(
+    "Amazon's \"Model Number\" tail is dropped",
+    cleanPageTitle("Amazon.ca: Samsonite Outline Pro Spinner Carry-On, Model Number: 143310-1041").name === "Samsonite Outline Pro Spinner Carry-On",
+    cleanPageTitle("Amazon.ca: Samsonite Outline Pro Spinner Carry-On, Model Number: 143310-1041").name,
+  );
+
+  section("F5. Sweep can be turned off; reading can be turned off");
+  process.env.SEARCH_RETAILER_SWEEP = "false";
+  process.env.TAVILY_EXTRACT_MAX_PAGES = "0";
+  installStub({ search: () => tavilyJson(outlinePages()) });
+  await search("samsonite outline pro");
+  check("SEARCH_RETAILER_SWEEP=false → 1 search", calls.search === 1, `${calls.search}`);
+  check("TAVILY_EXTRACT_MAX_PAGES=0 → no page reading", calls.extract === 0, `${calls.extract}`);
+  delete process.env.SEARCH_RETAILER_SWEEP;
+  delete process.env.TAVILY_EXTRACT_MAX_PAGES;
+
+  section("F6. Daily price checks use the economical depth");
+  installStub({ search: () => tavilyJson(outlinePages()), extract: (body) => extractJson([], (body.urls as string[]) ?? []) });
+  {
+    await search("samsonite outline pro", { depth: "lite" });
+    const urls = (calls.extractBodies[0]?.urls as string[] | undefined) ?? [];
+    check("lite → 1 search (no major-chains sweep)", calls.search === 1, `${calls.search}`);
+    check("lite → at most 3 pages read", urls.length <= 3, `${urls.length}`);
+    await search("samsonite outline pro");
+    // The full search must run its own major-chains search (a lite answer
+    // is never served in its place) — but the identical general search is
+    // reused from cache, so only 1 new call is paid for.
+    check("a lite result is never served to a full search; the shared search is reused free", calls.search === 2, `${calls.search}`);
+  }
 
   section("D1. Research never creates, imports or stores products");
   {

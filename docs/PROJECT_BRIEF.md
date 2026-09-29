@@ -263,6 +263,11 @@ Ordered by priority. For each question: why it matters, the cheapest way to answ
 | **Tavily replaces SerpAPI for all product research** (28 Sep 2026) | Direct retailer pages and links; price + stock + specs from one call; 1,000 free credits/month |
 | One Tavily search per lookup, basic depth, 20 results with page text | Minimum credits: no per-field searches, `auto_parameters` never sent |
 | App-enforced monthly credit cap (950), checked against Tavily's own usage | A call that would exceed the free plan is never sent |
+| **Two searches in parallel + page reading** (29 Sep 2026) | One general search came back led by the brand's own store with most prices missing from ~150-char excerpts (Outline Pro: 2 products, Samsonite.ca absent). Now: general + major-chains-only search sent together (no extra wait), then product pages without a price are read with Tavily Extract (1 credit per 5 pages), brand store first. ~3–4 credits per new search, still capped at $0 |
+| Results streamed in two steps | First results in ~3 s while pages are read; final list replaces them |
+| Ranking: best match, then lowest price | Client asked for the cheapest store first; accessories and other models follow |
+| Gemini grouping off by default | Added ~4 s per search; the built-in grouping is instant and tested |
+| Daily price checks use "lite" depth | One search + ≤ 3 page reads per tracked product keeps the cron inside the free plan |
 | Prices only from Canadian storefront pages, with the page words kept as evidence | No fake results; USD storefronts, list/was/instalment amounts rejected |
 | Research is read-only; tracking/adding products stays in its own workflow | Keeps research and product creation separate |
 | SerpAPI as the primary price source | Free tier, real Google Shopping Canada data |

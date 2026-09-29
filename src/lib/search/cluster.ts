@@ -15,16 +15,10 @@ import { callGeminiJSON, geminiConfigured, type GeminiSchema } from "@/lib/gemin
 import { RETAILER_INFO } from "@/lib/retailers";
 import type { Offer, SearchMode, SearchProduct } from "./types";
 
-/** Colour words that appear in luggage titles, for variant separation. */
-const COLOUR_WORDS =
-  /\b(black|white|grey|gray|silver|navy|blue|red|green|teal|purple|pink|burgundy|maroon|brown|tan|beige|gold|rose gold|rose|charcoal|graphite|champagne|olive|khaki|orange|yellow|ivory|cream|bronze|copper|coral)\b/i;
+import { COLOUR_WORDS, extractColour } from "./colours";
+import { isAccessoryTitle } from "./extract";
 
-/** Pull a colour out of a listing title, or "" when it names none. */
-export function extractColour(title: string): string {
-  const m = title.match(COLOUR_WORDS);
-  if (!m) return "";
-  return m[1].replace(/\b\w/g, (c) => c.toUpperCase());
-}
+export { extractColour };
 
 /** The same colour vocabulary, as single tokens, for signature building. */
 const COLOUR_TOKENS = new Set(
@@ -112,7 +106,7 @@ export function extractSize(title: string): string {
  * "Alpha 4"), sizes are compared separately, and colour is ignored unless
  * the caller is browsing variants.
  */
-type Identity = { tokens: Set<string>; brand: string; size: string; colour: string };
+type Identity = { tokens: Set<string>; brand: string; size: string; colour: string; accessory: boolean };
 
 /** Two-digit numbers in this range are almost always a size in inches. */
 function isSizeNumber(t: string): boolean {
@@ -139,6 +133,7 @@ function identify(title: string): Identity {
     brand: meaningful.find((t) => !/^\d+$/.test(t)) ?? "",
     size: extractSize(title),
     colour: extractColour(title).toLowerCase(),
+    accessory: isAccessoryTitle(title),
   };
 }
 
@@ -150,6 +145,8 @@ function identify(title: string): Identity {
  */
 function sameProduct(a: Identity, b: Identity, mode: SearchMode): boolean {
   if (a.brand && b.brand && a.brand !== b.brand) return false;
+  // A cover for the bag is never the bag.
+  if (a.accessory !== b.accessory) return false;
   if (a.size && b.size && a.size !== b.size) return false;
   if (mode === "catalog" && a.colour !== b.colour) return false;
 
@@ -218,6 +215,16 @@ function buildProduct(
   const highest = Math.max(...prices);
 
   const thumbnail = deduped.find((o) => o.thumbnail)?.thumbnail ?? null;
+
+  // Every colour seen for this product — from ALL its listings, including
+  // the pricier duplicates dropped above, and from the stores' colour pickers.
+  const colourMap = new Map<string, string>();
+  for (const o of offers) {
+    for (const c of [o.colour, ...(o.details?.colours ?? [])]) {
+      if (c && !colourMap.has(c.toLowerCase())) colourMap.set(c.toLowerCase(), c);
+    }
+  }
+  const colours = [...colourMap.values()].slice(0, 16);
   const key = slugify(`${meta.brand} ${meta.model} ${meta.color}`.trim()) || slugify(meta.name);
 
   return {
@@ -238,6 +245,7 @@ function buildProduct(
     hasMajorRetailer: deduped.some(
       (o) => o.retailerKey !== null && RETAILER_INFO[o.retailerKey]?.category === "major",
     ),
+    ...(colours.length > 0 ? { colours } : {}),
   };
 }
 
@@ -245,7 +253,11 @@ function buildProduct(
 /*  Heuristic clustering (no LLM)                                     */
 /* ------------------------------------------------------------------ */
 
-export function clusterHeuristic(offers: Offer[], mode: SearchMode = "compare"): SearchProduct[] {
+export function clusterHeuristic(
+  offers: Offer[],
+  mode: SearchMode = "compare",
+  brandHint: string | null = null,
+): SearchProduct[] {
   // Greedy grouping: each listing joins the first group whose founding
   // listing is the same product, else starts a new group. Order-insensitive
   // on words, so "Rhapsody 360 Medium Spinner – Samsonite" and "Samsonite
@@ -263,17 +275,21 @@ export function clusterHeuristic(offers: Offer[], mode: SearchMode = "compare"):
   const products: SearchProduct[] = [];
 
   for (const { offers: group } of groups) {
-    const title = stripRetailerNames(group[0].title);
+    const title = displayTitle(group);
     const words = title.split(/\s+/);
-    const brand = words[0] ?? "Unknown";
-    const model = words.slice(1, 4).join(" ") || title;
+    // A store that leaves the brand out of its title ("Outline Pro" on a
+    // dealer's site) still sells the brand that was searched for.
+    const hinted = brandHint && !title.toLowerCase().includes(brandHint.toLowerCase());
+    const brand = hinted ? brandHint : (words[0] ?? "Unknown");
+    const model = (hinted ? words.slice(0, 3) : words.slice(1, 4)).join(" ") || title;
+    const name = hinted ? `${brandHint} ${title}` : title;
 
     const product = buildProduct(group, {
-      name: title.slice(0, 140) || "Unknown product",
+      name: name.slice(0, 140) || "Unknown product",
       brand,
       model,
       color: extractColour(group[0].title),
-      size: extractSize(group[0].title),
+      size: group.map((o) => extractSize(o.title)).find(Boolean) ?? "",
       productType: null,
       upc: null,
     });
@@ -281,6 +297,24 @@ export function clusterHeuristic(offers: Offer[], mode: SearchMode = "compare"):
   }
 
   return products;
+}
+
+/**
+ * The clearest name among a group's listings: the brand's own store names
+ * its products best; otherwise the shortest title that still has three
+ * words (marketplace titles run long with keyword stuffing).
+ */
+function displayTitle(group: Offer[]): string {
+  const brandStore = group.find(
+    (o) => o.retailerKey && RETAILER_INFO[o.retailerKey]?.category === "specialty",
+  );
+  if (brandStore) return stripRetailerNames(brandStore.title);
+
+  const titles = group
+    .map((o) => stripRetailerNames(o.title))
+    .filter((t) => t.split(/\s+/).length >= 3)
+    .sort((a, b) => a.length - b.length);
+  return titles[0] ?? stripRetailerNames(group[0].title);
 }
 
 /* ------------------------------------------------------------------ */
@@ -294,19 +328,30 @@ export function clusterHeuristic(offers: Offer[], mode: SearchMode = "compare"):
  * something unusable. Any offer the model failed to place is recovered by
  * the heuristic, so no real listing is ever silently lost.
  */
+/**
+ * AI grouping is opt-in (SEARCH_AI_GROUPING=true). Live runs showed Gemini
+ * adding ~4 seconds to every search for grouping the instant heuristic
+ * already does well — speed wins by default.
+ */
+export function aiGroupingEnabled(): boolean {
+  return process.env.SEARCH_AI_GROUPING === "true";
+}
+
 export async function clusterOffers(
   offers: Offer[],
-  opts: { timeoutMs?: number; mode?: SearchMode } = {},
+  opts: { timeoutMs?: number; mode?: SearchMode; brandHint?: string | null; useAi?: boolean } = {},
 ): Promise<SearchProduct[]> {
   const mode: SearchMode = opts.mode ?? "compare";
+  const hint = opts.brandHint ?? null;
+  const heuristic = (list: Offer[]) => clusterHeuristic(list, mode, hint);
 
   if (offers.length === 0) return [];
-  if (!geminiConfigured()) return clusterHeuristic(offers, mode);
+  if (!(opts.useAi ?? aiGroupingEnabled()) || !geminiConfigured()) return heuristic(offers);
 
   // Out of time — fall back to heuristic grouping rather than returning
   // nothing. Real prices grouped imperfectly beat an empty result.
   const timeoutMs = opts.timeoutMs ?? 25_000;
-  if (timeoutMs < 4_000) return clusterHeuristic(offers, mode);
+  if (timeoutMs < 4_000) return heuristic(offers);
 
   const listing = offers
     .map((o, i) => `${i} | ${o.retailer} | $${o.price.toFixed(2)} | ${o.title.slice(0, 130)}`)
@@ -339,7 +384,7 @@ Rules:
     });
 
     const clusters = parsed?.products;
-    if (!Array.isArray(clusters) || clusters.length === 0) return clusterHeuristic(offers, mode);
+    if (!Array.isArray(clusters) || clusters.length === 0) return heuristic(offers);
 
     const used = new Set<number>();
     const products: SearchProduct[] = [];
@@ -379,10 +424,10 @@ Rules:
 
     // Recover anything the model dropped.
     const leftovers = offers.filter((_, i) => !used.has(i));
-    if (leftovers.length > 0) products.push(...clusterHeuristic(leftovers, mode));
+    if (leftovers.length > 0) products.push(...heuristic(leftovers));
 
-    return products.length > 0 ? products : clusterHeuristic(offers, mode);
+    return products.length > 0 ? products : heuristic(offers);
   } catch {
-    return clusterHeuristic(offers, mode);
+    return heuristic(offers);
   }
 }
