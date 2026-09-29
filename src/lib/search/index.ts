@@ -19,7 +19,7 @@
 /* ------------------------------------------------------------------ */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { RETAILER_INFO, retailerRank } from "@/lib/retailers";
+import { RETAILER_INFO, brandStoreFor, retailerRank } from "@/lib/retailers";
 import { broadenLadder, broadenedNotice } from "./broaden";
 import { clusterOffers } from "./cluster";
 import { isAccessoryTitle, queryMatch } from "./extract";
@@ -723,7 +723,9 @@ async function finish(
   let products = await clusterOffers(offers, {
     timeoutMs: opts.deadline.budget(6_000, 1_500),
     mode: opts.mode,
-    brandHint: intent.brand ? titleCase(intent.brand) : null,
+    brandHint: intent.brand
+      ? titleCase(intent.brand)
+      : (brandStoreFor(intent.terms)?.replace(/\.(?:ca|com)$/i, "") ?? null),
   });
 
   // ── Filter ───────────────────────────────────────────────────

@@ -11,7 +11,7 @@ export const COLOUR_WORDS =
   /\b(black|white|grey|gray|silver|navy|blue|red|green|teal|purple|pink|burgundy|maroon|brown|tan|beige|gold|rose gold|rose|charcoal|graphite|champagne|olive|khaki|orange|yellow|ivory|cream|bronze|copper|coral|lilac|lavender|mint|turquoise|aqua|sage|taupe|mocha|cognac|indigo)\b/i;
 
 /** Words stores put in front of a colour: "Ice Blue", "Jet Black". */
-const COLOUR_MODIFIERS = new Set([
+export const COLOUR_MODIFIERS = new Set([
   "ice", "stone", "jet", "midnight", "deep", "light", "dark", "sky", "forest", "ocean",
   "electric", "pearl", "matte", "bright", "pale", "royal", "baby", "dusty", "sand",
   "steel", "space", "slate", "true", "classic", "cool", "warm", "soft", "blush", "moss",

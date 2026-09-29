@@ -34,6 +34,7 @@ import {
 import {
   RESEARCH_EXCLUDED_DOMAINS,
   RETAILER_INFO,
+  hostOf,
   majorResearchDomains,
   preferredResearchDomains,
 } from "@/lib/retailers";
@@ -41,6 +42,8 @@ import type { Deadline, Meter } from "../deadline";
 import { ProviderError } from "../errors";
 import {
   analyzePage,
+  cleanPageTitle,
+  extractListingTiles,
   looksLikeProductUrl,
   queryMatch,
   queryTokens,
@@ -115,9 +118,44 @@ export function buildRetailerSweepRequest(intent: SearchIntent): TavilySearchReq
     includeRawContent: rawContentEnabled() ? "text" : false,
     includeDomains: domains,
     includeDomainsMode: "restrict",
-    country: "canada",
+    // No country boost: every domain listed is already Canadian, and the
+    // one live run with both set came back empty.
     topic: "general",
   };
+}
+
+/**
+ * The major-chains search costs a credit whether or not it finds anything.
+ * If it comes back empty three searches in a row, stop sending it for a day
+ * rather than keep paying for nothing.
+ */
+let sweepEmptyStreak = 0;
+let sweepPausedUntil = 0;
+const SWEEP_EMPTY_LIMIT = 3;
+const SWEEP_PAUSE_MS = 24 * 60 * 60_000;
+
+function sweepAvailable(): boolean {
+  return Date.now() >= sweepPausedUntil;
+}
+
+function recordSweep(response: TavilySearchResponse): void {
+  if (response.cached) return;
+  if (response.results.length > 0) {
+    sweepEmptyStreak = 0;
+    return;
+  }
+  sweepEmptyStreak++;
+  if (sweepEmptyStreak >= SWEEP_EMPTY_LIMIT) {
+    sweepPausedUntil = Date.now() + SWEEP_PAUSE_MS;
+    sweepEmptyStreak = 0;
+    console.warn("[research] the major-chains search came back empty 3 times in a row — paused for 24h to save credits.");
+  }
+}
+
+/** For tests. */
+export function resetSweepState(): void {
+  sweepEmptyStreak = 0;
+  sweepPausedUntil = 0;
 }
 
 /** Every result, analysed — offers where possible, reasons where not. */
@@ -222,7 +260,7 @@ export async function fetchOffers(
   } = {},
 ): Promise<TavilyOffersResult> {
   const requests: TavilySearchRequest[] = [buildLuggageRequest(intent)];
-  if (opts.sweep ?? sweepEnabled()) {
+  if ((opts.sweep ?? sweepEnabled()) && sweepAvailable()) {
     const sweep = buildRetailerSweepRequest(intent);
     if (sweep) requests.push(sweep);
   }
@@ -240,6 +278,7 @@ export async function fetchOffers(
     if (s.status === "fulfilled") {
       succeeded++;
       opts.onResearch?.({ request: requests[i], response: s.value });
+      if (requests[i].includeDomainsMode === "restrict") recordSweep(s.value);
       results.push(...s.value.results);
       creditsUsed += s.value.creditsUsed;
     } else if (!firstError) {
@@ -258,7 +297,7 @@ export async function fetchOffers(
 
   const fetchedAt = new Date().toISOString();
   const analysed = analyzeResults(results, fetchedAt);
-  const offers = analysed.map((a) => a.offer).filter((o): o is Offer => o !== null);
+  const pageOffers = analysed.map((a) => a.offer).filter((o): o is Offer => o !== null);
 
   const pages = new Map<string, PageInput>();
   for (const r of results) {
@@ -267,18 +306,92 @@ export async function fetchOffers(
     }
   }
 
+  // Collection pages the store's own product pages didn't price — the
+  // brand store is often only readable this way.
+  const tileOffers = listingTileOffers(analysed, pages, pageOffers, intent.terms, fetchedAt);
+  const offers = [...pageOffers, ...tileOffers];
+
+  // A product page whose price a tile already gave needn't be paid to read.
+  const priced = new Set(offers.map((o) => canonicalUrl(o.url)));
+  const unread = pagesWorthReading(
+    analysed,
+    pages,
+    intent.terms,
+    Math.min(maxPagesToRead(), opts.maxReads ?? Number.POSITIVE_INFINITY),
+  ).filter((u) => !priced.has(canonicalUrl(u.page.url)));
+
   return {
     offers,
     warnings,
     resultCount: results.length,
     creditsUsed,
-    unread: pagesWorthReading(
-      analysed,
-      pages,
-      intent.terms,
-      Math.min(maxPagesToRead(), opts.maxReads ?? Number.POSITIVE_INFINITY),
-    ),
+    unread,
   };
+}
+
+/** Word set of a product name, order- and punctuation-free. */
+function nameKey(name: string): string {
+  return [...new Set(name.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean))].sort().join(" ");
+}
+
+/**
+ * Offers from listing tiles ("name → price" on collection pages), for
+ * Canadian stores whose pages yielded no offer. Each is linked to the
+ * store's own product page when one with the same name was found, else to
+ * the listing page. Never duplicates an offer a product page already gave.
+ */
+export function listingTileOffers(
+  analysed: PageAnalysis[],
+  pages: Map<string, PageInput>,
+  existing: Offer[],
+  terms: string,
+  fetchedAt: string,
+): Offer[] {
+  const taken = new Set(existing.map((o) => `${o.retailer}|${nameKey(o.title)}`));
+  const out: Offer[] = [];
+
+  // Product pages by host, for linking a tile to its own page.
+  const productPages = new Map<string, { url: string; key: string }[]>();
+  for (const page of pages.values()) {
+    if (!looksLikeProductUrl(page.url)) continue;
+    const host = hostOf(page.url);
+    const list = productPages.get(host) ?? [];
+    list.push({ url: page.url, key: nameKey(cleanPageTitle(page.title).name) });
+    productPages.set(host, list);
+  }
+
+  for (const a of analysed) {
+    if (a.offer) continue;
+    if (/not a Canadian storefront|not a retailer page|no title/.test(a.reason ?? "")) continue;
+    const page = pages.get(a.url);
+    if (!page) continue;
+
+    const info = RETAILER_INFO[a.retailer];
+    const brand = info?.category === "specialty" ? a.retailer.replace(/\.(?:ca|com)$/i, "") : null;
+
+    for (const text of [page.content, page.rawContent ?? ""]) {
+      for (const tile of extractListingTiles(text, terms)) {
+        const title = brand && !tile.name.toLowerCase().includes(brand.toLowerCase()) ? `${brand} ${tile.name}` : tile.name;
+        const key = `${a.retailer}|${nameKey(title)}`;
+        if (taken.has(key)) continue;
+        taken.add(key);
+
+        const own = (productPages.get(a.host) ?? []).find((p) => p.key === nameKey(title) || p.key === nameKey(tile.name));
+        out.push({
+          retailer: a.retailer,
+          retailerKey: info ? a.retailer : null,
+          price: tile.price,
+          currency: "CAD",
+          inStock: true,
+          url: own?.url ?? a.url,
+          title,
+          fetchedAt,
+          evidence: tile.evidence,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 export type ReadPagesResult = {

@@ -495,6 +495,7 @@ export function resetTavilyState(): void {
   processCredits = 0;
   exhaustedUntil = 0;
   pageCache.clear();
+  blockedHosts.clear();
   extractSuccessCarry = { basic: 0, advanced: 0 };
 }
 
@@ -885,6 +886,32 @@ const FAILED_PAGE_TTL_MS = 30 * 60_000;
  */
 let extractSuccessCarry = { basic: 0, advanced: 0 };
 
+/**
+ * Stores whose pages even the advanced reader couldn't open. Reading them
+ * again soon would only add waiting time (failures are free, not fast), so
+ * they're skipped for a while.
+ */
+const blockedHosts = new Map<string, number>();
+const BLOCKED_HOST_MS = 12 * 60 * 60_000;
+
+function pageHost(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function hostBlocked(url: string): boolean {
+  const until = blockedHosts.get(pageHost(url));
+  if (!until) return false;
+  if (until < Date.now()) {
+    blockedHosts.delete(pageHost(url));
+    return false;
+  }
+  return true;
+}
+
 function pageKey(url: string, depth: string, format: string): string {
   return `${depth}:${format}:${url.split("#")[0]}`;
 }
@@ -917,6 +944,10 @@ export async function tavilyExtract(
   // De-duplicate, serve what we already read, skip recent failures.
   const toFetch: string[] = [];
   for (const url of [...new Set(req.urls.filter((u) => /^https?:\/\//i.test(u)))]) {
+    if (hostBlocked(url)) {
+      out.failed.push({ url, error: "this store blocks automated page reading" });
+      continue;
+    }
     const key = pageKey(url, depth, format);
     const hit = opts.bypassCache ? undefined : pageCache.get(key);
     if (hit && hit.expiresAt > Date.now()) {
@@ -1035,6 +1066,7 @@ export async function tavilyExtract(
       if (typeof f.url !== "string") continue;
       out.failed.push({ url: f.url, error: f.error ?? "failed", retryable: true });
       rememberPage(pageKey(f.url, depth, format), null);
+      if (depth === "advanced") blockedHosts.set(pageHost(f.url), Date.now() + BLOCKED_HOST_MS);
     }
     for (const url of urls) {
       if (!okUrls.has(url) && !out.failed.some((f) => f.url === url)) {

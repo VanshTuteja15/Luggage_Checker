@@ -15,7 +15,7 @@ import { callGeminiJSON, geminiConfigured, type GeminiSchema } from "@/lib/gemin
 import { RETAILER_INFO } from "@/lib/retailers";
 import type { Offer, SearchMode, SearchProduct } from "./types";
 
-import { COLOUR_WORDS, extractColour } from "./colours";
+import { COLOUR_MODIFIERS, COLOUR_WORDS, extractColour } from "./colours";
 import { isAccessoryTitle } from "./extract";
 
 export { extractColour };
@@ -29,7 +29,8 @@ const COLOUR_TOKENS = new Set(
 );
 
 function isColourToken(token: string): boolean {
-  return COLOUR_TOKENS.has(token.toLowerCase());
+  const t = token.toLowerCase();
+  return COLOUR_TOKENS.has(t) || COLOUR_MODIFIERS.has(t);
 }
 
 const CLUSTER_SCHEMA: GeminiSchema = {
@@ -96,6 +97,9 @@ export function extractSize(title: string): string {
   if (/\bcarry[-\s]?on\b/i.test(title)) return "Carry-On";
   if (/\bcheck(?:ed)?[-\s]?in\b/i.test(title)) return "Check-In";
   if (/\bunderseat\b/i.test(title)) return "Underseat";
+  if (/\blarge\b/i.test(title)) return "Large";
+  if (/\bmedium\b/i.test(title)) return "Medium";
+  if (/\bsmall\b/i.test(title)) return "Small";
   return "";
 }
 
@@ -106,7 +110,31 @@ export function extractSize(title: string): string {
  * "Alpha 4"), sizes are compared separately, and colour is ignored unless
  * the caller is browsing variants.
  */
-type Identity = { tokens: Set<string>; brand: string; size: string; colour: string; accessory: boolean };
+type Identity = {
+  tokens: Set<string>;
+  brand: string;
+  size: string;
+  /** Every size tag in the title: "30 inch" and "Large" can both describe one bag. */
+  sizes: Set<string>;
+  colour: string;
+  accessory: boolean;
+};
+
+/** All size tags a title states: inches, and the size class words. */
+export function sizeTags(title: string): Set<string> {
+  const tags = new Set<string>();
+  const inches = title.match(/\b(\d{2}(?:\.\d)?)\s*(?:"|''|inch|inches|in\b)/i);
+  if (inches) tags.add(`${inches[1]} inch`);
+  if (/\bcarry[-\s]?on\b|\bcabin\b/i.test(title)) tags.add("carry-on");
+  if (/\bunderseat\b/i.test(title)) tags.add("underseat");
+  if (/\blarge\b/i.test(title)) tags.add("large");
+  if (/\bmedium\b/i.test(title)) tags.add("medium");
+  if (/\bsmall\b/i.test(title)) tags.add("small");
+  // "Check-In" alone is compatible with medium or large, so it only counts
+  // when nothing more specific was stated.
+  if (tags.size === 0 && /\bcheck(?:ed)?[-\s]?in\b/i.test(title)) tags.add("check-in");
+  return tags;
+}
 
 /** Two-digit numbers in this range are almost always a size in inches. */
 function isSizeNumber(t: string): boolean {
@@ -114,7 +142,21 @@ function isSizeNumber(t: string): boolean {
   return /^\d{2}$/.test(t) && n >= 14 && n <= 34;
 }
 
-function identify(title: string): Identity {
+/** Luggage brands, so a title naming ANOTHER brand never gets the searched one. */
+const KNOWN_BRANDS =
+  /\b(?:samsonite|american tourister|travelpro|delsey|briggs\s*(?:&|and)\s*riley|tumi|away|monos|rimowa|calpak|swiss\s*gear|swissgear|heys|ricardo|victorinox|herschel|nautica|kenneth cole|travelers? club|osprey|eagle creek|london fog|it luggage|coolife|rockland|traveler'?s choice|lipault|hartmann|roncato|antler|level8|bagsmart|vera bradley|ful|wrangler|amazon basics|amazonbasics)\b/i;
+
+/** Put the searched brand in front of a title that names no brand at all. */
+function withBrandHint(title: string, brandHint: string | null): string {
+  if (!brandHint || title.toLowerCase().includes(brandHint.toLowerCase())) return title;
+  if (KNOWN_BRANDS.test(title)) return title;
+  return `${brandHint} ${title}`;
+}
+
+function identify(rawTitle: string, brandHint: string | null = null): Identity {
+  // A store that leaves the brand out ("Outline Pro 30'' Large…") still
+  // sells the brand that was searched for.
+  const title = withBrandHint(rawTitle, brandHint);
   const tokens = title
     .toLowerCase()
     .replace(/[^a-z0-9\s".]/g, " ")
@@ -132,6 +174,7 @@ function identify(title: string): Identity {
     tokens: new Set(meaningful),
     brand: meaningful.find((t) => !/^\d+$/.test(t)) ?? "",
     size: extractSize(title),
+    sizes: sizeTags(title),
     colour: extractColour(title).toLowerCase(),
     accessory: isAccessoryTitle(title),
   };
@@ -147,7 +190,8 @@ function sameProduct(a: Identity, b: Identity, mode: SearchMode): boolean {
   if (a.brand && b.brand && a.brand !== b.brand) return false;
   // A cover for the bag is never the bag.
   if (a.accessory !== b.accessory) return false;
-  if (a.size && b.size && a.size !== b.size) return false;
+  // Sizes conflict only when both titles state one and none are shared.
+  if (a.sizes.size > 0 && b.sizes.size > 0 && ![...a.sizes].some((t) => b.sizes.has(t))) return false;
   if (mode === "catalog" && a.colour !== b.colour) return false;
 
   // Model numbers must agree when both titles have one.
@@ -266,7 +310,7 @@ export function clusterHeuristic(
   const groups: { id: Identity; offers: Offer[] }[] = [];
 
   for (const offer of offers) {
-    const id = identify(stripRetailerNames(offer.title));
+    const id = identify(stripRetailerNames(offer.title), brandHint);
     const home = groups.find((g) => sameProduct(g.id, id, mode));
     if (home) home.offers.push(offer);
     else groups.push({ id, offers: [offer] });
@@ -279,8 +323,8 @@ export function clusterHeuristic(
     const words = title.split(/\s+/);
     // A store that leaves the brand out of its title ("Outline Pro" on a
     // dealer's site) still sells the brand that was searched for.
-    const hinted = brandHint && !title.toLowerCase().includes(brandHint.toLowerCase());
-    const brand = hinted ? brandHint : (words[0] ?? "Unknown");
+    const hinted = !!brandHint && withBrandHint(title, brandHint) !== title;
+    const brand = hinted && brandHint ? brandHint : (words[0] ?? "Unknown");
     const model = (hinted ? words.slice(0, 3) : words.slice(1, 4)).join(" ") || title;
     const name = hinted ? `${brandHint} ${title}` : title;
 

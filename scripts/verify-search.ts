@@ -25,11 +25,13 @@ import {
   analyzePage,
   cleanPageTitle,
   extractDetails,
+  extractListingTiles,
   pickListingPrice,
 } from "../src/lib/search/extract";
 import { ProviderError } from "../src/lib/search/errors";
 import { resetTavilyState, tavilyCreditStatus, tavilyExtract, tavilySearch } from "../src/lib/tavily";
 import { brandStoreFor } from "../src/lib/retailers";
+import { resetSweepState } from "../src/lib/search/providers/tavily";
 import type { SearchProduct } from "../src/lib/search/types";
 
 /* ------------------------------------------------------------------ */
@@ -218,6 +220,7 @@ function hangUntilAborted(init?: RequestInit): Promise<Response> {
 /** Install a fresh stub and clear every in-process cache and ledger. */
 function installStub(opts: StubOpts = {}) {
   resetTavilyState();
+  resetSweepState();
   calls.search = 0;
   calls.usage = 0;
   calls.gemini = 0;
@@ -1177,6 +1180,37 @@ async function main() {
   await search("samsonite outline pro");
   check("unknown shops aren't re-read with the paid-per-success reader", calls.extract === 1, `${calls.extract}`);
 
+  section("F7. Credit and time savers learned from the live run");
+  {
+    // The major-chains search came back empty in the live run. Three empty
+    // answers in a row → it stops being sent (and paid for) for a day.
+    installStub({ search: (body) => tavilyJson(body.include_domains_mode === "restrict" ? [] : outlinePages()) });
+    for (const q of ["outline pro one", "outline pro two", "outline pro three"]) await search(`samsonite ${q}`);
+    const before = calls.search;
+    await search("samsonite outline pro four");
+    check("empty major-chains search 3× → paused, 1 search next time", calls.search - before === 1, `${calls.search - before}`);
+    check("the sweep is sent without a country boost", !calls.bodies.some((b) => b.include_domains_mode === "restrict" && "country" in b));
+  }
+  installStub({
+    search: () => tavilyJson(outlinePages()),
+    extract: (body) => extractJson([], (body.urls as string[]) ?? [], 0),
+  });
+  {
+    await search("samsonite outline pro");
+    const first = calls.extract;
+    await search("samsonite outline pro medium", { bypassCache: true });
+    const sentAgain = calls.extractBodies.slice(first).flatMap((b) => (b.urls as string[]) ?? []);
+    check("a store that blocked even the advanced reader isn't retried for a while", !sentAgain.some((u) => /samsonite\.ca|walmart\.ca/.test(u)), sentAgain.join(", "));
+  }
+  {
+    const tiles = extractListingTiles("Samsonite Outline Pro Medium Spinner\nSale price $324.95 CAD    Regular price $405.95 CAD", "samsonite outline pro");
+    check("a tile takes the sale price, not the regular one", tiles.length === 1 && tiles[0].price === 324.95, JSON.stringify(tiles));
+    const table = extractListingTiles("| | Samsonite Outline Pro Carry-On | Samsonite Outline Pro Large |\n| Price | $289.95 | $359.95 |", "samsonite outline pro");
+    check("comparison-table prices are never tiles", table.length === 0, JSON.stringify(table));
+    const other = extractListingTiles("Samsonite Freeform Carry-On Spinner. C$ 249.95", "samsonite outline pro");
+    check("a tile must name the searched product", other.length === 0);
+  }
+
   section("F4. Brand store detection and title clean-up");
   check("samsonite outline pro → Samsonite.ca", brandStoreFor("samsonite outline pro") === "Samsonite.ca");
   check("Briggs & Riley Baseline → Briggs & Riley", brandStoreFor("Briggs & Riley Baseline") === "Briggs & Riley");
@@ -1210,6 +1244,41 @@ async function main() {
     // is never served in its place) — but the identical general search is
     // reused from cache, so only 1 new call is paid for.
     check("a lite result is never served to a full search; the shared search is reused free", calls.search === 2, `${calls.search}`);
+  }
+
+  section("E3. Real response (samsonite outline pro) — brand store via its collection pages");
+  const outlineFixture = JSON.parse(
+    readFileSync(resolve("scripts/fixtures/tavily-samsonite-outline-pro.json"), "utf8"),
+  ) as { searches: { request: { includeDomainsMode?: string }; response: { results: { title: string; url: string; content: string; score: number; rawContent: string | null }[] } }[] };
+  {
+    const toRows = (i: number): TavilyRow[] =>
+      outlineFixture.searches[i].response.results.map((r) => ({ title: r.title, url: r.url, content: r.content, score: r.score, raw_content: r.rawContent }));
+    installStub({
+      search: (body) => tavilyJson(body.include_domains_mode === "restrict" ? toRows(1) : toRows(0)),
+      // As in the live run: samsonite.ca refuses every page read.
+      extract: (body) => extractJson([], (body.urls as string[]) ?? [], 0),
+    });
+    const r = await search("samsonite outline pro");
+    show(r.products);
+    const bySize = (size: RegExp) => r.products.find((p) => size.test(p.name) && /outline pro/i.test(p.name));
+    const carry = bySize(/carry-on/i);
+    const medium = bySize(/medium/i);
+    const large = bySize(/large/i);
+    const priceAt = (p: SearchProduct | undefined, store: string) => p?.offers.find((o) => o.retailer === store)?.price;
+
+    check("Samsonite.ca carry-on: $289.95", priceAt(carry, "Samsonite.ca") === 289.95, `${priceAt(carry, "Samsonite.ca")}`);
+    check("Samsonite.ca medium: $324.95", priceAt(medium, "Samsonite.ca") === 324.95, `${priceAt(medium, "Samsonite.ca")}`);
+    check("Samsonite.ca large: $359.95", priceAt(large, "Samsonite.ca") === 359.95, `${priceAt(large, "Samsonite.ca")}`);
+    check("Amazon large is $359.95, not the carry-on's $289.95 from a comparison table", priceAt(large, "Amazon.ca") === 359.95, `${priceAt(large, "Amazon.ca")}`);
+    check("Amazon medium is $324.95", priceAt(medium, "Amazon.ca") === 324.95, `${priceAt(medium, "Amazon.ca")}`);
+    check("Amazon carry-on is $289.95", priceAt(carry, "Amazon.ca") === 289.95, `${priceAt(carry, "Amazon.ca")}`);
+    check("three sizes stay three products", !!carry && !!medium && !!large && new Set([carry, medium, large]).size === 3);
+    check("JP Grimard's 30'' Large joins the Large", priceAt(large, "Jpgrimard.com") === 359.95 || large?.offers.some((o) => /jpgrimard/i.test(o.url)) === true, large?.offers.map((o) => o.retailer).join(", "));
+    const samCarry = carry?.offers.find((o) => o.retailer === "Samsonite.ca");
+    check("Samsonite.ca price links to its own product page", /137392XXXX\.html$/.test(samCarry?.url ?? ""), samCarry?.url);
+    check("no accessory price ($30/$35) got in", !r.products.some((p) => p.offers.some((o) => o.price < 100)));
+    check("Amazon's colours kept", (carry?.colours ?? []).some((c) => /green|grey/i.test(c)), JSON.stringify(carry?.colours));
+    check("pages already priced from tiles aren't paid to read", !calls.extractBodies.some((b) => ((b.urls as string[]) ?? []).some((u) => /137392XXXX/.test(u))), JSON.stringify(calls.extractBodies.map((b) => b.urls)));
   }
 
   section("D1. Research never creates, imports or stores products");

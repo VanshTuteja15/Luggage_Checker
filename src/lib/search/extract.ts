@@ -50,7 +50,13 @@ const MAX_TEXT = 60_000;
  *     → { name: "Samsonite Freeform …", site: "Amazon.ca" }
  */
 export function cleanPageTitle(title: string): { name: string; site: string | null } {
-  const raw = (title ?? "").replace(/\s+/g, " ").trim();
+  const raw = (title ?? "")
+    .replace(/[™®©]/g, "")
+    // Amazon: "…Carry-On, Model Number - 137392-1327, Emerald Green : Amazon.ca…"
+    // Drop the catalogue number but keep the colour after it.
+    .replace(/,?\s*\b(?:item\s*)?model\s*(?:number|no\.?|#)\s*[-:]?\s*[\w.-]*\d[\w.-]*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!raw) return { name: "", site: null };
 
   const parts = raw
@@ -60,6 +66,16 @@ export function cleanPageTitle(title: string): { name: string; site: string | nu
 
   let name = parts[0] ?? raw;
   if (name.length < 8 && parts[1]) name = parts[1];
+  // "Outline Pro - 30'' Large Expandable Spinner Luggage": a short model name
+  // followed by the size and type. Keep both halves.
+  else if (
+    parts[1] &&
+    name.split(/\s+/).length <= 3 &&
+    /\b(?:carry[- ]?on|check(?:ed)?[- ]in|large|medium|small|\d{2}\s*(?:''|"|in\b|inch))/i.test(parts[1]) &&
+    !/amazon|walmart|canada|\.ca\b|\.com\b/i.test(parts[1])
+  ) {
+    name = `${name} ${parts[1]}`;
+  }
 
   // Amazon: "Amazon.ca: Samsonite Freeform …" puts the site first.
   const amazonFirst = name.match(/^Amazon\.(?:ca|com)\s*:\s*(.+)$/i);
@@ -196,7 +212,7 @@ const NEGATIVE_AFTER =
 
 /** Words right before an amount that mean "this IS the selling price". */
 const POSITIVE_BEFORE =
-  /(?:price|sale|sale price|now|our price|your price|current price|special|today|deal|prix|prix de vente|maintenant|solde)\s*[:\-–]?\s*$/i;
+  /(?:price|sale|sale price|now|our price|your price|current price|special|today|deal|one-time purchase|prix|prix de vente|maintenant|solde)\s*[:\-–]?\s*$/i;
 
 /** Mildly negative: "from $199" is often a variant range floor. */
 const WEAK_BEFORE = /(?:from|starting at|starts at|à partir de)\s*[:\-–]?\s*$/i;
@@ -293,6 +309,32 @@ export type PriceOptions = {
   productUrl?: boolean;
 };
 
+/** Positions where the title's leading words (up to a comma) appear verbatim. */
+function fullTitleSpots(text: string, title: string): number[] {
+  const head = title.split(",")[0].trim().toLowerCase();
+  if (head.length < 12) return [];
+  const lower = text.toLowerCase();
+  const spots: number[] = [];
+  for (let i = lower.indexOf(head); i >= 0 && spots.length < 20; i = lower.indexOf(head, i + head.length)) {
+    spots.push(i);
+  }
+  return spots;
+}
+
+/** True when the amount sits on a "|"-separated line holding other prices. */
+function inMultiPriceTableRow(text: string, c: Candidate): boolean {
+  const start = text.lastIndexOf("\n", c.index) + 1;
+  const endNl = text.indexOf("\n", c.end);
+  const line = text.slice(start, endNl < 0 ? text.length : endNl);
+  if ((line.match(/\|/g) ?? []).length < 3) return false;
+  const values = new Set(
+    findPriceCandidates(line)
+      .filter((x) => x.value >= MIN_PLAUSIBLE_PRICE)
+      .map((x) => x.value),
+  );
+  return values.size >= 2;
+}
+
 /**
  * The page's selling price, or null when it can't be told apart from the
  * other amounts on the page.
@@ -317,13 +359,25 @@ export function pickListingPrice(
   const related = tail.search(RELATED_SECTION);
   const cutoff = related >= 0 ? Math.max(0, anchor) + related : text.length;
 
+  // Where the product's full name is repeated (a buy box often restates
+  // it). Some pages — Amazon's, as Tavily returns them — put the buy box
+  // AFTER "Frequently bought together", so a labelled price right after the
+  // name counts even past that heading.
+  const titleSpots = fullTitleSpots(text, title);
+
   const scored: (Candidate & { score: number })[] = [];
   let firstPlausible = true;
 
   for (const c of findPriceCandidates(text)) {
-    if (c.index >= cutoff) continue;
+    const labelled = POSITIVE_BEFORE.test(text.slice(Math.max(0, c.index - 40), c.index));
+    const inBuyBox = labelled && titleSpots.some((t) => c.index > t && c.index - t <= 400);
+    if (c.index >= cutoff && !inBuyBox) continue;
     if (c.usd) continue;
     if (c.value < MIN_PLAUSIBLE_PRICE || c.value > MAX_PLAUSIBLE_PRICE) continue;
+
+    // A row of a comparison table ("| Price | $289.95 | $324.95 | $359.95 |")
+    // prices several products at once — none of them is this page's price.
+    if (inMultiPriceTableRow(text, c)) continue;
 
     const isFirst = firstPlausible;
     firstPlausible = false;
@@ -352,6 +406,7 @@ export function pickListingPrice(
 
     let score = 0;
     if (POSITIVE_BEFORE.test(before)) score += 3;
+    if (inBuyBox) score += 2;
     if (WEAK_BEFORE.test(before)) score -= 1;
 
     if (anchor >= 0) {
@@ -662,4 +717,72 @@ export function queryMatch(title: string, terms: string): number {
   let hits = 0;
   for (const t of wanted) if (have.has(t)) hits++;
   return hits / wanted.length;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Listing tiles                                                     */
+/*                                                                     */
+/*  A store's collection page lists products as tiles: the name, then */
+/*  its price right after it —                                        */
+/*    "Samsonite Outline Pro Spinner Large. C$ 359.95 The current…"   */
+/*    "Samsonite Outline Pro Medium Spinner\nSale price $324.95 CAD"  */
+/*  When the name matches EVERY searched word and the price follows   */
+/*  it directly, that pair is as reliable as a product page. Brand    */
+/*  stores that block page reading (Samsonite.ca) are often only      */
+/*  visible this way.                                                 */
+/* ------------------------------------------------------------------ */
+
+export type ListingTile = { name: string; price: number; evidence: string };
+
+/** What may sit between a tile's name and its price. */
+const TILE_CONNECTOR =
+  /^[\s.,·•|:–—-]*(?:(?:sale|our|your|special|now|current)\s+)?(?:price|prix)?[\s.,·•|:–—-]*$/i;
+
+/** Where a tile's name starts: after the previous sentence, tile or line. */
+const TILE_BOUNDARY = /(?:[.;·•|!?]\s|\n|\s{2,}|\bCAD\b|\$\s?\d[\d,.]*\s)/g;
+
+/**
+ * Name→price pairs in listing text whose name covers every searched word.
+ * Pure and strict: an amount is only paired with the words right before it.
+ */
+export function extractListingTiles(text: string, terms: string): ListingTile[] {
+  const body = (text ?? "").slice(0, MAX_TEXT);
+  const tiles: ListingTile[] = [];
+  const seen = new Set<string>();
+
+  for (const c of findPriceCandidates(body)) {
+    if (c.usd || c.value < MIN_PLAUSIBLE_PRICE || c.value > MAX_PLAUSIBLE_PRICE) continue;
+    if (inMultiPriceTableRow(body, c)) continue;
+
+    const before = body.slice(Math.max(0, c.index - 200), c.index);
+    // Peel the connector ("Sale price", ". ", "·") off the end.
+    const connector = before.match(/[\s.,·•|:–—-]*(?:(?:sale|our|your|special|now|current)\s+)?(?:price|prix)?[\s.,·•|:–—-]*$/i);
+    const connectorText = connector ? connector[0] : "";
+    if (connectorText.length > 25 || !TILE_CONNECTOR.test(connectorText)) continue;
+    const head = before.slice(0, before.length - connectorText.length);
+    if (NEGATIVE_BEFORE.test(`${head} `)) continue;
+
+    // The name is what follows the last boundary.
+    let startAt = 0;
+    for (const m of head.matchAll(TILE_BOUNDARY)) startAt = (m.index ?? 0) + m[0].length;
+    const name = head.slice(startAt).replace(/[™®©]/g, "").replace(/\s+/g, " ").trim();
+
+    const words = name.split(/\s+/).length;
+    if (name.length < 8 || name.length > 140 || words < 2 || words > 16) continue;
+    if (/\d[\d,]*\.\d{2}/.test(name) || /\bout of 5\b|\breviews?\b/i.test(name)) continue;
+    if (queryMatch(name, terms) < 0.99) continue;
+
+    const after = body.slice(c.end, c.end + 30);
+    if (NEGATIVE_AFTER.test(after)) continue;
+
+    const key = `${name.toLowerCase()}|${c.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tiles.push({
+      name,
+      price: Math.round(c.value * 100) / 100,
+      evidence: evidenceAround(body, Math.max(0, c.index - Math.min(name.length + connectorText.length, 70)), c.end),
+    });
+  }
+  return tiles;
 }

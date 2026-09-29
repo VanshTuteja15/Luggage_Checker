@@ -268,6 +268,8 @@ Ordered by priority. For each question: why it matters, the cheapest way to answ
 | Ranking: best match, then lowest price | Client asked for the cheapest store first; accessories and other models follow |
 | Gemini grouping off by default | Added ~4 s per search; the built-in grouping is instant and tested |
 | Blocked store pages get one "advanced" re-read (29 Sep 2026) | Walmart/Best Buy often block basic page reading. Advanced reading gets through more often; failed reads are free, successful ones 2 credits per 5 pages. Known stores only, max 5 pages per search. Not bypassing blocks — pages still blocked show as a link |
+| Brand-store prices from collection pages (29 Sep 2026) | Live run: samsonite.ca refuses every page read (basic and advanced), but its collection-page excerpts list "name → C$ price" for each size. Those tiles are read only when the name matches every searched word and the price directly follows it, then linked to the store's own product page. Stores that block even advanced reading are skipped for 12 h; an empty major-chains search 3× in a row pauses it for 24 h |
+| Comparison tables ignored; buy-box price preferred | Amazon's "compare with similar items" table priced the Large at the Carry-On's $289.95; prices on multi-price table rows are now never used, and "One-time purchase: $…" next to the product name wins |
 | Daily price checks use "lite" depth | One search + ≤ 3 page reads per tracked product keeps the cron inside the free plan |
 | Prices only from Canadian storefront pages, with the page words kept as evidence | No fake results; USD storefronts, list/was/instalment amounts rejected |
 | Research is read-only; tracking/adding products stays in its own workflow | Keeps research and product creation separate |
