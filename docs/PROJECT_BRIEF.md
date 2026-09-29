@@ -267,6 +267,7 @@ Ordered by priority. For each question: why it matters, the cheapest way to answ
 | Results streamed in two steps | First results in ~3 s while pages are read; final list replaces them |
 | Ranking: best match, then lowest price | Client asked for the cheapest store first; accessories and other models follow |
 | Gemini grouping off by default | Added ~4 s per search; the built-in grouping is instant and tested |
+| Blocked store pages get one "advanced" re-read (29 Sep 2026) | Walmart/Best Buy often block basic page reading. Advanced reading gets through more often; failed reads are free, successful ones 2 credits per 5 pages. Known stores only, max 5 pages per search. Not bypassing blocks — pages still blocked show as a link |
 | Daily price checks use "lite" depth | One search + ≤ 3 page reads per tracked product keeps the cron inside the free plan |
 | Prices only from Canadian storefront pages, with the page words kept as evidence | No fake results; USD storefronts, list/was/instalment amounts rejected |
 | Research is read-only; tracking/adding products stays in its own workflow | Keeps research and product creation separate |

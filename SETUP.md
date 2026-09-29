@@ -40,7 +40,7 @@ seconds; the rest fill in as pages are read.
 | | |
 | --- | --- |
 | Free plan | **1,000 credits a month**, no card |
-| Cost per new search | **2 credits** for the two searches + **~1–2** for reading pages (1 per 5 pages) |
+| Cost per new search | **2 credits** for the two searches + **~1–2** for reading pages (1 per 5 pages) + **~1** when a blocked store page gets through on a second, "advanced" read (2 per 5; blocked again = free) |
 | Repeat search (6 h) | **free** — served from cache |
 | Daily price check | **~1–2 credits** per tracked product (one search, ≤ 3 pages) |
 | Get a key | [app.tavily.com](https://app.tavily.com) |
@@ -59,7 +59,7 @@ Put it in `.env.local` as `TAVILY_API_KEY`, restart, then run
 3. Optional: set a per-key usage limit in the Tavily dashboard.
 
 To prove the real path end to end: `npm run diagnose -- --live "samsonite
-freeform 21"` (~3–4 credits). It prints every page Tavily returned, which became a
+freeform 21"` (~4–5 credits). It prints every page Tavily returned, which became a
 price and why the rest didn't, and saves the raw response to
 `tavily-response.json`.
 

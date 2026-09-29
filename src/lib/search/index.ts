@@ -156,7 +156,7 @@ export type SearchOptions = {
    */
   onResearch?: (info: { request: TavilySearchRequest; response: TavilySearchResponse }) => void;
   /** Diagnostics only: the page-reading request and what came back. */
-  onExtract?: (info: { urls: string[]; response: TavilyExtractResponse }) => void;
+  onExtract?: (info: { urls: string[]; depth: "basic" | "advanced"; response: TavilyExtractResponse }) => void;
   /**
    * Called with the first results while store pages are still being read,
    * so the page can show them immediately. Not called for cache hits or
@@ -627,6 +627,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
       meter: usedMeter,
       bypassCache: opts.bypassCache,
       onExtract: opts.onExtract,
+      // Daily checks stay on the cheapest path.
+      advancedRetry: !lite,
     });
     offers = [...offers, ...read.offers];
     creditsUsed += read.creditsUsed;

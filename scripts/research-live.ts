@@ -5,8 +5,9 @@
 /*  same request builder, the same page analysis, the same grouping.   */
 /*  What this prints is what the Search page will show.                */
 /*                                                                     */
-/*  Costs ~3–4 Tavily credits: two searches (general + major chains)   */
-/*  and reading the store pages that had no price. Checks the monthly  */
+/*  Costs ~4–5 Tavily credits: two searches (general + major chains), */
+/*  reading the store pages that had no price, and one advanced       */
+/*  re-read of pages a store blocked. Checks the monthly              */
 /*  cap first, like the app does, and saves every raw response to      */
 /*  tavily-response.json so problems can be diagnosed without paying   */
 /*  for a second run.                                                  */
@@ -65,7 +66,7 @@ async function main() {
 
   /* ── One real search, through the app ─────────────────────── */
   const searches: { request: TavilySearchRequest; response: TavilySearchResponse }[] = [];
-  const reads: { urls: string[]; response: TavilyExtractResponse }[] = [];
+  const reads: { urls: string[]; depth: "basic" | "advanced"; response: TavilyExtractResponse }[] = [];
   let partialAt: number | null = null;
   let partialOffers = 0;
 
@@ -94,7 +95,7 @@ async function main() {
     console.log(`  ${G}✓${X} search ${i + 1} (${label}): ${c.response.results.length} pages · ${B}${c.response.creditsUsed} credit(s)${X} · ${c.response.responseTimeMs ?? "?"}ms`);
   }
   for (const r of reads) {
-    console.log(`  ${G}✓${X} read ${r.urls.length} store page(s): ${r.response.results.length} read, ${r.response.failed.length} failed · ${B}${r.response.creditsUsed} credit(s)${X}`);
+    console.log(`  ${G}✓${X} ${r.depth} read of ${r.urls.length} store page(s): ${r.response.results.length} read, ${r.response.failed.length} failed · ${B}${r.response.creditsUsed} credit(s)${X}`);
     for (const f of r.response.failed) console.log(`      ${D}✗ ${f.url.slice(0, 70)} — ${f.error}${X}`);
   }
   console.log(`  ${D}raw responses saved to tavily-response.json${X}\n`);

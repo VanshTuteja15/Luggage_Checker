@@ -495,7 +495,7 @@ export function resetTavilyState(): void {
   processCredits = 0;
   exhaustedUntil = 0;
   pageCache.clear();
-  extractSuccessCarry = 0;
+  extractSuccessCarry = { basic: 0, advanced: 0 };
 }
 
 /* ------------------------------------------------------------------ */
@@ -855,8 +855,13 @@ export type TavilyExtractRequest = {
 export type TavilyExtractResponse = {
   /** Pages read, with their full text. Order is not guaranteed. */
   results: { url: string; rawContent: string }[];
-  /** Pages Tavily couldn't read (not charged). */
-  failed: { url: string; error: string }[];
+  /**
+   * Pages that weren't read. `retryable` is true only when Tavily itself
+   * tried the page and couldn't read it (typically a store blocking
+   * automated readers) — worth one try with the stronger "advanced" reader.
+   * Budget, time and network refusals are never retryable.
+   */
+  failed: { url: string; error: string; retryable?: boolean }[];
   /** Credits this call cost, per Tavily (or our conservative estimate). */
   creditsUsed: number;
   /** Pages served from this process's cache — no request made for them. */
@@ -878,7 +883,7 @@ const FAILED_PAGE_TTL_MS = 30 * 60_000;
  * Tavily bills 1 credit per 5 successful pages, carried across calls. When
  * a response doesn't state its cost, this carry reproduces Tavily's count.
  */
-let extractSuccessCarry = 0;
+let extractSuccessCarry = { basic: 0, advanced: 0 };
 
 function pageKey(url: string, depth: string, format: string): string {
   return `${depth}:${format}:${url.split("#")[0]}`;
@@ -917,7 +922,9 @@ export async function tavilyExtract(
     if (hit && hit.expiresAt > Date.now()) {
       out.cachedCount++;
       if (hit.rawContent) out.results.push({ url, rawContent: hit.rawContent });
-      else out.failed.push({ url, error: "failed recently; skipped" });
+      // Only Tavily's own read failures are remembered, so these stay
+      // retryable with the stronger reader (which has its own cache).
+      else out.failed.push({ url, error: "failed recently; skipped", retryable: true });
       continue;
     }
     toFetch.push(url);
@@ -953,8 +960,11 @@ export async function tavilyExtract(
 
     // Tavily's own fetch timeout, and ours a little longer so its answer
     // (with partial results) arrives before we give up on it.
-    const budgetMs = deadline ? deadline.budget(12_000, 500) : 12_000;
-    const tavilySeconds = Math.max(1, Math.min(req.timeoutSeconds ?? 8, Math.floor((budgetMs - 1_500) / 1000)));
+    const budgetMs = deadline ? deadline.budget(16_000, 500) : 16_000;
+    const tavilySeconds = Math.max(
+      1,
+      Math.min(req.timeoutSeconds ?? (depth === "advanced" ? 12 : 8), Math.floor((budgetMs - 1_500) / 1000)),
+    );
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), tavilySeconds * 1000 + 1_500);
 
@@ -1023,12 +1033,12 @@ export async function tavilyExtract(
     const okUrls = new Set(ok.map((r) => r.url));
     for (const f of raw.failed_results ?? []) {
       if (typeof f.url !== "string") continue;
-      out.failed.push({ url: f.url, error: f.error ?? "failed" });
+      out.failed.push({ url: f.url, error: f.error ?? "failed", retryable: true });
       rememberPage(pageKey(f.url, depth, format), null);
     }
     for (const url of urls) {
       if (!okUrls.has(url) && !out.failed.some((f) => f.url === url)) {
-        out.failed.push({ url, error: "no content returned" });
+        out.failed.push({ url, error: "no content returned", retryable: true });
       }
     }
 
@@ -1039,9 +1049,9 @@ export async function tavilyExtract(
     if (reported !== null) {
       credits = reported;
     } else {
-      extractSuccessCarry += ok.length;
-      credits = Math.floor(extractSuccessCarry / 5) * (depth === "advanced" ? 2 : 1);
-      extractSuccessCarry %= 5;
+      extractSuccessCarry[depth] += ok.length;
+      credits = Math.floor(extractSuccessCarry[depth] / 5) * (depth === "advanced" ? 2 : 1);
+      extractSuccessCarry[depth] %= 5;
     }
     recordLocalCredits(credits);
     if (credits !== expected) await opts.meter?.reconcile?.(credits - expected);

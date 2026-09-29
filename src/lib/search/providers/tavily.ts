@@ -289,44 +289,100 @@ export type ReadPagesResult = {
 };
 
 /**
- * Read store pages in full and try again for a price. Never throws: this
- * only ever adds offers to a search that already has results.
+ * Most pages given a second, "advanced" read per search (0 turns it off).
+ * Advanced reading loads pages more like a browser and gets through more
+ * often on stores that block basic readers. Pages it can't read cost
+ * nothing; pages it reads cost 2 credits per 5.
  */
-export async function readPages(
-  unread: UnreadPage[],
-  opts: {
-    deadline?: Deadline;
-    meter?: Meter;
-    bypassCache?: boolean;
-    onExtract?: (info: { urls: string[]; response: TavilyExtractResponse }) => void;
-  } = {},
-): Promise<ReadPagesResult> {
-  if (unread.length === 0) return { offers: [], stillUnread: [], creditsUsed: 0 };
+export function maxAdvancedRereads(): number {
+  const raw = process.env.TAVILY_ADVANCED_RETRY_PAGES;
+  if (raw === undefined || raw.trim() === "") return 5;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.min(10, Math.floor(n)) : 5;
+}
 
-  const urls = unread.map((u) => u.page.url);
+/** Enough time left to be worth an advanced read (it's slower). */
+const MIN_MS_FOR_ADVANCED = 6_000;
+
+type ReadOpts = {
+  deadline?: Deadline;
+  meter?: Meter;
+  bypassCache?: boolean;
+  onExtract?: (info: { urls: string[]; depth: "basic" | "advanced"; response: TavilyExtractResponse }) => void;
+  /** Give blocked pages a second try with the advanced reader. Default: on. */
+  advancedRetry?: boolean;
+};
+
+/** One read pass: which pages yielded an offer, which were blocked, which had no price. */
+async function readPass(
+  pages: UnreadPage[],
+  depth: "basic" | "advanced",
+  opts: ReadOpts,
+): Promise<{ offers: Offer[]; blocked: UnreadPage[]; noPrice: UnreadPage[]; other: UnreadPage[]; credits: number }> {
+  const urls = pages.map((u) => u.page.url);
   let response: TavilyExtractResponse;
   try {
-    response = await tavilyExtract({ urls, depth: "basic", format: "text" }, opts);
+    response = await tavilyExtract({ urls, depth, format: "text" }, opts);
   } catch {
-    return { offers: [], stillUnread: unread, creditsUsed: 0 };
+    return { offers: [], blocked: [], noPrice: [], other: pages, credits: 0 };
   }
-  opts.onExtract?.({ urls, response });
+  opts.onExtract?.({ urls, depth, response });
 
   const text = new Map(response.results.map((r) => [canonicalUrl(r.url), r.rawContent]));
+  const retryable = new Set(response.failed.filter((f) => f.retryable).map((f) => canonicalUrl(f.url)));
   const fetchedAt = new Date().toISOString();
-  const offers: Offer[] = [];
-  const stillUnread: UnreadPage[] = [];
+  const out = { offers: [] as Offer[], blocked: [] as UnreadPage[], noPrice: [] as UnreadPage[], other: [] as UnreadPage[], credits: response.creditsUsed };
 
-  for (const u of unread) {
-    const raw = text.get(canonicalUrl(u.page.url));
+  for (const u of pages) {
+    const key = canonicalUrl(u.page.url);
+    const raw = text.get(key);
     if (!raw) {
-      stillUnread.push(u);
+      (retryable.has(key) ? out.blocked : out.other).push(u);
       continue;
     }
     const analysis = analyzePage({ ...u.page, rawContent: raw }, fetchedAt);
-    if (analysis.offer) offers.push(analysis.offer);
-    else stillUnread.push(u);
+    if (analysis.offer) out.offers.push(analysis.offer);
+    else out.noPrice.push(u);
+  }
+  return out;
+}
+
+/**
+ * Read store pages in full and try again for a price. Never throws: this
+ * only ever adds offers to a search that already has results.
+ *
+ *   1. basic read of every page (1 credit per 5 pages read)
+ *   2. pages a store blocked, or that loaded without a price, get ONE
+ *      advanced read — known stores only, brand store first, capped per
+ *      search (2 credits per 5 pages read; blocked again = free)
+ */
+export async function readPages(unread: UnreadPage[], opts: ReadOpts = {}): Promise<ReadPagesResult> {
+  if (unread.length === 0) return { offers: [], stillUnread: [], creditsUsed: 0 };
+
+  const first = await readPass(unread, "basic", opts);
+  let offers = first.offers;
+  let creditsUsed = first.credits;
+  let stillUnread = [...first.blocked, ...first.noPrice, ...first.other];
+
+  const limit = opts.advancedRetry === false ? 0 : maxAdvancedRereads();
+  if (limit > 0 && (!opts.deadline || opts.deadline.hasAtLeast(MIN_MS_FOR_ADVANCED))) {
+    // Blocked pages first (the reason this exists), then pages that loaded
+    // but showed no price — both only from stores we know, keeping the
+    // brand-store-first order the pages arrived in.
+    const known = (u: UnreadPage) => u.retailerKey !== null;
+    const retry = [...first.blocked.filter(known), ...first.noPrice.filter(known)]
+      .sort((a, b) => unread.indexOf(a) - unread.indexOf(b))
+      .sort((a, b) => Number(first.noPrice.includes(a)) - Number(first.noPrice.includes(b)))
+      .slice(0, limit);
+
+    if (retry.length > 0) {
+      const second = await readPass(retry, "advanced", opts);
+      offers = [...offers, ...second.offers];
+      creditsUsed += second.credits;
+      const nowPriced = new Set(second.offers.map((o) => canonicalUrl(o.url)));
+      stillUnread = stillUnread.filter((u) => !nowPriced.has(canonicalUrl(u.page.url)));
+    }
   }
 
-  return { offers, stillUnread, creditsUsed: response.creditsUsed };
+  return { offers, stillUnread, creditsUsed };
 }

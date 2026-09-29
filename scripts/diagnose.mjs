@@ -64,7 +64,7 @@ async function fetchWithTimeout(url, opts = {}, ms = 30_000) {
 }
 
 console.log(`\n${B}LuggageTracker diagnostics${X}`);
-console.log(`${D}${LIVE ? "live mode — this WILL spend about 3–4 Tavily credits" : "dry run — no billable calls"}${X}\n`);
+console.log(`${D}${LIVE ? "live mode — this WILL spend about 4–5 Tavily credits" : "dry run — no billable calls"}${X}\n`);
 
 /* ── 1. Keys present ───────────────────────────────────────────── */
 
@@ -280,7 +280,7 @@ if (errors.length === 0 && warns.length === 0) {
 }
 if (!LIVE && hasShopping) {
   console.log(`\n${D}This was a dry run. To prove the real research path end to end:${X}`);
-  console.log(`  ${B}npm run diagnose -- --live "samsonite freeform 21"${X}   ${D}(costs ~3–4 credits)${X}`);
+  console.log(`  ${B}npm run diagnose -- --live "samsonite freeform 21"${X}   ${D}(costs ~4–5 credits)${X}`);
 }
 console.log("");
 process.exit(errors.length > 0 ? 1 : 0);
