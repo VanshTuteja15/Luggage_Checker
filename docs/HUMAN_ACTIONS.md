@@ -60,6 +60,16 @@ The engine's tables don't exist in the live project until you run these. Each fi
 
 **Check:** `select count(*) from sources;` returns 24.
 
-## 8. Rotate the credentials that were pasted into chat earlier
+## 8. Choose where the worker runs, and connect it
+
+Both options are $0; steps are in `worker/README.md`.
+- **A. Office PC + Cloudflare Tunnel** (recommended: the P0 probe ran from this network).
+- **B. Oracle Cloud Always Free VM** (re-run `npm run probe:sources` from the VM first).
+
+Then set the same `WORKER_SHARED_SECRET` (`openssl rand -hex 32`) on both sides, `WORKER_URL` in Vercel, and `DATABASE_URL` (Supabase **session pooler** string) on the worker and in Vercel. **Check:** `https://<worker>/health` shows `"store":"postgres"` and `"queue":{"kind":"pg-boss"…}`.
+
+Until a worker is connected, research runs inline on Vercel (slower but works) and the daily jobs run inside the cron route with their caps.
+
+## 9. Rotate the credentials that were pasted into chat earlier
 
 The project brief records that the Supabase secret key and the SerpAPI key were once pasted into a chat. Rotate both in their dashboards and update `.env.local` / Vercel.

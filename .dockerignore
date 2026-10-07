@@ -1,0 +1,21 @@
+# Build context for worker/Dockerfile (run from the repo root).
+# Secrets and local state never enter an image.
+.env
+.env.*
+*.local
+**/.env
+**/.env.*
+.git
+.next
+.tanstack
+node_modules
+worker/node_modules
+worker/dist
+Claude outputs
+docs
+tests
+supabase
+public
+tavily-response.json
+serpapi-response.json
+*.tsbuildinfo

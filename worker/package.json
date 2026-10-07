@@ -1,0 +1,29 @@
+{
+  "name": "luggage-tracker-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LuggageTracker price-engine worker: research sessions, discovery, scheduled verification. Vercel only orchestrates.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "bundle": "node build.mjs",
+    "build": "npm run typecheck && npm run bundle",
+    "start": "node dist/main.mjs",
+    "dev": "node build.mjs && node dist/main.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pg": "8.23.1",
+    "pg-boss": "12.37.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "@types/pg": "^8.15.6",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.8.3",
+    "vitest": "3.2.7"
+  }
+}
