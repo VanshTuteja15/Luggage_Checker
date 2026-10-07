@@ -27,7 +27,11 @@ await build({
   format: "esm",
   target: "node20",
   outfile: out,
-  external: ["@supabase/supabase-js"],
+  // pg-native is pg's optional native binding, never loaded by our scripts.
+  external: ["@supabase/supabase-js", "pg-native"],
+  // CommonJS dependencies (pg) call require() for Node built-ins; give the
+  // ESM bundle a real require so those calls work.
+  banner: { js: "import { createRequire as __lwCreateRequire } from 'node:module'; const require = __lwCreateRequire(import.meta.url);" },
   alias: { "@": resolve("src") },
   logLevel: "warning",
 });

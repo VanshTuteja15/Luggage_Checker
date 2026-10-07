@@ -13,7 +13,9 @@
     "research:live": "node scripts/run-ts.mjs scripts/research-live.ts",
     "probe:sources": "node scripts/run-ts.mjs scripts/probe/main.ts",
     "test": "vitest run",
-    "test:engine": "vitest run tests/engine"
+    "test:engine": "vitest run tests/engine",
+    "db:seed": "node scripts/run-ts.mjs scripts/db/seed.ts",
+    "test:db": "node scripts/run-ts.mjs scripts/db/test-migrations.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -6,7 +6,7 @@ Plan and rules: [`MASTER_PROMPT.md`](../MASTER_PROMPT.md). Things only a human c
 | Phase | Status | Evidence / reason |
 |---|---|---|
 | **P0 Evidence** | ✅ done | Probe selftest 36/36. Live probe run (46 requests, honest UA, robots honoured). [`PROBE_REPORT.md`](./PROBE_REPORT.md). Registry seed `src/lib/engine/registry/seed.ts` updated from the evidence; 47 registry/pack tests pass. |
-| P1 Schema | ⏳ next | |
+| **P1 Schema** | ✅ done | `supabase/migrations/004_price_engine.sql`: 14 tables (sources, feature_flags, app_admins, catalog_products/variants/identifiers, listings + GIN full-text index, research_sessions, session_events, fetch_attempts, observations, price_ranges, identity_review, feed_imports), RLS on all, append-only triggers, range-collapsing trigger, `source_health` view, retention function, Realtime publication. `npm run test:db`: **45/45** on a fresh Postgres 17 (both install paths, applied twice, RLS as owner/other/admin/anon, FTS, append-only, CAD-only check, plus the EngineStore contract on Postgres, 9/9). Seed: `npm run db:seed` → `supabase/seed/sources.sql`. Typed helpers: `src/lib/engine/store/{port,pg,memory}.ts`. |
 | P2 Worker + queue + politeness | ⏳ | |
 | P3 Adapters + extraction + validation | ⏳ | |
 | P4 Research Session API + streaming UI | ⏳ | |

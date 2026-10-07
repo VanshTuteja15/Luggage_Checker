@@ -48,7 +48,17 @@ Samsonite.ca and TUMI.ca block automated requests (PerimeterX CAPTCHA). Their pr
 
 ## 7. Run the new database migrations in Supabase
 
-(details added in P1)
+The engine's tables don't exist in the live project until you run these. Each file is additive and idempotent (tested twice on a fresh Postgres 17 by `npm run test:db`), so running one again is safe.
+
+1. Supabase dashboard → SQL Editor → New query.
+2. If not done before: paste and run `supabase/migrations/003_search_cache_and_quota.sql`.
+3. Paste and run `supabase/migrations/004_price_engine.sql`. The last statement lists 14 tables, each with `rls_enabled = true`.
+4. Run `npm run db:seed`, then paste and run the generated `supabase/seed/sources.sql` (24 stores + default flags).
+5. Make yourself an admin (for `/admin`): find your user id under Authentication → Users, then run
+   `insert into app_admins (user_id, note) values ('<your-user-id>', 'owner');`
+6. Later migrations (005+) are run the same way, in number order.
+
+**Check:** `select count(*) from sources;` returns 24.
 
 ## 8. Rotate the credentials that were pasted into chat earlier
 
