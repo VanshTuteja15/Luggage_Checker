@@ -1,0 +1,55 @@
+# Human Actions
+
+Things the engine cannot (and must not) do for itself: accounts, keys, publishing, legal reads, database changes in the live project, and hosting choices. Each item says **what it unlocks**, **the exact steps**, and **how to check it worked**. Until an item is done, the feature behind it shows a clear "not configured" state; nothing is faked.
+
+Secrets go **only** in `.env.local` (local) or the host's environment settings (Vercel / worker host). Never paste them in chat, commits or issues.
+
+_This file grows with every phase; the final, ordered go-live checklist is at the end._
+
+## 1. Publish the UCP agent profile → unlocks 6–10 Shopify stores
+
+Shopify's Catalog MCP requires every call to carry the URL of a public JSON profile describing our agent.
+
+- **Option A (once the app is deployed):** the app serves the profile itself at `https://<your-app-domain>/.well-known/ucp-agent` (the route ships in this branch). Set `UCP_AGENT_PROFILE_URL=https://<your-app-domain>/.well-known/ucp-agent`.
+- **Option B (before deploying):** follow `docs/PROBE_SETUP.md` §1 (public GitHub repo + jsDelivr URL).
+- **Check:** open the URL in a browser and see the JSON. Then run `npm run probe:sources -- --only=canadaluggagedepot,travelpro-ca`: the `ucp` line should read `accessible YES`.
+
+## 2. Set a monitored contact for the crawler
+
+The User-Agent always carries a contact. Today it's the project's public issue tracker. A business email is better for store operators.
+
+- Set `CRAWLER_CONTACT=<an email Luggage Depot monitors>` in Vercel and on the worker host.
+
+## 3. eBay Browse API keys (free) → unlocks eBay.ca
+
+1. developer.ebay.com → sign in → Application Keys → create a **Production** keyset.
+2. Set `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET`.
+3. **Check:** `npm run probe:sources -- --only=ebay` shows a token and CAD results.
+
+## 4. Read the terms of three stores (⚖, 15 min each)
+
+| Store | Terms | If they allow automated reading of public product data |
+|---|---|---|
+| U.N. Luggage | https://unluggage.com/policies/terms-of-service | turn on flag `source.unluggage.product_json` |
+| Bentley | robots.txt disallows `/policies`, so open it in a browser yourself | turn on `source.bentley.product_json` |
+| JP Grimard | not found online: ask the store | add routes after permission |
+
+Flip flags in `/admin` (Flags) or with SQL: `insert into feature_flags(key, enabled) values ('source.unluggage.product_json', true) on conflict (key) do update set enabled = excluded.enabled;`
+
+## 5. Legal sign-off (⚖): UCP on stores whose terms carry an anti-scrape clause
+
+Travelpro, Briggs & Riley, Heys, Monos and Away publish a UCP agent channel and invite agents in robots.txt/agents.md, but their terms keep Shopify's generic "spider, crawl, or scrape" clause. The engine uses **only** their published agent channel, at low volume, under flag `policy.ucp_on_restricted_stores` (on by default per the audit's position). Luggage City is off (`source.luggagecity.ucp`) until reviewed.
+- Get a legal read, or short written permission from priority stores, before launch. If the answer is no, turn the flag off.
+
+## 6. Dealer feeds (Samsonite, TUMI, others)
+
+Samsonite.ca and TUMI.ca block automated requests (PerimeterX CAPTCHA). Their prices can only come from a dealer price list.
+- Ask the Samsonite Canada rep for the dealer price list / EDI catalog (also covers TUMI and American Tourister). Upload it through `/admin` → Feeds once received (CSV columns documented there).
+
+## 7. Run the new database migrations in Supabase
+
+(details added in P1)
+
+## 8. Rotate the credentials that were pasted into chat earlier
+
+The project brief records that the Supabase secret key and the SerpAPI key were once pasted into a chat. Rotate both in their dashboards and update `.env.local` / Vercel.

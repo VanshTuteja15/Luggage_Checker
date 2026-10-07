@@ -44,6 +44,7 @@ const CHALLENGE_MARKERS = [
   /px-captcha|perimeterx/i,
   /robot or human/i,
   /request unsuccessful\. incapsula/i,
+  /access to this page has been denied/i,
 ];
 
 /** Per-host spacing, set from robots.txt crawl-delay (minimum 3 s). */
@@ -126,12 +127,16 @@ export async function probeFetch(
   }
 }
 
-function classify(status: number, body: string, headers: Record<string, string>): string {
+export function classify(status: number, body: string, headers: Record<string, string>): string {
   const head = body.slice(0, 20_000);
   if (headers["cf-mitigated"]) return "challenge";
   if (status === 429) return "rate_limited";
   if (status === 404 || status === 410) return "not_found";
   if ((status === 403 || status === 503) && CHALLENGE_MARKERS.some((re) => re.test(head))) return "challenge";
+  // fetch follows real redirects, so a 3xx that reaches us had no usable
+  // Location. Bot managers answer like this: samsonite.ca and ca.tumi.com
+  // return a 307 PerimeterX CAPTCHA page that never redirects (7 Oct probe).
+  if (status >= 300 && status < 400 && CHALLENGE_MARKERS.some((re) => re.test(head))) return "challenge";
   if (status === 401 || status === 403) return "blocked";
   if (status >= 200 && status < 300) {
     // A 200 can still be an interstitial.

@@ -201,7 +201,7 @@ export default function HistoryPage() {
                   Showing {chartProducts.length} of {filtered.length}
                   {filtered.length > MAX_SERIES && ` (max ${MAX_SERIES})`}:
                 </span>
-                {filtered.map((p, i) => {
+                {filtered.map((p) => {
                   const on = charted.includes(p.id);
                   const atLimit = !on && charted.length >= MAX_SERIES;
                   return (

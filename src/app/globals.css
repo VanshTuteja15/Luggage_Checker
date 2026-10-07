@@ -69,7 +69,7 @@
   --tracking-wide: 0.05em;
   --tracking-wider: 0.075em;
   --tracking-widest: 0.125em;
-  --font-sans: Outfit, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-outfit), Outfit, ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {

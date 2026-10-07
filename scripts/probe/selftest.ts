@@ -2,6 +2,7 @@
 /*  Offline checks for the probe's parsers — no network.              */
 /* ------------------------------------------------------------------ */
 
+import { classify } from "./http";
 import { isAllowed, parseRobots } from "./robots";
 import { extractStructured, looksJsOnly } from "./structured";
 import { parseProductJs, parseProductJson } from "./shopify";
@@ -49,6 +50,15 @@ export function selftest(): boolean {
   check("crawl-delay read from * group", delay.crawlDelaySec === 10);
   check("encoded path still matches", isAllowed(delay, "https://x.ca/en/luggage/samsonite-outline-pro-spinner-carry-on%E2%84%A2/137392XXXX.html"));
   check("longest match: Allow beats shorter Disallow", isAllowed(parseRobots("User-agent: *\nDisallow: /p\nAllow: /products/", "x"), "https://x.ca/products/a"));
+
+  console.log("\nBlock classification");
+  const px = '<html><head><meta name="description" content="px-captcha"><title>Access to this page has been denied</title></head><body><script>window._pxAppId="PX1";</script></body></html>';
+  check("307 PerimeterX CAPTCHA page → challenge", classify(307, px, {}) === "challenge");
+  check("cf-mitigated header → challenge", classify(403, "<html>Just a moment...</html>", { "cf-mitigated": "challenge" }) === "challenge");
+  check("plain 403 → blocked", classify(403, "Forbidden", {}) === "blocked");
+  check("429 → rate_limited", classify(429, "", {}) === "rate_limited");
+  check("404 → not_found", classify(404, "", {}) === "not_found");
+  check("200 product page → ok", classify(200, "<html><title>Outline Pro</title></html>", {}) === "ok");
 
   console.log("\nJSON-LD / meta");
   const shopifyHtml = `<html><head>
