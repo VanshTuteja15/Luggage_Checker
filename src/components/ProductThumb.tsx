@@ -1,7 +1,15 @@
 import { Luggage } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PALETTE = ["#5B6B4A", "#10B981", "#8B7D5B", "#A0522D", "#6B8E6B", "#7C6E4F", "#4A6B5B"];
+const PALETTE = [
+  "var(--chart-1)",
+  "var(--chart-5)",
+  "var(--chart-2)",
+  "var(--chart-4)",
+  "var(--chart-3)",
+  "var(--primary)",
+  "var(--muted-foreground)",
+];
 
 function pick(seed: string) {
   let h = 0;

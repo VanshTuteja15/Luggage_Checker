@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorState, SectionTitle } from "@/components/Bits";
+import { ThemePicker } from "@/components/ThemeToggle";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -144,6 +145,11 @@ export default function SettingsPage() {
         </Button>
       }
     >
+      {/* ── Appearance ──────────────────────────────────────── */}
+      <Section title="Appearance" description="How LuggageTracker looks on this device">
+        <ThemePicker />
+      </Section>
+
       {/* ── General ─────────────────────────────────────────── */}
       <Section title="General" description="Account and locale">
         <div className="grid gap-4 sm:grid-cols-2">

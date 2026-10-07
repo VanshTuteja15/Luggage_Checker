@@ -18,7 +18,7 @@
 /*  anything it can't source is dropped.                               */
 /* ------------------------------------------------------------------ */
 
-import { callGeminiGrounded, geminiConfigured, parseJson } from "@/lib/gemini";
+import { callGeminiGrounded, parseJson } from "@/lib/gemini";
 import { MAJOR_RETAILERS, RETAILER_INFO, hostOf, matchRetailer } from "@/lib/retailers";
 import { NoProviderError, type Offer, type SearchIntent } from "../types";
 
@@ -26,8 +26,9 @@ import { NoProviderError, type Offer, type SearchIntent } from "../types";
 const MIN_PRICE = 15;
 const MAX_PRICE = 6000;
 
+/** Grounding needs Google billing. Never treat it as a live price source. */
 export function geminiGroundedConfigured(): boolean {
-  return geminiConfigured();
+  return false;
 }
 
 type RawOffer = {

@@ -29,8 +29,14 @@ import { useStore } from "@/lib/store";
 import type { TrackedProduct } from "@/lib/types";
 
 const CHART_COLORS = [
-  "#5B6B4A", "#8B7D5B", "#A0522D", "#6B8E6B", "#7C6E4F",
-  "#4A6B5B", "#9B8E6E", "#6D8B74", "#BFA87A", "#5A7F6A",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--primary)",
+  "var(--muted-foreground)",
+  "var(--foreground)",
 ];
 
 /** How many series stay readable on one chart. */
@@ -335,7 +341,11 @@ export default function HistoryPage() {
                           <Sparkline
                             data={row.spark}
                             color={
-                              row.change < 0 ? "#10B981" : row.change > 0 ? "#EF4444" : "#5B6B4A"
+                              row.change < 0
+                                ? "var(--chart-5)"
+                                : row.change > 0
+                                  ? "var(--destructive)"
+                                  : "var(--chart-1)"
                             }
                           />
                         ) : (

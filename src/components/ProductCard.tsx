@@ -101,7 +101,9 @@ export function TrackedProductCard({
       {spark.length > 1 && (
         <Sparkline
           data={spark}
-          color={product.change < 0 ? "#10B981" : product.change > 0 ? "#EF4444" : "#5B6B4A"}
+          color={
+            product.change < 0 ? "var(--chart-5)" : product.change > 0 ? "var(--destructive)" : "var(--chart-1)"
+          }
         />
       )}
 

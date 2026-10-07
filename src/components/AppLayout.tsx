@@ -17,6 +17,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useStore, useHydrated } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { AiChat } from "@/components/AiChat";
 
 const NAV = [
@@ -77,12 +78,12 @@ export function AppLayout({
   }
 
   const sidebar = (
-    <div className="flex h-full w-64 flex-col bg-sidebar text-sidebar-foreground">
+    <div className="flex h-full w-60 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-5 py-5">
         <span className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary">
-          <Luggage className="h-4.5 w-4.5 text-sidebar-primary-foreground" />
+          <Luggage className="h-4 w-4 text-sidebar-primary-foreground" />
         </span>
-        <span className="text-[15px] font-semibold text-sidebar-accent-foreground">
+        <span className="text-[15px] font-semibold tracking-tight text-sidebar-accent-foreground">
           LuggageTracker
         </span>
       </div>
@@ -94,9 +95,9 @@ export function AppLayout({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors",
                 active
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  ? "bg-sidebar-primary font-medium text-sidebar-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               )}
             >
@@ -123,7 +124,7 @@ export function AppLayout({
             signOut();
             router.push("/");
           }}
-          className="mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="mt-1 flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
           <LogOut className="h-4 w-4" />
           Log out
@@ -155,7 +156,7 @@ export function AppLayout({
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-border bg-card/90 px-5 py-4 backdrop-blur lg:px-8">
+        <header className="sticky top-0 z-30 flex h-14 flex-wrap items-center gap-3 border-b border-border bg-background px-5 lg:px-8">
           <button
             className="rounded-md border border-border p-2 lg:hidden"
             onClick={() => setOpen(true)}
@@ -169,11 +170,14 @@ export function AppLayout({
               <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
             ) : null}
           </div>
-          {actions ?? (
-            <Button asChild>
-              <Link href="/tracked">+ Add Product</Link>
-            </Button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            {actions ?? (
+              <Button asChild>
+                <Link href="/tracked">+ Add Product</Link>
+              </Button>
+            )}
+          </div>
         </header>
         <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-8 lg:px-8">{children}</main>
       </div>

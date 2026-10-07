@@ -10,7 +10,8 @@
     "probe": "node scripts/probe-serpapi.mjs",
     "verify:search": "node scripts/run-ts.mjs scripts/verify-search.ts",
     "diagnose": "node scripts/diagnose.mjs",
-    "research:live": "node scripts/run-ts.mjs scripts/research-live.ts"
+    "research:live": "node scripts/run-ts.mjs scripts/research-live.ts",
+    "probe:sources": "node scripts/run-ts.mjs scripts/probe/main.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

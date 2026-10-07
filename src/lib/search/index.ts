@@ -24,6 +24,7 @@ import { broadenLadder, broadenedNotice } from "./broaden";
 import { clusterOffers } from "./cluster";
 import { isAccessoryTitle, queryMatch } from "./extract";
 import { parseQuery } from "./parse";
+import * as serpProvider from "./providers/serpapi";
 import * as tavilyProvider from "./providers/tavily";
 import type { TavilyExtractResponse, TavilySearchRequest, TavilySearchResponse } from "@/lib/tavily";
 import { Deadline, type Meter } from "./deadline";
@@ -172,16 +173,21 @@ export type SearchOptions = {
 };
 
 /**
- * Research providers in preference order. Tavily is the only one: SerpAPI
- * and Serper are retired for product research, and Gemini grounding needs
- * a billing-enabled Google project, which the $0 budget rules out.
+ * Live price sources, in order.
+ *
+ * Tavily first (page research). SerpAPI next (Google Shopping) when Tavily
+ * is missing or fails. Gemini Google Search grounding is never used — it
+ * needs a billed Google project and is what produced the "Search failed"
+ * screen on a free Gemini key.
  */
-const PROVIDER_ORDER: ProviderName[] = ["tavily"];
+const PROVIDER_ORDER: ProviderName[] = ["tavily", "serpapi"];
 
 export function providerConfigured(provider: ProviderName): boolean {
   switch (provider) {
     case "tavily":
       return tavilyProvider.tavilyProviderConfigured();
+    case "serpapi":
+      return serpProvider.serpApiConfigured();
     default:
       return false;
   }
@@ -239,11 +245,24 @@ async function fetchFromProvider(
 ): Promise<ProviderResult> {
   switch (provider) {
     case "tavily":
-      // Meters itself per HTTP attempt, in credits, and reconciles with the
-      // cost Tavily reports.
       return tavilyProvider.fetchOffers(intent, ctx);
+    case "serpapi": {
+      const offers = await serpProvider.fetchOffers(intent, {
+        deadline: ctx.deadline,
+        meter: ctx.meter,
+      });
+      return {
+        offers,
+        warnings: [],
+        resultCount: offers.length,
+        creditsUsed: 1,
+        unread: [],
+      };
+    }
     default:
-      throw new NoProviderError(`Unknown provider: ${provider}`);
+      throw new NoProviderError(
+        "No live price source is configured. Add TAVILY_API_KEY or SERPAPI_KEY to .env.local and restart.",
+      );
   }
 }
 
@@ -451,7 +470,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const available = configuredProviders();
   if (available.length === 0) {
     throw new NoProviderError(
-      "No research provider is configured. Add TAVILY_API_KEY to .env.local (free: 1,000 credits a month, no card) and restart the dev server.",
+      "No live price source is configured. Add TAVILY_API_KEY or SERPAPI_KEY to .env.local and restart.",
     );
   }
 

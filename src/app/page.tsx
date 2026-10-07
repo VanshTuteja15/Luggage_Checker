@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, Suspense } from "react";
 import { toast } from "sonner";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,20 +95,20 @@ function PasswordStrengthBar({ password }: { password: string }) {
 
 function BrandingPanel() {
   return (
-    <aside className="relative overflow-hidden bg-[#5B6B4A] px-8 py-10 text-white lg:flex lg:w-[44%] lg:min-h-screen lg:flex-col lg:justify-between lg:px-12 lg:py-16">
+    <aside className="relative overflow-hidden border-b border-border bg-background px-8 py-10 lg:flex lg:w-[44%] lg:min-h-screen lg:flex-col lg:justify-between lg:border-b-0 lg:border-r lg:px-12 lg:py-16">
       <Luggage
-        className="pointer-events-none absolute -bottom-10 -right-10 h-72 w-72 text-white/[0.07]"
+        className="pointer-events-none absolute -bottom-10 -right-10 h-72 w-72 text-muted-foreground/10"
         strokeWidth={1}
         aria-hidden
       />
       <div className="relative">
         <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/20">
+          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
             <Luggage className="h-6 w-6" />
           </span>
           <span className="text-xl font-semibold tracking-tight">LuggageTracker</span>
         </div>
-        <p className="mt-5 max-w-sm text-base leading-relaxed text-white/85 lg:mt-8 lg:text-lg">
+        <p className="mt-5 max-w-sm text-base leading-relaxed text-muted-foreground/70 lg:mt-8 lg:text-lg">
           Monitor luggage prices across 15+ Canadian retailers
         </p>
         <ul className="mt-8 hidden space-y-5 lg:block">
@@ -117,15 +118,15 @@ function BrandingPanel() {
             { icon: TrendingDown, text: "Watch 30-day price history in one place" },
           ].map(({ icon: Icon, text }) => (
             <li key={text} className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/12">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary-foreground">
                 <Icon className="h-4 w-4" />
               </span>
-              <span className="text-sm leading-6 text-white/90">{text}</span>
+              <span className="text-sm leading-6 text-muted-foreground/70">{text}</span>
             </li>
           ))}
         </ul>
       </div>
-      <p className="relative mt-8 hidden text-xs text-white/50 lg:block">
+      <p className="relative mt-8 hidden text-xs text-muted-foreground/70 lg:block">
         Built for Canadian travellers who wait for the right price.
       </p>
     </aside>
@@ -485,7 +486,7 @@ function AuthCard() {
               <Button
                 type="submit"
                 disabled={!canSubmit}
-                className="h-12 w-full rounded-lg bg-[#5B6B4A] text-white hover:bg-[#4a5840]"
+                className="h-12 w-full rounded-lg"
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {submitLabel}
@@ -503,6 +504,9 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col lg:flex-row">
       <BrandingPanel />
       <main className="flex flex-1 flex-col items-center justify-center bg-background px-4 py-10 sm:px-8">
+        <div className="mb-4 flex w-full max-w-md justify-end">
+          <ThemeToggle />
+        </div>
         <Suspense
           fallback={
             <div className="h-[28rem] w-full max-w-md animate-pulse rounded-xl bg-card" />

@@ -134,8 +134,8 @@ export default function SearchPage() {
 
         <p className="mt-2 text-center text-xs text-muted-foreground">
           {provider.data?.providerLabel
-            ? `AI search via ${provider.data.providerLabel} · live CAD prices`
-            : "AI search across major Canadian retailers"}
+            ? `Live prices via ${provider.data.providerLabel} · CAD`
+            : "Live prices from Amazon, Walmart, Samsonite and other Canadian retailers"}
           {lowBudget && (
             <>
               {" · "}
@@ -167,9 +167,10 @@ export default function SearchPage() {
             No research provider is configured
           </p>
           <p className="mt-1 text-muted-foreground">
-            Add <code className="rounded bg-muted px-1">TAVILY_API_KEY</code> to{" "}
-            <code className="rounded bg-muted px-1">.env.local</code>, then restart the app. The free
-            plan gives 1,000 credits a month with no card, and the app stops before the limit.
+            Add <code className="rounded bg-muted px-1">TAVILY_API_KEY</code> or{" "}
+            <code className="rounded bg-muted px-1">SERPAPI_KEY</code> to{" "}
+            <code className="rounded bg-muted px-1">.env.local</code>, then restart the app. Gemini
+            grounding is not used for prices.
           </p>
         </div>
       )}

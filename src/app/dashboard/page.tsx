@@ -167,27 +167,27 @@ export default function DashboardPage() {
               label="Tracked Products"
               value={String(list.length)}
               icon={BookmarkCheck}
-              color="#5B6B4A"
+              color="var(--chart-1)"
             />
             <StatCard
               label="Price Drops"
               value={String(drops.length)}
               hint={bestDrop ? `Best: ${usd(Math.abs(bestDrop.change))} off` : undefined}
               icon={TrendingDown}
-              color="#10B981"
+              color="var(--chart-5)"
             />
             <StatCard
               label="Price Increases"
               value={String(rises.length)}
               icon={TrendingUp}
-              color="#EF4444"
+              color="var(--destructive)"
             />
             <StatCard
               label="Retailers Carrying"
               value={String(activeRetailers.size)}
               hint={`of ${MAJOR_RETAILERS.length} majors monitored`}
               icon={Globe}
-              color="#6B7280"
+              color="var(--muted-foreground)"
             />
           </div>
 

@@ -121,8 +121,8 @@ export function SearchBox({
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
-          className={`h-14 w-full border border-input bg-background pl-12 pr-32 text-base shadow-sm outline-none transition-[border-radius] placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
-            showList ? "rounded-t-2xl rounded-b-none border-b-transparent" : "rounded-2xl"
+          className={`h-14 w-full border bg-input pl-12 pr-32 text-base shadow-xs outline-none transition-[border-radius] placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 ${
+            showList ? "rounded-t-xl rounded-b-none border-b-transparent" : "rounded-xl"
           }`}
         />
         {value && !pending && (
@@ -150,7 +150,7 @@ export function SearchBox({
       </form>
 
       {showList && (
-        <div className="absolute inset-x-0 top-full z-30 overflow-hidden rounded-b-2xl border border-t-0 border-input bg-popover shadow-lg">
+        <div className="absolute inset-x-0 top-full z-30 overflow-hidden rounded-b-xl border border-t-0 bg-popover shadow-md">
           <div className="mx-4 border-t border-border" />
           <ul id={listId} role="listbox" className="py-1.5">
             {rows.map((row, i) => (

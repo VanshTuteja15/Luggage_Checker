@@ -160,7 +160,7 @@ export function AiChat() {
           "fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-200 hover:scale-105",
           open
             ? "bg-muted text-muted-foreground"
-            : "bg-[#5B6B4A] text-white hover:bg-[#4a5a3d]",
+            : "bg-primary text-primary-foreground hover:bg-primary/90",
         )}
         aria-label={open ? "Close AI chat" : "Open AI chat"}
       >
@@ -171,13 +171,13 @@ export function AiChat() {
       {open && (
         <div className="fixed bottom-24 right-6 z-50 flex h-[520px] w-[380px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:w-[420px]">
           {/* Header */}
-          <div className="flex items-center gap-3 border-b border-border bg-[#5B6B4A] px-4 py-3 text-white">
+          <div className="flex items-center gap-3 border-b border-border bg-primary px-4 py-3 text-primary-foreground">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15">
               <Sparkles className="h-4.5 w-4.5" />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">LuggageTracker AI</p>
-              <p className="text-xs text-white/70">Powered by Google Gemini</p>
+              <p className="text-xs text-primary-foreground/70">Powered by Google Gemini</p>
             </div>
             <div className="flex h-2 w-2 rounded-full bg-emerald-400" title="Online" />
           </div>
@@ -196,7 +196,7 @@ export function AiChat() {
                   className={cn(
                     "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                     msg.role === "user"
-                      ? "rounded-br-md bg-[#5B6B4A] text-white"
+                      ? "rounded-br-md bg-primary text-primary-foreground"
                       : "rounded-bl-md bg-muted text-foreground",
                   )}
                 >
@@ -256,7 +256,7 @@ export function AiChat() {
             <button
               type="submit"
               disabled={!input.trim() || loading}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#5B6B4A] text-white transition-colors hover:bg-[#4a5a3d] disabled:opacity-40"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
             >
               <Send className="h-3.5 w-3.5" />
             </button>
