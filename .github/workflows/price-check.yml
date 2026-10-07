@@ -1,12 +1,10 @@
-# Fetch latest prices for all tracked products every 6 hours.
-# This is a backup for Vercel Cron — use whichever works best for your setup.
+# Re-check prices for all tracked products, on demand.
+# Manual trigger only: Vercel Cron is the scheduler (vercel.json). A second
+# scheduler here would double the daily request volume to every store.
 name: Price Check
 
 on:
-  schedule:
-    # Every 6 hours: midnight, 6 AM, noon, 6 PM UTC
-    - cron: "0 */6 * * *"
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   fetch-prices:

@@ -1,13 +1,9 @@
-# Send daily price report email at 9 AM Mountain Time.
-# Mountain Time = UTC-7 (MST) or UTC-6 (MDT).
-# 9 AM MDT = 15:00 UTC, 9 AM MST = 16:00 UTC.
-# Using 15:00 UTC (summer) — adjust if needed.
+# Send the daily price report email, on demand.
+# Manual trigger only: Vercel Cron sends it every day (vercel.json).
 name: Daily Report
 
 on:
-  schedule:
-    - cron: "0 15 * * *"
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   send-report:
