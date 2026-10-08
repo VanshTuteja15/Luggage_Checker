@@ -514,7 +514,16 @@ export default function LoginPage() {
         >
           <AuthCard />
         </Suspense>
-        <p className="mt-8 text-xs text-muted-foreground">Powered by Supabase</p>
+        <p className="mt-8 text-xs text-muted-foreground">
+          <a href="/privacy" className="underline-offset-4 hover:underline">
+            Privacy
+          </a>
+          {" · "}
+          <a href="/terms" className="underline-offset-4 hover:underline">
+            Terms
+          </a>
+          {" · "}Powered by Supabase
+        </p>
       </main>
     </div>
   );

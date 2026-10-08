@@ -1,0 +1,52 @@
+name: CI (manual)
+
+# Manual trigger only (MASTER_PROMPT rule 9): Actions → "CI (manual)" → Run workflow.
+# Runs every quality gate. No secrets are needed: builds use placeholder
+# public values, and the database tests start their own throwaway Postgres.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-public-key
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix worker
+      - name: Typecheck (app + worker)
+        run: |
+          npx tsc --noEmit
+          npx tsc -p worker/tsconfig.json --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Search pipeline harness
+        run: npm run verify:search
+      - name: Probe self-test
+        run: npm run probe:sources -- --selftest
+      - name: Engine tests
+        run: npm test
+      - name: Migrations + store contract on Postgres 17
+        run: npm run test:db
+      - name: Worker build and tests (incl. e2e on Postgres + pg-boss)
+        run: |
+          npm run worker:build
+          npm run test:worker
+          npm run test:worker:e2e
+      - name: Production build
+        run: npx next build

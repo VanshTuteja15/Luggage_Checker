@@ -377,3 +377,17 @@ for (const h of harnesses) {
     });
   });
 }
+
+describe.runIf(!!PG_URL)("PgEngineStore retention", () => {
+  it("applies the 180-day policy and refuses under 30 days", async () => {
+    const store = new PgEngineStore(PG_URL!, 1);
+    try {
+      const r = await store.retention(180);
+      expect(typeof r.fetchAttempts).toBe("number");
+      expect(typeof r.sessionEvents).toBe("number");
+      await expect(store.retention(7)).rejects.toThrow(/at least 30 days/);
+    } finally {
+      await store.close();
+    }
+  });
+});

@@ -45,6 +45,15 @@ export function getEngine(): Engine {
   return g.__luggageEngine;
 }
 
+/**
+ * In production the engine needs its database: the in-memory store is empty
+ * and lives per serverless instance, so a session started on one instance
+ * would be invisible to the next request. Development and tests may use it.
+ */
+export function engineStoreReady(engine: Engine = getEngine()): boolean {
+  return engine.rt.store.kind === "postgres" || process.env.NODE_ENV !== "production";
+}
+
 /** True when session events land in Supabase, so the browser can use Realtime. */
 export function realtimeAvailable(): boolean {
   const url = engineConfig().databaseUrl;

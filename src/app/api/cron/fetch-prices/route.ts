@@ -77,7 +77,10 @@ export async function POST(req: NextRequest) {
       };
     }
     const engineVerified = new Set(engine.verifiedProductIds);
-    if (flagOn(await getEngine().rt.flags(), "engine.default_search")) {
+    // Web research is skipped only when the engine actually ran: if it is
+    // unavailable or failed, tracked products still get their daily check.
+    const engineRan = engine.mode === "inline" || engine.mode === "worker";
+    if (engineRan && flagOn(await getEngine().rt.flags(), "engine.default_search")) {
       return NextResponse.json({ message: "Price check complete (verified engine)", engine });
     }
 

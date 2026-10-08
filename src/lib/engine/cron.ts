@@ -15,14 +15,30 @@ import { luggagePack } from "./packs/luggage";
 import { callWorker, getEngine } from "./server";
 import { PgEngineStore } from "./store/pg";
 
-export type EngineCronResult =
+type Retention = { fetchAttempts: number; sessionEvents: number } | null;
+
+export type EngineCronResult = (
   | { mode: "worker"; jobs: Record<string, number | null>; verifiedProductIds: string[] }
   | { mode: "inline"; stats: VerifyTrackedStats; verifiedProductIds: string[] }
-  | { mode: "unavailable"; reason: string; verifiedProductIds: string[] };
+  | { mode: "unavailable"; reason: string; verifiedProductIds: string[] }
+) & { retention: Retention };
+
+/** Retention policy: 180 days of fetch attempts and session events, applied daily. */
+async function applyRetention(): Promise<Retention> {
+  const { rt } = getEngine();
+  if (!(rt.store instanceof PgEngineStore)) return null;
+  try {
+    return await rt.store.retention(180);
+  } catch (err) {
+    console.error("engine: retention failed", err);
+    return null;
+  }
+}
 
 export async function runScheduledEngine(
   opts: { timeLimitMs?: number } = {},
 ): Promise<EngineCronResult> {
+  const retention = await applyRetention();
   const cfg = engineConfig();
   if (cfg.worker) {
     const jobs: Record<string, number | null> = {};
@@ -30,7 +46,7 @@ export async function runScheduledEngine(
       jobs[name] = await callWorker("/v1/jobs", { name, data: {} });
     }
     if (Object.values(jobs).every((s) => s === 202))
-      return { mode: "worker", jobs, verifiedProductIds: [] };
+      return { mode: "worker", jobs, verifiedProductIds: [], retention };
     // Worker unreachable: fall through and do the essential part here.
   }
 
@@ -40,6 +56,7 @@ export async function runScheduledEngine(
       mode: "unavailable",
       reason: "DATABASE_URL not set: the engine can't reach the tracked products",
       verifiedProductIds: [],
+      retention,
     };
   }
   const { stats, verifiedProductIds } = await verifyTracked(
@@ -52,5 +69,5 @@ export async function runScheduledEngine(
       trigger: "cron",
     },
   );
-  return { mode: "inline", stats, verifiedProductIds };
+  return { mode: "inline", stats, verifiedProductIds, retention };
 }

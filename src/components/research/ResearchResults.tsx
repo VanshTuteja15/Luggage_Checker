@@ -545,6 +545,13 @@ export function ResearchResults({
       )}
 
       <CouldntVerify rows={unverified} />
+
+      {products.length > 0 && (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Prices are each store&rsquo;s listed price in Canadian dollars, before GST/HST and
+          shipping, as read at the time shown.
+        </p>
+      )}
     </div>
   );
 }

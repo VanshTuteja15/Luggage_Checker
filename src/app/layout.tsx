@@ -6,7 +6,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "LuggageTracker — Luggage Price Monitoring",
   description:
-    "Monitor luggage prices across Amazon, Walmart, Target and more.",
+    "Verified luggage prices from Canadian retailers, with the source and time of every price.",
 };
 
 // Self-hosted at build time: no request to Google from the visitor's browser.

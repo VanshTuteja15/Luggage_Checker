@@ -239,6 +239,15 @@ export class PgEngineStore implements EngineStore {
     await Promise.all(Array.from({ length: n }, () => this.pool.query("SELECT 1")));
   }
 
+  /** Drop fetch attempts and session events older than `days` (engine_retention, migration 004). */
+  async retention(days = 180): Promise<{ fetchAttempts: number; sessionEvents: number }> {
+    const rows = await this.q<{ r: { fetch_attempts: number; session_events: number } }>(
+      "SELECT engine_retention($1) AS r",
+      [days],
+    );
+    return { fetchAttempts: rows[0].r.fetch_attempts, sessionEvents: rows[0].r.session_events };
+  }
+
   private async q<T extends Row = Row>(text: string, params: unknown[] = []): Promise<T[]> {
     const res = await this.pool.query<T>(text, params);
     return res.rows;

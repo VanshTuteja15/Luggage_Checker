@@ -3,7 +3,12 @@ import { badRequest, errorResponse } from "@/lib/api/respond";
 import { engineConfig } from "@/lib/engine/config";
 import { flagOn } from "@/lib/engine/flags";
 import { checkRateLimit, createSession, parseResearchInput } from "@/lib/engine/research/api";
-import { dispatchSession, getEngine, realtimeAvailable } from "@/lib/engine/server";
+import {
+  dispatchSession,
+  engineStoreReady,
+  getEngine,
+  realtimeAvailable,
+} from "@/lib/engine/server";
 import { requireUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +33,15 @@ export async function POST(req: NextRequest) {
     if (!flagOn(await rt.flags(), "engine.enabled")) {
       return NextResponse.json(
         { error: "Verified price checks are switched off right now.", code: "engine_disabled" },
+        { status: 503 },
+      );
+    }
+    if (!engineStoreReady()) {
+      return NextResponse.json(
+        {
+          error: "Verified price checks aren't set up on this server yet (no engine database).",
+          code: "engine_not_configured",
+        },
         { status: 503 },
       );
     }
@@ -75,9 +89,10 @@ export async function GET(req: NextRequest) {
     const cfg = engineConfig();
     const { rt } = getEngine();
     const flags = await rt.flags();
+    const available = flagOn(flags, "engine.enabled") && engineStoreReady();
     return NextResponse.json({
-      available: flagOn(flags, "engine.enabled"),
-      defaultEngine: flagOn(flags, "engine.default_search"),
+      available,
+      defaultEngine: available && flagOn(flags, "engine.default_search"),
       worker: !!cfg.worker,
       store: rt.store.kind,
       realtime: realtimeAvailable(),
