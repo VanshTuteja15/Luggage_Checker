@@ -7,8 +7,7 @@
 /* ------------------------------------------------------------------ */
 
 import { build } from "esbuild";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -18,7 +17,11 @@ if (!entry) {
   process.exit(1);
 }
 
-const out = join(mkdtempSync(join(tmpdir(), "lw-run-")), "entry.mjs");
+// Inside the project, so packages left external (supabase-js) resolve from
+// its node_modules.
+const cache = resolve("node_modules/.cache");
+mkdirSync(cache, { recursive: true });
+const out = join(mkdtempSync(join(cache, "lw-run-")), "entry.mjs");
 
 await build({
   entryPoints: [resolve(entry)],

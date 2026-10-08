@@ -58,7 +58,8 @@ describe("admin overview", () => {
     const cld = o.sources.find((s) => s.sourceId === "canadaluggagedepot")!;
     expect(cld.routes.find((r) => r.adapter === "shopify_product_json")!.usable).toBe(true);
     expect(cld.routes.find((r) => r.adapter === "shopify_ucp")!.reason).toMatch(/agent profile/);
-    expect(o.flags.find((f) => f.key === "engine.default_search")!.enabled).toBe(false);
+    expect(o.flags.find((f) => f.key === "engine.default_search")!.enabled).toBe(true);
+    expect(o.flags.find((f) => f.key === "discovery.tavily")!.enabled).toBe(false);
   });
 
   it("only known flags can be flipped", async () => {

@@ -105,9 +105,8 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, retailer_label = EXCLUDED.r
 -- Default flags: inserted once, never overwritten (admins own them).
 INSERT INTO feature_flags (key, enabled, description) VALUES
 ('engine.enabled', true, 'New price engine available (research API, worker jobs)'),
-('engine.default_search', false, 'Search uses the new engine by default (after shadow mode passes)'),
+('engine.default_search', true, 'Search opens on verified prices (the engine) instead of web research'),
 ('discovery.tavily', false, 'Tavily as a discovery fallback: URLs only, never prices'),
-('shadow.enabled', false, 'Run old and new search side by side and record the comparison'),
 ('policy.ucp_on_restricted_stores', true, 'Use the store-published UCP channel on stores whose terms carry a generic anti-scrape clause (legal sign-off pending)'),
 ('source.luggagecity.ucp', false, 'Luggage City UCP (audit: legal review first)'),
 ('source.unluggage.product_json', false, 'U.N. Luggage product JSON (turn on after reading the terms)'),

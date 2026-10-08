@@ -5,7 +5,7 @@
 /*    1. FLAG_DEFAULTS below (safe defaults: anything that needs a      */
 /*       human decision is OFF)                                         */
 /*    2. rows in the `feature_flags` table (admins flip these)          */
-/*    3. ENGINE_FLAGS env, e.g. "discovery.tavily=on,shadow.enabled=off" */
+/*    3. ENGINE_FLAGS env, e.g. "discovery.tavily=on,engine.default_search=off" */
 /*       for operators and tests                                        */
 /* ------------------------------------------------------------------ */
 
@@ -15,14 +15,14 @@ export const FLAG_DEFAULTS = {
   /** The new engine is available at all (research API, worker jobs). */
   "engine.enabled": true,
   /**
-   * Search uses the new engine by default. OFF until shadow mode shows the
-   * engine matches or beats the old Tavily path (see docs/SHADOW_REPORT.md).
+   * Search opens on verified prices (the engine) instead of web research.
+   * ON since the P8 shadow run: the engine matched or beat the old Tavily
+   * path on every measure (docs/SHADOW_REPORT.md). Web research stays one
+   * click away; turning this off in /admin rolls the default back.
    */
-  "engine.default_search": false,
+  "engine.default_search": true,
   /** Tavily as a flag-controlled discovery fallback (URLs only, never prices). */
   "discovery.tavily": false,
-  /** Run old and new paths side by side and record the comparison. */
-  "shadow.enabled": false,
 
   /**
    * UCP on Shopify stores whose terms carry the generic anti-scrape clause

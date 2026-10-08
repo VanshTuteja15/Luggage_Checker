@@ -802,6 +802,11 @@ async function main() {
   check("maxPrice parsed", cheap.intent.maxPrice === 200, `${cheap.intent.maxPrice}`);
   check("'under $200' stripped from the research query", !/200|under/i.test(String(calls.bodies[0]?.query)), String(calls.bodies[0]?.query));
   check("every product shown is under $200", cheap.products.every((p) => p.lowestPrice <= 200));
+  installStub();
+  // Shadow run (P8): "Sky Max 3.0" was read as "max $3" and the search found nothing.
+  const model = await search("Delsey Sky Max 3.0 Carry-On");
+  check("a model name is not a price ceiling", model.intent.maxPrice === null, `${model.intent.maxPrice}`);
+  check("the model name stays in the research query", /sky max 3\.0/i.test(String(calls.bodies[0]?.query)), String(calls.bodies[0]?.query));
 
   section("C5. Specs attached to products");
   installStub({

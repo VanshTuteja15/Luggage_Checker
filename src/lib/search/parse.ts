@@ -7,6 +7,7 @@
 /* ------------------------------------------------------------------ */
 
 import { callGeminiJSON, geminiConfigured, type GeminiSchema } from "@/lib/gemini";
+import { MIN_PLAUSIBLE_PRICE } from "./extract";
 import type { SearchIntent } from "./types";
 
 const INTENT_SCHEMA: GeminiSchema = {
@@ -29,29 +30,44 @@ const INTENT_SCHEMA: GeminiSchema = {
     features: { type: "ARRAY", items: { type: "STRING" } },
     explanation: {
       type: "STRING",
-      description: "One short sentence, addressed to the user, describing what is being searched for.",
+      description:
+        "One short sentence, addressed to the user, describing what is being searched for.",
     },
   },
   required: ["terms", "explanation"],
 };
 
+const MAX_PHRASE =
+  /(?:\b(?:under|below|less than|max|up to)|<)\s*(\$)?\s*(\d[\d,]*(?:\.\d{2})?)(?![.\d])/gi;
+const MIN_PHRASE =
+  /(?:\b(?:over|above|more than|min|at least)|>)\s*(\$)?\s*(\d[\d,]*(?:\.\d{2})?)(?![.\d])/gi;
+
+/**
+ * "under 300", "max $250", "< 400" — but not a model name: "Delsey Sky Max
+ * 3.0" is not "max $3". Without a "$" the number must be a plausible price.
+ */
+function pricePhrases(query: string, re: RegExp): { value: number; text: string }[] {
+  return [...query.matchAll(re)]
+    .map((m) => ({ value: Number(m[2].replace(/,/g, "")), dollar: !!m[1], text: m[0] }))
+    .filter((p) => p.dollar || p.value >= MIN_PLAUSIBLE_PRICE)
+    .map(({ value, text }) => ({ value, text }));
+}
+
 /** Pull "$300", "under 300", "300 dollars" out of a raw query. */
 function heuristicMaxPrice(query: string): number | null {
-  const m = query.match(/(?:under|below|less than|max|up to|<)\s*\$?\s*(\d[\d,]*)/i);
-  if (m) return Number(m[1].replace(/,/g, ""));
-  return null;
+  return pricePhrases(query, MAX_PHRASE)[0]?.value ?? null;
 }
 
 function heuristicMinPrice(query: string): number | null {
-  const m = query.match(/(?:over|above|more than|min|at least|>)\s*\$?\s*(\d[\d,]*)/i);
-  if (m) return Number(m[1].replace(/,/g, ""));
-  return null;
+  return pricePhrases(query, MIN_PHRASE)[0]?.value ?? null;
 }
 
 /** Strip price phrases so they don't pollute the shopping keywords. */
 function stripPricePhrases(query: string): string {
-  return query
-    .replace(/(?:under|below|less than|max|up to|over|above|more than|min|at least)\s*\$?\s*\d[\d,]*/gi, "")
+  let out = query;
+  for (const p of [...pricePhrases(query, MAX_PHRASE), ...pricePhrases(query, MIN_PHRASE)])
+    out = out.replace(p.text, " ");
+  return out
     .replace(/\$\s*\d[\d,]*/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -107,18 +123,30 @@ export function isPlainProductQuery(query: string): boolean {
 
   // Price constraints are the main thing the LLM is there for.
   if (/\d\s*(?:dollars?|cad|\$)|\$\s*\d/i.test(q)) return false;
-  if (/\b(under|below|less than|over|above|more than|between|max|min|up to|at least|cheaper|cheapest|budget)\b/i.test(q)) {
+  if (
+    /\b(under|below|less than|over|above|more than|between|max|min|up to|at least|cheaper|cheapest|budget)\b/i.test(
+      q,
+    )
+  ) {
     return false;
   }
 
   // Questions and instructions, not product names.
   if (/[?]/.test(q)) return false;
-  if (/\b(show|find|get|need|want|looking|compare|best|good|vs|versus|for my|that|which|what|recommend)\b/i.test(q)) {
+  if (
+    /\b(show|find|get|need|want|looking|compare|best|good|vs|versus|for my|that|which|what|recommend)\b/i.test(
+      q,
+    )
+  ) {
     return false;
   }
 
   // Short and plain. Six words covers "Samsonite Omni PC 20 inch spinner".
   return q.split(/\s+/).filter(Boolean).length <= 6;
+}
+
+function plausibleCeiling(n: number | null): number | null {
+  return n !== null && n >= MIN_PLAUSIBLE_PRICE ? n : null;
 }
 
 function clampPrice(value: unknown): number | null {
@@ -192,7 +220,8 @@ Extract the search intent. Rules:
       brand: cleanString(parsed.brand),
       model: cleanString(parsed.model),
       productType: cleanString(parsed.productType),
-      maxPrice: clampPrice(parsed.maxPrice) ?? heuristicMaxPrice(raw),
+      // A ceiling under any luggage price is a misread model name ("Sky Max 3.0").
+      maxPrice: plausibleCeiling(clampPrice(parsed.maxPrice)) ?? heuristicMaxPrice(raw),
       minPrice: clampPrice(parsed.minPrice) ?? heuristicMinPrice(raw),
       features,
       explanation: cleanString(parsed.explanation) ?? `Searching for "${terms}".`,

@@ -23,7 +23,9 @@
     "db:dev": "node scripts/run-ts.mjs scripts/db/dev-db.ts",
     "engine:discover": "node scripts/run-ts.mjs scripts/engine/discover.ts",
     "engine:research": "node scripts/run-ts.mjs scripts/engine/research.ts",
-    "engine:reresolve": "node scripts/run-ts.mjs scripts/engine/reresolve.ts"
+    "engine:reresolve": "node scripts/run-ts.mjs scripts/engine/reresolve.ts",
+    "shadow:run": "node scripts/run-ts.mjs scripts/shadow/run.ts",
+    "shadow:report": "node scripts/run-ts.mjs scripts/shadow/report.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

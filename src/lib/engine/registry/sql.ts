@@ -32,9 +32,8 @@ function jsonb(value: unknown): string {
 
 const FLAG_DESCRIPTIONS: Record<string, string> = {
   "engine.enabled": "New price engine available (research API, worker jobs)",
-  "engine.default_search": "Search uses the new engine by default (after shadow mode passes)",
+  "engine.default_search": "Search opens on verified prices (the engine) instead of web research",
   "discovery.tavily": "Tavily as a discovery fallback: URLs only, never prices",
-  "shadow.enabled": "Run old and new search side by side and record the comparison",
   "policy.ucp_on_restricted_stores":
     "Use the store-published UCP channel on stores whose terms carry a generic anti-scrape clause (legal sign-off pending)",
   "source.luggagecity.ucp": "Luggage City UCP (audit: legal review first)",
