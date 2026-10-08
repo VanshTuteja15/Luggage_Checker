@@ -114,7 +114,7 @@ async function main(): Promise<void> {
     const c = await connect("fresh");
     await c.query(sql("supabase/tests/shim.sql"));
     for (const round of [1, 2]) {
-      for (const f of ["000_complete_setup.sql", "003_search_cache_and_quota.sql", "004_price_engine.sql"]) {
+      for (const f of ["000_complete_setup.sql", "003_search_cache_and_quota.sql", "004_price_engine.sql", "005_scheduler_alerts.sql"]) {
         try {
           await c.query(sql(`supabase/migrations/${f}`));
           check(`round ${round}: ${f} applies`, true);
@@ -242,7 +242,7 @@ async function main(): Promise<void> {
     console.log(`\n${B}Legacy install: shim → 001 → 002 → 003 → 004${X}`);
     const l = await connect("legacy");
     await l.query(sql("supabase/tests/shim.sql"));
-    for (const f of ["001_initial_schema.sql", "002_live_search_and_alerts.sql", "003_search_cache_and_quota.sql", "004_price_engine.sql"]) {
+    for (const f of ["001_initial_schema.sql", "002_live_search_and_alerts.sql", "003_search_cache_and_quota.sql", "004_price_engine.sql", "005_scheduler_alerts.sql"]) {
       try {
         await l.query(sql(`supabase/migrations/${f}`));
         check(`${f} applies`, true);

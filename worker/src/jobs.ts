@@ -6,6 +6,10 @@
 import { discoverAll, discoverSource } from "@/lib/engine/discovery";
 import { checkSourceHealth } from "@/lib/engine/jobs/health";
 import { luggagePack } from "@/lib/engine/packs/luggage";
+import { PgTrackedBridge } from "@/lib/engine/bridge/tracked";
+import { verifyTracked } from "@/lib/engine/jobs/verify-tracked";
+import { PgEngineStore } from "@/lib/engine/store/pg";
+import { sendPriceAlert } from "@/lib/email";
 import type { EngineRuntime } from "@/lib/engine/recorder";
 import { log } from "./log";
 import type { JobQueue } from "./queue";
@@ -37,6 +41,26 @@ export async function registerJobs(queue: JobQueue, rt: EngineRuntime): Promise<
       return r;
     },
     { concurrency: 2 },
+  );
+
+  await queue.work(
+    "verify.tracked",
+    async (data, job) => {
+      if (!(rt.store instanceof PgEngineStore)) {
+        log("warn", "verify.tracked skipped: needs DATABASE_URL (tracked products live in Postgres)", { jobId: job.id });
+        return { skipped: true };
+      }
+      const { stats } = await verifyTracked(rt, luggagePack, new PgTrackedBridge(rt.store.pool), {
+        maxProducts: maxFetches(data.maxProducts),
+        maxFetches: maxFetches(data.maxFetches),
+        sendAlert: sendPriceAlert,
+        signal: job.signal,
+        trigger: "worker",
+      });
+      log("info", "verify.tracked done", { jobId: job.id, ...stats });
+      return stats;
+    },
+    { concurrency: 1 },
   );
 
   await queue.work(

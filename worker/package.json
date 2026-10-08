@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "pg": "8.23.1",
-    "pg-boss": "12.37.0"
+    "pg-boss": "12.37.0",
+    "resend": "^4.8.0"
   },
   "devDependencies": {
     "@types/node": "^22.16.5",

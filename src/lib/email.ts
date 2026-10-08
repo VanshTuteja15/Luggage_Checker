@@ -233,6 +233,28 @@ function buildSubject(data: ReportData): string {
 
 /* ------------------------------------------------------------------ */
 
+export type PriceAlert = { to: string; productName: string; retailer: string; price: number; target: number; url: string; checkedAt: string };
+
+/**
+ * Target-price alert, sent when a tracked bag's verified price reaches the
+ * user's target. The scheduler sends at most one per user, product and day.
+ */
+export async function sendPriceAlert(a: PriceAlert): Promise<{ id: string } | null> {
+  if (!emailConfigured() || !a.to) return null;
+  const from = process.env.REPORT_FROM_EMAIL ?? "LuggageTracker <onboarding@resend.dev>";
+  const when = new Date(a.checkedAt).toLocaleString("en-CA", { timeZone: "America/Edmonton", dateStyle: "medium", timeStyle: "short" });
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;color:#111">
+      <h1 style="font-size:18px;margin:0 0 12px">Price alert: ${esc(a.productName)}</h1>
+      <p style="font-size:15px;margin:0 0 8px"><strong style="color:${SUCCESS}">${cad(a.price)}</strong> at ${esc(a.retailer)} — your target was ${cad(a.target)}.</p>
+      <p style="font-size:13px;color:#555;margin:0 0 16px">Verified live on ${esc(when)} (Calgary time) from the store's own data.</p>
+      <p><a href="${esc(a.url)}" style="background:${BRAND};color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none;font-size:14px">Open ${esc(a.retailer)}</a></p>
+    </div>`;
+  const { data: sent, error } = await client().emails.send({ from, to: a.to, subject: `Price alert: ${a.productName} is ${cad(a.price)} at ${a.retailer}`, html });
+  if (error) throw new Error(`Resend: ${error.message}`);
+  return sent ? { id: sent.id } : null;
+}
+
 /**
  * Send the daily report. Returns the Resend message id, or null when email
  * isn't configured (which is not an error — the cron job still ran).

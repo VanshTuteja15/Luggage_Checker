@@ -17,7 +17,7 @@ await build({
   target: "node22",
   outfile: here("./dist/main.mjs"),
   alias: { "@": here("../src") },
-  external: ["pg", "pg-boss", "pg-native"],
+  external: ["pg", "pg-boss", "pg-native", "resend"],
   banner: { js: "import { createRequire as __lwCreateRequire } from 'node:module'; const require = __lwCreateRequire(import.meta.url);" },
   sourcemap: true,
   logLevel: "warning",

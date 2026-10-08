@@ -25,6 +25,7 @@ export const SIZE_CLASSES = [
   "duffel",
   "garment",
   "tote",
+  "briefcase",
   "accessory",
 ] as const;
 
@@ -41,6 +42,7 @@ export const SIZE_LABELS: Record<SizeClass, string> = {
   duffel: "Duffel",
   garment: "Garment Bag",
   tote: "Tote",
+  briefcase: "Briefcase",
   accessory: "Accessory",
 };
 
@@ -134,7 +136,7 @@ function stripBrand(lower: string, brand: string | null): string {
 /* ── Size classes ───────────────────────────────────────────────────── */
 
 const ACCESSORY_RE =
-  /\b(?:cover|covers|luggage tag|tags?|strap|straps|organi[sz]er|packing cubes?|cubes? set|toiletry|toiletries|pouch|scale|adapter|pillow|wallet|passport holder|replacement|wheel kit|handle kit|garment sleeve|lock|locks|charger|power bank|neck pillow|laundry bag|shoe bag|insert)\b/i;
+  /\b(?:cover|covers|luggage tag|tags?|strap|straps|organi[sz]er|packing cubes?|cubes? set|toiletry|toiletries|pouch|scale|adapter|pillow|wallet|passport holder|replacement|wheel kit|handle kit|garment sleeve|lock|locks|charger|power bank|neck pillow|laundry bag|shoe bag|insert|beauty case|cosmetic case|vanity case|toiletry kit|adapter plug|grounded adapter|converter|umbrella)\b/i;
 
 function isAccessory(title: string): boolean {
   // "TSA lock" is a suitcase feature, not an accessory.
@@ -167,6 +169,8 @@ function sizeClassOf(text: string): SizeClass | null {
   if (isAccessory(text)) return "accessory";
   if (/\b(?:\d\s*-?\s*(?:pc|pcs|piece|pieces)\b|luggage set|set of \d|two-piece|three-piece)/.test(t)) return "set";
   if (/\bunder[-\s]?seat(?:er)?\b|\bpersonal item\b/.test(t)) return "underseat";
+  // (é isn't a regex word character, so no \b after "attaché")
+  if (/\battach[eé](?![a-z])|\bbriefcase\b|\blaptop (?:bag|case|sleeve|brief)\b|\bmessenger\b|\bportfolio\b/.test(t)) return "briefcase";
   if (/\bbackpack\b|\bsac à dos\b/.test(t)) return "backpack";
   if (/\bduffel\b|\bduffle\b/.test(t)) return "duffel";
   if (/\bgarment bag\b|\bgarment\b/.test(t)) return "garment";
@@ -245,8 +249,20 @@ const FILLER = new Set([
   "underseater", "international", "domestic", "global", "case", "edition",
 ]);
 
+/**
+ * Drop a short trailing variant segment: "…Suitcase, Black", "…Luggage - Blue",
+ * "…Backpack, Hazelnut". Stores that list each colour as its own product put
+ * the colour there, and it is not part of the product line.
+ */
+function stripVariantSuffix(text: string): string {
+  const m = text.match(/^(.*\S)\s*(?:,|\s[-–]\s)\s*([^,–]{2,30})$/);
+  if (!m) return text;
+  const tail = m[2].trim().split(/\s+/);
+  return tail.length <= 3 && m[1].trim().split(/\s+/).length >= 2 ? m[1] : text;
+}
+
 function lineOf(text: string, brand: string | null): string[] {
-  const lower = stripBrand(text.toLowerCase().replace(/[’`]/g, "'"), brand)
+  const lower = stripBrand(stripVariantSuffix(text).toLowerCase().replace(/[’`]/g, "'"), brand)
     // drop measurements: 21", 22 x 14 x 9 in, 55 cm, 20-inch
     .replace(/\b\d{2}(?:\.\d)?\s*(?:"|''|”|-?\s?inch(?:es)?\b|-?\s?in\b|\s?cm\b)/g, " ")
     .replace(/\b\d{2}\s*x\s*\d{1,2}(?:\s*x\s*\d{1,2})?\b/g, " ")

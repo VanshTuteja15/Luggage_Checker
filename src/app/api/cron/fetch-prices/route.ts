@@ -4,6 +4,9 @@ import { refreshProducts } from "@/lib/db/refresh";
 import { activeProvider, getBudget } from "@/lib/search";
 import { fetchTavilyUsage, processCreditsSpent } from "@/lib/tavily";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { runScheduledEngine, type EngineCronResult } from "@/lib/engine/cron";
+import { flagOn } from "@/lib/engine/flags";
+import { getEngine } from "@/lib/engine/server";
 
 function envInt(name: string, fallback: number): number {
   const n = Number.parseInt(process.env[name] ?? "", 10);
@@ -58,6 +61,20 @@ export async function POST(req: NextRequest) {
 
     if (byUser.size === 0) {
       return NextResponse.json({ message: "No tracked products", checked: 0 });
+    }
+
+    // ── Verified prices first: the price engine (worker, or inline) ──
+    // Products it verified today skip the paid-credit web research below;
+    // once the engine is the default search, web research doesn't run here.
+    let engine: EngineCronResult | { mode: "error"; error: string; verifiedProductIds: string[] };
+    try {
+      engine = await runScheduledEngine({ timeLimitMs: 120_000 });
+    } catch (err) {
+      engine = { mode: "error", error: err instanceof Error ? err.message : "engine run failed", verifiedProductIds: [] };
+    }
+    const engineVerified = new Set(engine.verifiedProductIds);
+    if (flagOn(await getEngine().rt.flags(), "engine.default_search")) {
+      return NextResponse.json({ message: "Price check complete (verified engine)", engine });
     }
 
     // ── Spend only what the free allowance has left ──────────────
@@ -127,7 +144,7 @@ export async function POST(req: NextRequest) {
     for (const [userId, productIds] of byUser) {
       if (callsLeft <= 0 || runBudgetSpent()) break;
 
-      const fresh = productIds.filter((id) => !seen.has(id));
+      const fresh = productIds.filter((id) => !seen.has(id) && !engineVerified.has(id));
       if (fresh.length === 0) continue;
 
       const products = await getTrackedProducts(supabase, userId, { days: 2 });
@@ -161,6 +178,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       message: "Price check complete",
+      engine,
       provider,
       budget: finalBudget,
       skippedForBudget: Math.max(0, totalDistinctProducts - seen.size),

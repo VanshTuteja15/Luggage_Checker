@@ -19,7 +19,9 @@
     "test:worker": "npm --prefix worker test",
     "test:worker:e2e": "node scripts/run-ts.mjs scripts/db/with-test-db.ts -- npm --prefix worker test",
     "worker:build": "npm --prefix worker run build",
-    "fixtures:record": "node scripts/run-ts.mjs scripts/fixtures/record.ts"
+    "fixtures:record": "node scripts/run-ts.mjs scripts/fixtures/record.ts",
+    "db:dev": "node scripts/run-ts.mjs scripts/db/dev-db.ts",
+    "engine:discover": "node scripts/run-ts.mjs scripts/engine/discover.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

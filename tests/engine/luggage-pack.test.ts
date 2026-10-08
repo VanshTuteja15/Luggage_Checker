@@ -26,6 +26,13 @@ describe("size classes (identity boundary)", () => {
     it(`${title} → ${want}`, () => expect(P.sizeClassOf(title)).toBe(want));
   }
 
+  it("non-suitcase items found in real store indexes get their own classes", () => {
+    expect(P.sizeClassOf("Samsonite Focus III 4 inch Attache Case")).toBe("briefcase");
+    expect(P.sizeClassOf("Mancini BUSINESS Collection Expandable Attaché Case")).toBe("briefcase");
+    expect(P.sizeClassOf("CHATELET AIR 2.0 | Beauty Case - 80th Anniversary Edition, Burgundy")).toBe("accessory");
+    expect(P.sizeClassOf("Samsonite Grounded Adapter Plug (Italy)")).toBe("accessory");
+  });
+
   it("never puts carry-on, medium and large in one class", () => {
     const classes = ["Outline Pro Spinner Carry-On", "Outline Pro Medium Spinner", "Outline Pro Large Spinner"].map(P.sizeClassOf);
     expect(new Set(classes).size).toBe(3);
@@ -73,6 +80,12 @@ describe("brands and product lines", () => {
     expect(P.lineOf('Travelpro Maxlite 5 21" Expandable Carry-On Spinner', "Travelpro")).toEqual(["maxlite", "5"]);
     expect(P.lineOf("TUMI Alpha 3 International Expandable 4 Wheeled Carry-On", "TUMI")).toEqual(["alpha", "3"]);
     expect(P.lineOf("Outline Pro Spinner Medium, Stone Grey", "Samsonite")).toEqual(["outline", "pro"]);
+  });
+  it("drops a trailing colour/variant segment stores put after a comma or dash", () => {
+    // Real Delsey/Travelon titles where each colour is its own product.
+    expect(P.lineOf("Anti-Theft Backpack (RFID Blocking), Hazelnut", null)).toEqual(P.lineOf("Anti-Theft Backpack (RFID Blocking), Midnight", null));
+    expect(P.lineOf("CHATELET AIR 2.0 | Leather Duffel Bag, Cognac", "Delsey")).toEqual(["chatelet", "air", "2.0", "leather", "duffel"]);
+    expect(P.lineOf("Samsonite Omni 3.0 Large Spinner Expandable Luggage - Blue", "Samsonite")).toEqual(["omni", "3.0"]);
   });
 });
 

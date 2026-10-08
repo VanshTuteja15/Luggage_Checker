@@ -130,10 +130,16 @@ export async function resolveListing(store: EngineStore, pack: CategoryPack, lis
 
   /* 4. a new product of its own */
   if (!sizeClass || !brand) {
-    // Without a size class or brand we can't be sure what it is: own product, flagged.
+    // Without a size class or brand we can't match it safely: it gets a product of
+    // its own. Only suitcases need a human look (their size is the identity wall);
+    // a plug adapter or a pouch without a size is just itself.
     const productId = await createFor(store, listing, brand, line, sizeClass, null);
-    await store.enqueueReview(listing.id, null, 0, [!brand ? "brand unknown" : "size class unknown", ...reasons]);
-    return { productId, variantId: null, method: "review", reasons: ["created, flagged for review"] };
+    const suitcaseLike = /\b(spinner|suitcase|luggage|carry[-\s]?on|checked|check-in|hardside|softside|trolley|upright|valise)\b/i.test(listing.title);
+    if (suitcaseLike) {
+      await store.enqueueReview(listing.id, null, 0, [!brand ? "brand unknown" : "size class unknown", ...reasons]);
+      return { productId, variantId: null, method: "review", reasons: ["created, flagged for review"] };
+    }
+    return { productId, variantId: null, method: "new", reasons: [...reasons, "no size class or brand: kept on its own"] };
   }
   const productId = await createFor(store, listing, brand, line, sizeClass, key);
   return { productId, variantId: (await store.getListing(listing.id))?.variantId ?? null, method: "new", reasons };
