@@ -19,7 +19,9 @@ export function tokenize(text: string): string[] {
     .filter(Boolean);
 }
 
-export function haystackFor(l: Pick<ListingRecord, "brand" | "title" | "identifiers">): Set<string> {
+export function haystackFor(
+  l: Pick<ListingRecord, "brand" | "title" | "identifiers">,
+): Set<string> {
   return new Set([
     ...tokenize(l.brand ?? ""),
     ...tokenize(l.title),
@@ -36,7 +38,11 @@ export function requiredTerms(q: ParsedQuery): string[] {
 }
 
 /** 0 = not a match. Size classes never cross: a carry-on query never returns a large. */
-export function matchScore(q: ParsedQuery, haystack: Set<string>, listingSize: string | null): number {
+export function matchScore(
+  q: ParsedQuery,
+  haystack: Set<string>,
+  listingSize: string | null,
+): number {
   const required = requiredTerms(q);
   if (required.length === 0) return 0;
   if (!required.every((t) => haystack.has(t))) return 0;
@@ -46,6 +52,23 @@ export function matchScore(q: ParsedQuery, haystack: Set<string>, listingSize: s
   if (q.sizeClass && listingSize === q.sizeClass) score += 2;
   if (q.colour && haystack.has(q.colour.toLowerCase().split(" ").pop() ?? "")) score += 1;
   return score;
+}
+
+/**
+ * Within one store, once some listings match the asked size exactly, its
+ * listings with no size at all are dropped: "Chatelet Air 2.0 Medium" should
+ * not also check that store's Chatelet laptop bag. A store whose titles never
+ * carry a size keeps its unknown-size listings.
+ */
+export function preferExactSize<T extends { l: Pick<ListingRecord, "sourceId" | "sizeClass"> }>(
+  q: ParsedQuery,
+  scored: T[],
+): T[] {
+  if (!q.sizeClass) return scored;
+  const exact = new Set(
+    scored.filter((x) => x.l.sizeClass === q.sizeClass).map((x) => x.l.sourceId),
+  );
+  return scored.filter((x) => x.l.sizeClass !== null || !exact.has(x.l.sourceId));
 }
 
 /** tsquery text for to_tsquery('simple', …), or null if nothing to search. Inputs are sanitised to [a-z0-9.]. */

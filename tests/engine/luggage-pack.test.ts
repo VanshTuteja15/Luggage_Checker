@@ -29,12 +29,18 @@ describe("size classes (identity boundary)", () => {
   it("non-suitcase items found in real store indexes get their own classes", () => {
     expect(P.sizeClassOf("Samsonite Focus III 4 inch Attache Case")).toBe("briefcase");
     expect(P.sizeClassOf("Mancini BUSINESS Collection Expandable Attaché Case")).toBe("briefcase");
-    expect(P.sizeClassOf("CHATELET AIR 2.0 | Beauty Case - 80th Anniversary Edition, Burgundy")).toBe("accessory");
+    expect(
+      P.sizeClassOf("CHATELET AIR 2.0 | Beauty Case - 80th Anniversary Edition, Burgundy"),
+    ).toBe("accessory");
     expect(P.sizeClassOf("Samsonite Grounded Adapter Plug (Italy)")).toBe("accessory");
   });
 
   it("never puts carry-on, medium and large in one class", () => {
-    const classes = ["Outline Pro Spinner Carry-On", "Outline Pro Medium Spinner", "Outline Pro Large Spinner"].map(P.sizeClassOf);
+    const classes = [
+      "Outline Pro Spinner Carry-On",
+      "Outline Pro Medium Spinner",
+      "Outline Pro Large Spinner",
+    ].map(P.sizeClassOf);
     expect(new Set(classes).size).toBe(3);
   });
 });
@@ -45,14 +51,20 @@ describe("manufacturer model numbers", () => {
   });
   it("Samsonite model + colour name (U.N. Luggage SKU)", () => {
     expect(P.modelOf("137394-Black", "Samsonite")).toEqual({ model: "137394", colourCode: null });
-    expect(P.modelOf("137394-Stone Grey", "Samsonite")).toEqual({ model: "137394", colourCode: null });
+    expect(P.modelOf("137394-Stone Grey", "Samsonite")).toEqual({
+      model: "137394",
+      colourCode: null,
+    });
   });
   it("SFCC concatenated SKU and master id", () => {
     expect(P.modelOf("1373941041", "Samsonite")).toEqual({ model: "137394", colourCode: "1041" });
     expect(P.modelOf("137394XXXX", "Samsonite")).toEqual({ model: "137394", colourCode: null });
   });
   it("TUMI style + colour", () => {
-    expect(P.modelOf("expandable-carry-on-01396831041", "TUMI")).toEqual({ model: "0139683", colourCode: "1041" });
+    expect(P.modelOf("expandable-carry-on-01396831041", "TUMI")).toEqual({
+      model: "0139683",
+      colourCode: "1041",
+    });
   });
   it("Delsey 9-digit model + 2-digit colour", () => {
     expect(P.modelOf("40119980500US", "Delsey")).toEqual({ model: "401199805", colourCode: "00" });
@@ -75,17 +87,51 @@ describe("brands and product lines", () => {
     expect(P.brandOf("Away The Carry-On")).toBe("Away");
   });
   it("keeps line and version words, drops size, colour and filler", () => {
-    expect(P.lineOf("Samsonite Outline Pro Medium Spinner", "Samsonite")).toEqual(["outline", "pro"]);
-    expect(P.lineOf("Samsonite Omni 3.0 Large Spinner Expandable Luggage", "Samsonite")).toEqual(["omni", "3.0"]);
-    expect(P.lineOf('Travelpro Maxlite 5 21" Expandable Carry-On Spinner', "Travelpro")).toEqual(["maxlite", "5"]);
-    expect(P.lineOf("TUMI Alpha 3 International Expandable 4 Wheeled Carry-On", "TUMI")).toEqual(["alpha", "3"]);
-    expect(P.lineOf("Outline Pro Spinner Medium, Stone Grey", "Samsonite")).toEqual(["outline", "pro"]);
+    expect(P.lineOf("Samsonite Outline Pro Medium Spinner", "Samsonite")).toEqual([
+      "outline",
+      "pro",
+    ]);
+    expect(P.lineOf("Samsonite Omni 3.0 Large Spinner Expandable Luggage", "Samsonite")).toEqual([
+      "omni",
+      "3.0",
+      "expandable",
+    ]);
+    expect(P.lineOf('Travelpro Maxlite 5 21" Expandable Carry-On Spinner', "Travelpro")).toEqual([
+      "maxlite",
+      "5",
+      "expandable",
+    ]);
+    expect(P.lineOf("TUMI Alpha 3 International Expandable 4 Wheeled Carry-On", "TUMI")).toEqual([
+      "alpha",
+      "3",
+      "international",
+      "expandable",
+    ]);
+    // ...but a query need not say them.
+    expect(P.parseQuery("TUMI Alpha 3 International Expandable Carry-On").line).toEqual([
+      "alpha",
+      "3",
+    ]);
+    expect(P.lineOf("Outline Pro Spinner Medium, Stone Grey", "Samsonite")).toEqual([
+      "outline",
+      "pro",
+    ]);
   });
   it("drops a trailing colour/variant segment stores put after a comma or dash", () => {
     // Real Delsey/Travelon titles where each colour is its own product.
-    expect(P.lineOf("Anti-Theft Backpack (RFID Blocking), Hazelnut", null)).toEqual(P.lineOf("Anti-Theft Backpack (RFID Blocking), Midnight", null));
-    expect(P.lineOf("CHATELET AIR 2.0 | Leather Duffel Bag, Cognac", "Delsey")).toEqual(["chatelet", "air", "2.0", "leather", "duffel"]);
-    expect(P.lineOf("Samsonite Omni 3.0 Large Spinner Expandable Luggage - Blue", "Samsonite")).toEqual(["omni", "3.0"]);
+    expect(P.lineOf("Anti-Theft Backpack (RFID Blocking), Hazelnut", null)).toEqual(
+      P.lineOf("Anti-Theft Backpack (RFID Blocking), Midnight", null),
+    );
+    expect(P.lineOf("CHATELET AIR 2.0 | Leather Duffel Bag, Cognac", "Delsey")).toEqual([
+      "chatelet",
+      "air",
+      "2.0",
+      "leather",
+      "duffel",
+    ]);
+    expect(
+      P.lineOf("Samsonite Omni 3.0 Large Spinner Expandable Luggage - Blue", "Samsonite"),
+    ).toEqual(["omni", "3.0", "expandable"]);
   });
 });
 

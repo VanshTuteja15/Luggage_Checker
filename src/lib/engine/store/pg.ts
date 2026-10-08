@@ -46,7 +46,7 @@ import type {
   SessionTiming,
   SourceHealthStat,
 } from "./port";
-import { haystackFor, matchScore, tsQueryFor } from "./terms";
+import { haystackFor, matchScore, preferExactSize, tsQueryFor } from "./terms";
 
 /* ── connection ───────────────────────────────────────────────────── */
 
@@ -62,12 +62,19 @@ export function poolConfig(connectionString: string, max = 5): PoolConfig {
   else if (ca) ssl = { ca, rejectUnauthorized: true };
   else if (mode === "no-verify") ssl = { rejectUnauthorized: false };
   else ssl = { rejectUnauthorized: true };
-  return { connectionString: url.toString(), max, ssl, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 8_000 };
+  return {
+    connectionString: url.toString(),
+    max,
+    ssl,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 8_000,
+  };
 }
 
 /* ── row mapping ──────────────────────────────────────────────────── */
 
-const iso = (v: unknown): string | null => (v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : String(v));
+const iso = (v: unknown): string | null =>
+  v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : String(v);
 const isoReq = (v: unknown): string => iso(v) ?? new Date(0).toISOString();
 const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 
@@ -141,7 +148,14 @@ function toProduct(r: Row): CatalogProduct {
 }
 
 function toVariant(r: Row): CatalogVariant {
-  return { id: r.id, productId: r.product_id, colour: r.colour, colourCode: r.colour_code, title: r.title, imageUrl: r.image_url };
+  return {
+    id: r.id,
+    productId: r.product_id,
+    colour: r.colour,
+    colourCode: r.colour_code,
+    title: r.title,
+    imageUrl: r.image_url,
+  };
 }
 
 function toObservation(r: Row): Observation {
@@ -156,7 +170,11 @@ function toObservation(r: Row): Observation {
     availability: r.availability as Availability,
     seller: r.seller,
     condition: r.condition,
-    validation: { outcome: r.outcome, confidence: Number(r.confidence), reasons: (r.validation?.reasons ?? []) as string[] },
+    validation: {
+      outcome: r.outcome,
+      confidence: Number(r.confidence),
+      reasons: (r.validation?.reasons ?? []) as string[],
+    },
     evidence: r.evidence ?? {},
     extractorVersion: r.extractor_version,
     validatorVersion: r.validator_version,
@@ -206,7 +224,19 @@ export class PgEngineStore implements EngineStore {
   readonly pool: Pool;
 
   constructor(connectionStringOrPool: string | Pool, max = 5) {
-    this.pool = typeof connectionStringOrPool === "string" ? new Pool(poolConfig(connectionStringOrPool, max)) : connectionStringOrPool;
+    this.pool =
+      typeof connectionStringOrPool === "string"
+        ? new Pool(poolConfig(connectionStringOrPool, max))
+        : connectionStringOrPool;
+  }
+
+  /**
+   * Open `n` pool connections ahead of time. Connection setup (TLS to the
+   * Supabase pooler; IPv6-then-IPv4 for "localhost" on Windows) otherwise
+   * lands in the middle of a research session, measured at ~1 s each.
+   */
+  async warm(n = 3): Promise<void> {
+    await Promise.all(Array.from({ length: n }, () => this.pool.query("SELECT 1")));
   }
 
   private async q<T extends Row = Row>(text: string, params: unknown[] = []): Promise<T[]> {
@@ -214,7 +244,9 @@ export class PgEngineStore implements EngineStore {
     return res.rows;
   }
 
-  private async tx<T>(fn: (q: (text: string, params?: unknown[]) => Promise<Row[]>) => Promise<T>): Promise<T> {
+  private async tx<T>(
+    fn: (q: (text: string, params?: unknown[]) => Promise<Row[]>) => Promise<T>,
+  ): Promise<T> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -244,7 +276,10 @@ export class PgEngineStore implements EngineStore {
   }
 
   async getHealth(sourceId: string): Promise<SourceHealth> {
-    const [r] = await this.q("SELECT circuit_state, circuit_opened_at, circuit_reason, consecutive_failures FROM sources WHERE id = $1", [sourceId]);
+    const [r] = await this.q(
+      "SELECT circuit_state, circuit_opened_at, circuit_reason, consecutive_failures FROM sources WHERE id = $1",
+      [sourceId],
+    );
     return {
       sourceId,
       circuit: (r?.circuit_state as CircuitState) ?? "closed",
@@ -262,15 +297,25 @@ export class PgEngineStore implements EngineStore {
   }
 
   async sourcesWithAdapter(adapter: "feed_import" | "manual_entry"): Promise<Set<string>> {
-    const rows = await this.q("SELECT DISTINCT source_id FROM observations WHERE adapter = $1 AND outcome <> 'rejected'", [adapter]);
+    const rows = await this.q(
+      "SELECT DISTINCT source_id FROM observations WHERE adapter = $1 AND outcome <> 'rejected'",
+      [adapter],
+    );
     return new Set(rows.map((r) => r.source_id as string));
   }
 
   /* flags */
 
   async listFlagRows(): Promise<FlagRow[]> {
-    const rows = await this.q("SELECT key, enabled, description, updated_at FROM feature_flags ORDER BY key");
-    return rows.map((r) => ({ key: r.key, enabled: r.enabled, description: r.description, updatedAt: isoReq(r.updated_at) }));
+    const rows = await this.q(
+      "SELECT key, enabled, description, updated_at FROM feature_flags ORDER BY key",
+    );
+    return rows.map((r) => ({
+      key: r.key,
+      enabled: r.enabled,
+      description: r.description,
+      updatedAt: isoReq(r.updated_at),
+    }));
   }
 
   async setFlag(key: string, enabled: boolean, userId: string | null): Promise<void> {
@@ -328,11 +373,17 @@ export class PgEngineStore implements EngineStore {
   }
 
   async findListingByUrl(sourceId: string, url: string): Promise<ListingRecord | null> {
-    const [r] = await this.q("SELECT * FROM listings WHERE source_id = $1 AND url = $2", [sourceId, url]);
+    const [r] = await this.q("SELECT * FROM listings WHERE source_id = $1 AND url = $2", [
+      sourceId,
+      url,
+    ]);
     return r ? toListing(r) : null;
   }
 
-  async searchListings(q: ParsedQuery, opts: { limit: number; sourceIds?: string[] }): Promise<ListingRecord[]> {
+  async searchListings(
+    q: ParsedQuery,
+    opts: { limit: number; sourceIds?: string[] },
+  ): Promise<ListingRecord[]> {
     const tsq = tsQueryFor(q);
     if (!tsq) return [];
     const rows = await this.q(
@@ -346,30 +397,50 @@ export class PgEngineStore implements EngineStore {
       [tsq, opts.sourceIds ?? null, q.sizeClass, Math.min(500, opts.limit * 3)],
     );
     // Final ordering uses the same scorer as the memory store.
-    return rows
+    const scored = rows
       .map(toListing)
       .map((l) => ({ l, s: matchScore(q, haystackFor(l), l.sizeClass) }))
-      .filter((x) => x.s > 0)
+      .filter((x) => x.s > 0);
+    return preferExactSize(q, scored)
       .sort((a, b) => b.s - a.s || a.l.title.localeCompare(b.l.title))
       .slice(0, opts.limit)
       .map((x) => x.l);
   }
 
   async listingsForProduct(productId: string): Promise<ListingRecord[]> {
-    return (await this.q("SELECT * FROM listings WHERE product_id = $1 AND active ORDER BY source_id", [productId])).map(toListing);
+    return (
+      await this.q("SELECT * FROM listings WHERE product_id = $1 AND active ORDER BY source_id", [
+        productId,
+      ])
+    ).map(toListing);
   }
 
   async listingsBySource(sourceId: string, limit: number): Promise<ListingRecord[]> {
-    return (await this.q("SELECT * FROM listings WHERE source_id = $1 ORDER BY last_seen_at DESC LIMIT $2", [sourceId, limit])).map(toListing);
+    return (
+      await this.q(
+        "SELECT * FROM listings WHERE source_id = $1 ORDER BY last_seen_at DESC LIMIT $2",
+        [sourceId, limit],
+      )
+    ).map(toListing);
   }
 
   async countListingsBySource(): Promise<Record<string, number>> {
-    const rows = await this.q("SELECT source_id, count(*)::int AS n FROM listings WHERE active GROUP BY source_id");
+    const rows = await this.q(
+      "SELECT source_id, count(*)::int AS n FROM listings WHERE active GROUP BY source_id",
+    );
     return Object.fromEntries(rows.map((r) => [r.source_id, r.n]));
   }
 
-  async linkListing(listingId: string, productId: string | null, variantId: string | null): Promise<void> {
-    await this.q("UPDATE listings SET product_id = $2, variant_id = $3 WHERE id = $1", [listingId, productId, variantId]);
+  async linkListing(
+    listingId: string,
+    productId: string | null,
+    variantId: string | null,
+  ): Promise<void> {
+    await this.q("UPDATE listings SET product_id = $2, variant_id = $3 WHERE id = $1", [
+      listingId,
+      productId,
+      variantId,
+    ]);
   }
 
   /* identity */
@@ -380,7 +451,15 @@ export class PgEngineStore implements EngineStore {
        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
        ON CONFLICT (identity_key) WHERE status = 'active' AND identity_key IS NOT NULL DO NOTHING
        RETURNING *`,
-      [p.category, p.brand, p.line, p.name.slice(0, 300), p.sizeClass, p.identityKey, JSON.stringify(p.attributes ?? {})],
+      [
+        p.category,
+        p.brand,
+        p.line,
+        p.name.slice(0, 300),
+        p.sizeClass,
+        p.identityKey,
+        JSON.stringify(p.attributes ?? {}),
+      ],
     );
     if (rows[0]) return toProduct(rows[0]);
     const existing = p.identityKey ? await this.findProductByIdentityKey(p.identityKey) : null;
@@ -394,7 +473,10 @@ export class PgEngineStore implements EngineStore {
   }
 
   async findProductByIdentityKey(key: string): Promise<CatalogProduct | null> {
-    const [r] = await this.q("SELECT * FROM catalog_products WHERE identity_key = $1 AND status = 'active'", [key]);
+    const [r] = await this.q(
+      "SELECT * FROM catalog_products WHERE identity_key = $1 AND status = 'active'",
+      [key],
+    );
     return r ? toProduct(r) : null;
   }
 
@@ -406,7 +488,11 @@ export class PgEngineStore implements EngineStore {
     return rows.map(toProduct);
   }
 
-  async findProductsByIdentifier(kind: IdentifierKind, value: string, sourceId?: string): Promise<string[]> {
+  async findProductsByIdentifier(
+    kind: IdentifierKind,
+    value: string,
+    sourceId?: string,
+  ): Promise<string[]> {
     const rows = await this.q(
       `SELECT DISTINCT i.product_id FROM catalog_identifiers i
        JOIN catalog_products p ON p.id = i.product_id AND p.status = 'active'
@@ -429,7 +515,10 @@ export class PgEngineStore implements EngineStore {
       [productId, variantId, kind, value, sourceId ?? null],
     );
     if (ins.length) return "added";
-    const [r] = await this.q("SELECT product_id FROM catalog_identifiers WHERE kind = $1 AND value = $2 AND scope = $3", [kind, value, sourceId ?? ""]);
+    const [r] = await this.q(
+      "SELECT product_id FROM catalog_identifiers WHERE kind = $1 AND value = $2 AND scope = $3",
+      [kind, value, sourceId ?? ""],
+    );
     return r?.product_id === productId ? "exists" : "conflict";
   }
 
@@ -455,7 +544,12 @@ export class PgEngineStore implements EngineStore {
     return toVariant(r);
   }
 
-  async enqueueReview(listingId: string, candidateProductId: string | null, score: number, reasons: string[]): Promise<void> {
+  async enqueueReview(
+    listingId: string,
+    candidateProductId: string | null,
+    score: number,
+    reasons: string[],
+  ): Promise<void> {
     await this.q(
       "INSERT INTO identity_review (listing_id, candidate_product_id, score, reasons) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT DO NOTHING",
       [listingId, candidateProductId, Math.round(score * 1000) / 1000, JSON.stringify(reasons)],
@@ -474,7 +568,11 @@ export class PgEngineStore implements EngineStore {
     return rows.map(toReview);
   }
 
-  async decideReview(id: string, decision: "approved" | "rejected", userId: string | null): Promise<ReviewItem | null> {
+  async decideReview(
+    id: string,
+    decision: "approved" | "rejected",
+    userId: string | null,
+  ): Promise<ReviewItem | null> {
     const [r] = await this.q(
       `UPDATE identity_review SET status = $2, decided_by = $3, decided_at = now()
        WHERE id = $1 AND status = 'pending' RETURNING *`,
@@ -486,19 +584,35 @@ export class PgEngineStore implements EngineStore {
   async mergeProducts(fromId: string, intoId: string): Promise<void> {
     if (fromId === intoId) throw new Error("cannot merge a product into itself");
     await this.tx(async (q) => {
-      const rows = await q("SELECT id, size_class, status FROM catalog_products WHERE id = ANY($1::uuid[]) FOR UPDATE", [[fromId, intoId]]);
+      const rows = await q(
+        "SELECT id, size_class, status FROM catalog_products WHERE id = ANY($1::uuid[]) FOR UPDATE",
+        [[fromId, intoId]],
+      );
       const from = rows.find((r) => r.id === fromId);
       const into = rows.find((r) => r.id === intoId);
       if (!from || !into) throw new Error("unknown product");
-      if (from.status !== "active" || into.status !== "active") throw new Error("both products must be active");
+      if (from.status !== "active" || into.status !== "active")
+        throw new Error("both products must be active");
       if ((from.size_class ?? null) !== (into.size_class ?? null)) {
         throw new Error("size classes differ: products of different sizes are never merged");
       }
-      await q("UPDATE catalog_variants SET product_id = $2 WHERE product_id = $1", [fromId, intoId]);
-      await q("UPDATE catalog_identifiers SET product_id = $2 WHERE product_id = $1", [fromId, intoId]);
+      await q("UPDATE catalog_variants SET product_id = $2 WHERE product_id = $1", [
+        fromId,
+        intoId,
+      ]);
+      await q("UPDATE catalog_identifiers SET product_id = $2 WHERE product_id = $1", [
+        fromId,
+        intoId,
+      ]);
       await q("UPDATE listings SET product_id = $2 WHERE product_id = $1", [fromId, intoId]);
-      await q("UPDATE identity_review SET candidate_product_id = $2 WHERE candidate_product_id = $1 AND status = 'pending'", [fromId, intoId]);
-      await q("UPDATE catalog_products SET status = 'merged', merged_into = $2, identity_key = NULL WHERE id = $1", [fromId, intoId]);
+      await q(
+        "UPDATE identity_review SET candidate_product_id = $2 WHERE candidate_product_id = $1 AND status = 'pending'",
+        [fromId, intoId],
+      );
+      await q(
+        "UPDATE catalog_products SET status = 'merged', merged_into = $2, identity_key = NULL WHERE id = $1",
+        [fromId, intoId],
+      );
     });
   }
 
@@ -506,12 +620,17 @@ export class PgEngineStore implements EngineStore {
     return this.tx(async (q) => {
       const [l] = await q("SELECT * FROM listings WHERE id = $1 FOR UPDATE", [listingId]);
       if (!l) throw new Error("unknown listing");
-      const [old] = l.product_id ? await q("SELECT category, line FROM catalog_products WHERE id = $1", [l.product_id]) : [];
+      const [old] = l.product_id
+        ? await q("SELECT category, line FROM catalog_products WHERE id = $1", [l.product_id])
+        : [];
       const [p] = await q(
         "INSERT INTO catalog_products (category, brand, line, name, size_class) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         [old?.category ?? "luggage", l.brand, old?.line ?? null, l.title, l.size_class],
       );
-      await q("UPDATE listings SET product_id = $2, variant_id = NULL WHERE id = $1", [listingId, p.id]);
+      await q("UPDATE listings SET product_id = $2, variant_id = NULL WHERE id = $1", [
+        listingId,
+        p.id,
+      ]);
       return toProduct(p);
     });
   }
@@ -548,7 +667,10 @@ export class PgEngineStore implements EngineStore {
     return toObservation(r);
   }
 
-  async latestObservation(listingId: string, opts: { shownOnly?: boolean } = {}): Promise<Observation | null> {
+  async latestObservation(
+    listingId: string,
+    opts: { shownOnly?: boolean } = {},
+  ): Promise<Observation | null> {
     const [r] = await this.q(
       `SELECT * FROM observations WHERE listing_id = $1 AND ($2::boolean IS NOT TRUE OR outcome <> 'rejected')
        ORDER BY fetched_at DESC, id DESC LIMIT 1`,
@@ -558,7 +680,10 @@ export class PgEngineStore implements EngineStore {
   }
 
   async priceRanges(listingId: string, limit: number): Promise<PriceRange[]> {
-    const rows = await this.q("SELECT * FROM price_ranges WHERE listing_id = $1 ORDER BY last_seen_at DESC, id DESC LIMIT $2", [listingId, limit]);
+    const rows = await this.q(
+      "SELECT * FROM price_ranges WHERE listing_id = $1 ORDER BY last_seen_at DESC, id DESC LIMIT $2",
+      [listingId, limit],
+    );
     return rows.map((r) => ({
       listingId: r.listing_id,
       price: Number(r.price ?? 0),
@@ -607,7 +732,14 @@ export class PgEngineStore implements EngineStore {
     const [r] = await this.q(
       `INSERT INTO research_sessions (user_id, query, parent_session_id, store_ids, deadline_ms, mode)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [input.userId, input.query, input.parentSessionId ?? null, input.storeIds ?? null, input.deadlineMs, input.mode],
+      [
+        input.userId,
+        input.query,
+        input.parentSessionId ?? null,
+        input.storeIds ?? null,
+        input.deadlineMs,
+        input.mode,
+      ],
     );
     return toSession(r);
   }
@@ -628,7 +760,8 @@ export class PgEngineStore implements EngineStore {
     if (patch.status !== undefined) add("status", patch.status);
     if (patch.startedAt !== undefined) add("started_at", patch.startedAt);
     if (patch.finishedAt !== undefined) add("finished_at", patch.finishedAt);
-    if (patch.answer !== undefined) add("answer", patch.answer === null ? null : JSON.stringify(patch.answer), "::jsonb");
+    if (patch.answer !== undefined)
+      add("answer", patch.answer === null ? null : JSON.stringify(patch.answer), "::jsonb");
     if (patch.error !== undefined) add("error", patch.error);
     if (sets.length === 0) return;
     await this.q(`UPDATE research_sessions SET ${sets.join(", ")} WHERE id = $1`, params);
@@ -642,7 +775,10 @@ export class PgEngineStore implements EngineStore {
   }
 
   async listEvents(sessionId: string, afterSeq: number): Promise<SessionEvent[]> {
-    const rows = await this.q("SELECT * FROM session_events WHERE session_id = $1 AND seq > $2 ORDER BY seq", [sessionId, afterSeq]);
+    const rows = await this.q(
+      "SELECT * FROM session_events WHERE session_id = $1 AND seq > $2 ORDER BY seq",
+      [sessionId, afterSeq],
+    );
     return rows.map((r) => ({
       sessionId: r.session_id,
       seq: r.seq,
@@ -654,7 +790,10 @@ export class PgEngineStore implements EngineStore {
   }
 
   async countSessionsSince(userId: string, sinceIso: string): Promise<number> {
-    const [r] = await this.q("SELECT count(*)::int AS n FROM research_sessions WHERE user_id = $1 AND created_at >= $2", [userId, sinceIso]);
+    const [r] = await this.q(
+      "SELECT count(*)::int AS n FROM research_sessions WHERE user_id = $1 AND created_at >= $2",
+      [userId, sinceIso],
+    );
     return r?.n ?? 0;
   }
 

@@ -59,7 +59,8 @@ export type PermissionStatus =
 
 export type TermsStance = "silent" | "restricts" | "prohibits" | "unknown" | "sanctions_json";
 
-export type SourceCategory = "brand_direct" | "specialty_retailer" | "major_retailer" | "marketplace";
+export type SourceCategory =
+  "brand_direct" | "specialty_retailer" | "major_retailer" | "marketplace";
 
 export type SourceStatus = "active" | "inactive" | "defunct";
 
@@ -83,6 +84,12 @@ export type IdentityQuality = {
   /** The manufacturer model number appears in the store SKU. */
   modelInSku: boolean;
   notes?: string;
+  /**
+   * Brand-direct stores: the brand every product belongs to. Their titles
+   * usually leave it out ("CHATELET AIR 2.0 | 26-Inch…" on Delsey.ca), so it
+   * fills in when the title names no brand.
+   */
+  houseBrand?: string;
 };
 
 export type SourceRecord = {
@@ -208,7 +215,10 @@ export type ListingRecord = {
   active: boolean;
 };
 
-export type ListingInput = Omit<ListingRecord, "id" | "firstSeenAt" | "lastSeenAt" | "productId" | "variantId"> & {
+export type ListingInput = Omit<
+  ListingRecord,
+  "id" | "firstSeenAt" | "lastSeenAt" | "productId" | "variantId"
+> & {
   productId?: string | null;
   variantId?: string | null;
 };
@@ -301,7 +311,10 @@ export type Observation = {
  * A rejected reading is still evidence: it keeps the source's own currency
  * (e.g. USD) and may have no price at all. Shown readings are CAD with a price.
  */
-export type ObservationInput = Omit<Observation, "id" | "price" | "currency"> & { price: number | null; currency: string };
+export type ObservationInput = Omit<Observation, "id" | "price" | "currency"> & {
+  price: number | null;
+  currency: string;
+};
 
 /* ── Queries and research sessions ────────────────────────────────── */
 
@@ -449,4 +462,10 @@ export type CategoryPack = {
   modelOf(text: string, brand: string | null): { model: string; colourCode: string | null } | null;
   /** True for accessories/non-items that must never match a main product. */
   isAccessory(title: string): boolean;
+  /**
+   * Line words that tell products apart when a store names them, but that a
+   * person's short name for the bag often leaves out ("Omni 3.0 Large" for the
+   * "Omni 3.0 Expandable Large Spinner"). A name that omits one still matches.
+   */
+  optionalLineWords: ReadonlySet<string>;
 };

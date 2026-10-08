@@ -21,7 +21,9 @@
     "worker:build": "npm --prefix worker run build",
     "fixtures:record": "node scripts/run-ts.mjs scripts/fixtures/record.ts",
     "db:dev": "node scripts/run-ts.mjs scripts/db/dev-db.ts",
-    "engine:discover": "node scripts/run-ts.mjs scripts/engine/discover.ts"
+    "engine:discover": "node scripts/run-ts.mjs scripts/engine/discover.ts",
+    "engine:research": "node scripts/run-ts.mjs scripts/engine/research.ts",
+    "engine:reresolve": "node scripts/run-ts.mjs scripts/engine/reresolve.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

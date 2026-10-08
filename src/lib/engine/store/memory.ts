@@ -36,12 +36,18 @@ import type {
   SessionTiming,
   SourceHealthStat,
 } from "./port";
-import { haystackFor, matchScore } from "./terms";
+import { haystackFor, matchScore, preferExactSize } from "./terms";
 
 const now = () => new Date().toISOString();
 const BLOCKED = new Set(["blocked", "challenge", "rate_limited"]);
 
-type IdentifierRow = { productId: string; variantId: string | null; kind: IdentifierKind; value: string; scope: string };
+type IdentifierRow = {
+  productId: string;
+  variantId: string | null;
+  kind: IdentifierKind;
+  value: string;
+  scope: string;
+};
 type RangeRow = PriceRange & { id: number };
 
 export class MemoryEngineStore implements EngineStore {
@@ -93,7 +99,13 @@ export class MemoryEngineStore implements EngineStore {
 
   async getHealth(sourceId: string): Promise<SourceHealth> {
     return (
-      this.health.get(sourceId) ?? { sourceId, circuit: "closed", circuitOpenedAt: null, circuitReason: null, consecutiveFailures: 0 }
+      this.health.get(sourceId) ?? {
+        sourceId,
+        circuit: "closed",
+        circuitOpenedAt: null,
+        circuitReason: null,
+        consecutiveFailures: 0,
+      }
     );
   }
 
@@ -102,7 +114,11 @@ export class MemoryEngineStore implements EngineStore {
   }
 
   async sourcesWithAdapter(adapter: "feed_import" | "manual_entry"): Promise<Set<string>> {
-    return new Set(this.observations.filter((o) => o.adapter === adapter && o.validation.outcome !== "rejected").map((o) => o.sourceId));
+    return new Set(
+      this.observations
+        .filter((o) => o.adapter === adapter && o.validation.outcome !== "rejected")
+        .map((o) => o.sourceId),
+    );
   }
 
   /* ── flags ──────────────────────────────────────────────────────── */
@@ -119,7 +135,9 @@ export class MemoryEngineStore implements EngineStore {
   /* ── listings ───────────────────────────────────────────────────── */
 
   async upsertListing(input: ListingInput): Promise<ListingRecord> {
-    const existing = [...this.listings.values()].find((l) => l.sourceId === input.sourceId && l.url === input.url);
+    const existing = [...this.listings.values()].find(
+      (l) => l.sourceId === input.sourceId && l.url === input.url,
+    );
     const t = now();
     if (existing) {
       const next: ListingRecord = {
@@ -165,7 +183,10 @@ export class MemoryEngineStore implements EngineStore {
     return l ? structuredClone(l) : null;
   }
 
-  async searchListings(q: ParsedQuery, opts: { limit: number; sourceIds?: string[] }): Promise<ListingRecord[]> {
+  async searchListings(
+    q: ParsedQuery,
+    opts: { limit: number; sourceIds?: string[] },
+  ): Promise<ListingRecord[]> {
     const scored: { l: ListingRecord; score: number }[] = [];
     for (const l of this.listings.values()) {
       if (!l.active) continue;
@@ -173,14 +194,16 @@ export class MemoryEngineStore implements EngineStore {
       const score = matchScore(q, haystackFor(l), l.sizeClass);
       if (score > 0) scored.push({ l, score });
     }
-    return scored
+    return preferExactSize(q, scored)
       .sort((a, b) => b.score - a.score || a.l.title.localeCompare(b.l.title))
       .slice(0, opts.limit)
       .map((x) => structuredClone(x.l));
   }
 
   async listingsForProduct(productId: string): Promise<ListingRecord[]> {
-    return [...this.listings.values()].filter((l) => l.productId === productId && l.active).map((l) => structuredClone(l));
+    return [...this.listings.values()]
+      .filter((l) => l.productId === productId && l.active)
+      .map((l) => structuredClone(l));
   }
 
   async listingsBySource(sourceId: string, limit: number): Promise<ListingRecord[]> {
@@ -193,11 +216,16 @@ export class MemoryEngineStore implements EngineStore {
 
   async countListingsBySource(): Promise<Record<string, number>> {
     const out: Record<string, number> = {};
-    for (const l of this.listings.values()) if (l.active) out[l.sourceId] = (out[l.sourceId] ?? 0) + 1;
+    for (const l of this.listings.values())
+      if (l.active) out[l.sourceId] = (out[l.sourceId] ?? 0) + 1;
     return out;
   }
 
-  async linkListing(listingId: string, productId: string | null, variantId: string | null): Promise<void> {
+  async linkListing(
+    listingId: string,
+    productId: string | null,
+    variantId: string | null,
+  ): Promise<void> {
     const l = this.listings.get(listingId);
     if (l) {
       l.productId = productId;
@@ -235,7 +263,9 @@ export class MemoryEngineStore implements EngineStore {
   }
 
   async findProductByIdentityKey(key: string): Promise<CatalogProduct | null> {
-    const p = [...this.products.values()].find((x) => x.status === "active" && x.identityKey === key);
+    const p = [...this.products.values()].find(
+      (x) => x.status === "active" && x.identityKey === key,
+    );
     return p ? { ...p } : null;
   }
 
@@ -245,9 +275,15 @@ export class MemoryEngineStore implements EngineStore {
       .map((p) => ({ ...p }));
   }
 
-  async findProductsByIdentifier(kind: IdentifierKind, value: string, sourceId?: string): Promise<string[]> {
+  async findProductsByIdentifier(
+    kind: IdentifierKind,
+    value: string,
+    sourceId?: string,
+  ): Promise<string[]> {
     const scope = sourceId ?? "";
-    const ids = this.identifiers.filter((i) => i.kind === kind && i.value === value && i.scope === scope).map((i) => i.productId);
+    const ids = this.identifiers
+      .filter((i) => i.kind === kind && i.value === value && i.scope === scope)
+      .map((i) => i.productId);
     return [...new Set(ids)].filter((id) => this.products.get(id)?.status === "active");
   }
 
@@ -259,7 +295,9 @@ export class MemoryEngineStore implements EngineStore {
     sourceId?: string,
   ): Promise<"added" | "exists" | "conflict"> {
     const scope = sourceId ?? "";
-    const hit = this.identifiers.find((i) => i.kind === kind && i.value === value && i.scope === scope);
+    const hit = this.identifiers.find(
+      (i) => i.kind === kind && i.value === value && i.scope === scope,
+    );
     if (hit) return hit.productId === productId ? "exists" : "conflict";
     this.identifiers.push({ productId, variantId, kind, value, scope });
     return "added";
@@ -272,17 +310,35 @@ export class MemoryEngineStore implements EngineStore {
     title: string | null,
     imageUrl: string | null,
   ): Promise<CatalogVariant> {
-    const key = (v: CatalogVariant) => (colourCode && v.colourCode ? v.colourCode === colourCode : (v.colour ?? "").toLowerCase() === (colour ?? "").toLowerCase());
+    const key = (v: CatalogVariant) =>
+      colourCode && v.colourCode
+        ? v.colourCode === colourCode
+        : (v.colour ?? "").toLowerCase() === (colour ?? "").toLowerCase();
     const hit = [...this.variants.values()].find((v) => v.productId === productId && key(v));
     if (hit) return { ...hit };
-    const rec: CatalogVariant = { id: randomUUID(), productId, colour, colourCode, title, imageUrl };
+    const rec: CatalogVariant = {
+      id: randomUUID(),
+      productId,
+      colour,
+      colourCode,
+      title,
+      imageUrl,
+    };
     this.variants.set(rec.id, rec);
     return { ...rec };
   }
 
-  async enqueueReview(listingId: string, candidateProductId: string | null, score: number, reasons: string[]): Promise<void> {
+  async enqueueReview(
+    listingId: string,
+    candidateProductId: string | null,
+    score: number,
+    reasons: string[],
+  ): Promise<void> {
     const dup = [...this.reviews.values()].find(
-      (r) => r.listingId === listingId && r.candidateProductId === candidateProductId && r.status === "pending",
+      (r) =>
+        r.listingId === listingId &&
+        r.candidateProductId === candidateProductId &&
+        r.status === "pending",
     );
     if (dup) return;
     const l = this.listings.get(listingId);
@@ -304,7 +360,10 @@ export class MemoryEngineStore implements EngineStore {
   }
 
   async listReviews(status: ReviewItem["status"], limit: number): Promise<ReviewItem[]> {
-    return [...this.reviews.values()].filter((r) => r.status === status).slice(0, limit).map((r) => ({ ...r }));
+    return [...this.reviews.values()]
+      .filter((r) => r.status === status)
+      .slice(0, limit)
+      .map((r) => ({ ...r }));
   }
 
   async decideReview(id: string, decision: "approved" | "rejected"): Promise<ReviewItem | null> {
@@ -319,7 +378,8 @@ export class MemoryEngineStore implements EngineStore {
     const from = this.products.get(fromId);
     const into = this.products.get(intoId);
     if (!from || !into) throw new Error("unknown product");
-    if (from.sizeClass !== into.sizeClass) throw new Error("size classes differ: products of different sizes are never merged");
+    if (from.sizeClass !== into.sizeClass)
+      throw new Error("size classes differ: products of different sizes are never merged");
     for (const v of this.variants.values()) if (v.productId === fromId) v.productId = intoId;
     for (const i of this.identifiers) if (i.productId === fromId) i.productId = intoId;
     for (const l of this.listings.values()) if (l.productId === fromId) l.productId = intoId;
@@ -349,7 +409,11 @@ export class MemoryEngineStore implements EngineStore {
 
   async insertObservation(o: ObservationInput): Promise<Observation> {
     // Same mapping as Postgres: a rejected reading without a price reads back as 0.
-    const rec: Observation = { ...structuredClone(o), price: o.price ?? 0, id: String(++this.obsSeq) };
+    const rec: Observation = {
+      ...structuredClone(o),
+      price: o.price ?? 0,
+      id: String(++this.obsSeq),
+    };
     this.observations.push(rec);
     if (rec.validation.outcome !== "rejected") this.collapse(rec);
     return structuredClone(rec);
@@ -376,9 +440,15 @@ export class MemoryEngineStore implements EngineStore {
     });
   }
 
-  async latestObservation(listingId: string, opts: { shownOnly?: boolean } = {}): Promise<Observation | null> {
+  async latestObservation(
+    listingId: string,
+    opts: { shownOnly?: boolean } = {},
+  ): Promise<Observation | null> {
     const list = this.observations
-      .filter((o) => o.listingId === listingId && (!opts.shownOnly || o.validation.outcome !== "rejected"))
+      .filter(
+        (o) =>
+          o.listingId === listingId && (!opts.shownOnly || o.validation.outcome !== "rejected"),
+      )
       .sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt) || Number(b.id) - Number(a.id));
     return list[0] ? structuredClone(list[0]) : null;
   }
@@ -455,15 +525,21 @@ export class MemoryEngineStore implements EngineStore {
   }
 
   async listEvents(sessionId: string, afterSeq: number): Promise<SessionEvent[]> {
-    return (this.events.get(sessionId) ?? []).filter((e) => e.seq > afterSeq).sort((a, b) => a.seq - b.seq).map((e) => structuredClone(e));
+    return (this.events.get(sessionId) ?? [])
+      .filter((e) => e.seq > afterSeq)
+      .sort((a, b) => a.seq - b.seq)
+      .map((e) => structuredClone(e));
   }
 
   async countSessionsSince(userId: string, sinceIso: string): Promise<number> {
-    return [...this.sessions.values()].filter((s) => s.userId === userId && s.createdAt >= sinceIso).length;
+    return [...this.sessions.values()].filter((s) => s.userId === userId && s.createdAt >= sinceIso)
+      .length;
   }
 
   async countActiveSessions(userId: string): Promise<number> {
-    return [...this.sessions.values()].filter((s) => s.userId === userId && (s.status === "queued" || s.status === "running")).length;
+    return [...this.sessions.values()].filter(
+      (s) => s.userId === userId && (s.status === "queued" || s.status === "running"),
+    ).length;
   }
 
   /* ── feeds ──────────────────────────────────────────────────────── */
@@ -486,8 +562,18 @@ export class MemoryEngineStore implements EngineStore {
       const in24 = mine.filter((a) => Date.parse(a.startedAt) > day);
       const in7 = mine.filter((a) => Date.parse(a.startedAt) > week);
       const h = this.health.get(s.id);
-      const lastOk = mine.filter((a) => a.outcome === "ok").map((a) => a.startedAt).sort().pop() ?? null;
-      const lastBlock = mine.filter((a) => BLOCKED.has(a.outcome)).map((a) => a.startedAt).sort().pop() ?? null;
+      const lastOk =
+        mine
+          .filter((a) => a.outcome === "ok")
+          .map((a) => a.startedAt)
+          .sort()
+          .pop() ?? null;
+      const lastBlock =
+        mine
+          .filter((a) => BLOCKED.has(a.outcome))
+          .map((a) => a.startedAt)
+          .sort()
+          .pop() ?? null;
       return {
         sourceId: s.id,
         retailerLabel: s.retailerLabel,
@@ -512,7 +598,15 @@ export class MemoryEngineStore implements EngineStore {
       .filter((a) => a.outcome !== "ok")
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
       .slice(0, limit)
-      .map((a) => ({ sourceId: a.sourceId, adapter: a.adapter, url: a.url, status: a.status, outcome: a.outcome, error: a.error, startedAt: a.startedAt }));
+      .map((a) => ({
+        sourceId: a.sourceId,
+        adapter: a.adapter,
+        url: a.url,
+        status: a.status,
+        outcome: a.outcome,
+        error: a.error,
+        startedAt: a.startedAt,
+      }));
   }
 
   async recentRejections(limit: number): Promise<RejectionRow[]> {
@@ -520,7 +614,13 @@ export class MemoryEngineStore implements EngineStore {
       .filter((o) => o.validation.outcome === "rejected")
       .sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt))
       .slice(0, limit)
-      .map((o) => ({ sourceId: o.sourceId, listingId: o.listingId, adapter: o.adapter, reasons: o.validation.reasons, fetchedAt: o.fetchedAt }));
+      .map((o) => ({
+        sourceId: o.sourceId,
+        listingId: o.listingId,
+        adapter: o.adapter,
+        reasons: o.validation.reasons,
+        fetchedAt: o.fetchedAt,
+      }));
   }
 
   async sessionTimings(limit: number): Promise<SessionTiming[]> {

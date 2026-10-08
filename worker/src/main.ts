@@ -33,7 +33,9 @@ async function main(): Promise<void> {
   let store: EngineStore;
   let queue: JobQueue;
   if (cfg.databaseUrl) {
-    store = new PgEngineStore(cfg.databaseUrl, 6);
+    const pg = new PgEngineStore(cfg.databaseUrl, 6);
+    await pg.warm(4);
+    store = pg;
     queue = new PgBossQueue(cfg.databaseUrl);
   } else {
     log("warn", "DATABASE_URL not set: in-memory store and queue (nothing persists)");

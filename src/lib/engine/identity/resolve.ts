@@ -21,10 +21,15 @@ export type Resolution = {
   reasons: string[];
 };
 
-const ids = (list: Identifier[], kind: Identifier["kind"]) => list.filter((i) => i.kind === kind).map((i) => i.value);
+const ids = (list: Identifier[], kind: Identifier["kind"]) =>
+  list.filter((i) => i.kind === kind).map((i) => i.value);
 
 /** brand|line words (sorted)|size: the name-level identity of a product. */
-export function identityKey(brand: string | null, line: string[], sizeClass: string | null): string | null {
+export function identityKey(
+  brand: string | null,
+  line: string[],
+  sizeClass: string | null,
+): string | null {
   if (!brand || line.length === 0 || !sizeClass) return null;
   return `${brand.toLowerCase()}|${[...line].sort().join(" ")}|${sizeClass}`;
 }
@@ -40,8 +45,14 @@ function jaccard(a: string[], b: string[]): number {
 
 /** Numbers in a line ("Omni 3.0", "Maxlite 5", "Alpha 3") must agree exactly. */
 function versionsAgree(a: string[], b: string[]): boolean {
-  const na = a.filter((w) => /\d/.test(w)).sort().join(" ");
-  const nb = b.filter((w) => /\d/.test(w)).sort().join(" ");
+  const na = a
+    .filter((w) => /\d/.test(w))
+    .sort()
+    .join(" ");
+  const nb = b
+    .filter((w) => /\d/.test(w))
+    .sort()
+    .join(" ");
   return na === nb;
 }
 
@@ -49,15 +60,34 @@ function sizeCompatible(product: CatalogProduct, sizeClass: string | null): bool
   return product.sizeClass === null || sizeClass === null || product.sizeClass === sizeClass;
 }
 
-async function attach(store: EngineStore, listing: ListingRecord, product: CatalogProduct, colourCode: string | null): Promise<string | null> {
-  const variant = await store.findOrCreateVariant(product.id, listing.colour, colourCode, listing.title, listing.imageUrl);
+async function attach(
+  store: EngineStore,
+  listing: ListingRecord,
+  product: CatalogProduct,
+  colourCode: string | null,
+): Promise<string | null> {
+  const variant = await store.findOrCreateVariant(
+    product.id,
+    listing.colour,
+    colourCode,
+    listing.title,
+    listing.imageUrl,
+  );
   await store.linkListing(listing.id, product.id, variant.id);
   // Record what this listing taught us (GTIN on the variant, model on the product, SKU per store).
   for (const i of listing.identifiers) {
-    const r = await store.addIdentifier(product.id, i.kind === "gtin" || i.kind === "mpn" ? variant.id : null, i.kind, i.value, i.kind === "store_sku" ? listing.sourceId : undefined);
+    const r = await store.addIdentifier(
+      product.id,
+      i.kind === "gtin" || i.kind === "mpn" ? variant.id : null,
+      i.kind,
+      i.value,
+      i.kind === "store_sku" ? listing.sourceId : undefined,
+    );
     // The same barcode/model on two products means one of the links is wrong: a human decides.
     if (r === "conflict" && i.kind !== "store_sku") {
-      await store.enqueueReview(listing.id, product.id, 0.4, [`${i.kind} ${i.value} is already recorded on another product`]);
+      await store.enqueueReview(listing.id, product.id, 0.4, [
+        `${i.kind} ${i.value} is already recorded on another product`,
+      ]);
     }
   }
   return variant.id;
@@ -68,8 +98,18 @@ function colourCodeOf(listing: ListingRecord): string | null {
   return mpn?.split("-").pop() ?? null;
 }
 
-export async function resolveListing(store: EngineStore, pack: CategoryPack, listing: ListingRecord): Promise<Resolution> {
-  if (listing.productId) return { productId: listing.productId, variantId: listing.variantId, method: "unresolved", reasons: ["already linked"] };
+export async function resolveListing(
+  store: EngineStore,
+  pack: CategoryPack,
+  listing: ListingRecord,
+): Promise<Resolution> {
+  if (listing.productId)
+    return {
+      productId: listing.productId,
+      variantId: listing.variantId,
+      method: "unresolved",
+      reasons: ["already linked"],
+    };
   const sizeClass = listing.sizeClass ?? pack.sizeClassOf(listing.title);
   const brand = listing.brand ?? pack.brandOf(listing.title);
   const line = pack.lineOf(listing.title, brand);
@@ -86,8 +126,15 @@ export async function resolveListing(store: EngineStore, pack: CategoryPack, lis
         return { productId: p.id, variantId, method: "gtin", reasons: [`GTIN ${gtin}`] };
       }
       if (p) {
-        await store.enqueueReview(listing.id, p.id, 0.5, [`GTIN ${gtin} matches a ${p.sizeClass} product but this listing reads as ${sizeClass}`]);
-        return { productId: null, variantId: null, method: "review", reasons: ["GTIN matches a product of another size"] };
+        await store.enqueueReview(listing.id, p.id, 0.5, [
+          `GTIN ${gtin} matches a ${p.sizeClass} product but this listing reads as ${sizeClass}`,
+        ]);
+        return {
+          productId: null,
+          variantId: null,
+          method: "review",
+          reasons: ["GTIN matches a product of another size"],
+        };
       }
     }
     if (hits.length > 1) reasons.push(`GTIN ${gtin} is on ${hits.length} products`);
@@ -96,7 +143,9 @@ export async function resolveListing(store: EngineStore, pack: CategoryPack, lis
   /* 2. manufacturer model number, same size class */
   for (const model of ids(listing.identifiers, "model")) {
     const hits = await store.findProductsByIdentifier("model", model);
-    const products = (await Promise.all(hits.map((h) => store.getProduct(h)))).filter((p): p is CatalogProduct => !!p && sizeCompatible(p, sizeClass));
+    const products = (await Promise.all(hits.map((h) => store.getProduct(h)))).filter(
+      (p): p is CatalogProduct => !!p && sizeCompatible(p, sizeClass),
+    );
     if (products.length === 1) {
       const variantId = await attach(store, listing, products[0], colourCode);
       return { productId: products[0].id, variantId, method: "model", reasons: [`model ${model}`] };
@@ -110,7 +159,12 @@ export async function resolveListing(store: EngineStore, pack: CategoryPack, lis
     const exact = await store.findProductByIdentityKey(key);
     if (exact) {
       const variantId = await attach(store, listing, exact, colourCode);
-      return { productId: exact.id, variantId, method: "name", reasons: [`same brand, line and size (${key})`] };
+      return {
+        productId: exact.id,
+        variantId,
+        method: "name",
+        reasons: [`same brand, line and size (${key})`],
+      };
     }
     const candidates = await store.candidateProducts(brand!, sizeClass);
     let best: { p: CatalogProduct; score: number } | null = null;
@@ -122,9 +176,19 @@ export async function resolveListing(store: EngineStore, pack: CategoryPack, lis
     }
     if (best && best.score >= 0.6) {
       // Close but not identical (e.g. "outline pro" vs "outline pro hardside"): a human decides.
-      const listingProduct = await createFor(store, listing, brand, line, sizeClass, null);
-      await store.enqueueReview(listing.id, best.p.id, best.score, [`similar line: "${best.p.line}" vs "${line.join(" ")}"`, ...reasons]);
-      return { productId: listingProduct, variantId: null, method: "review", reasons: [`near match (${best.score.toFixed(2)}) queued for review`] };
+      // The new product keeps its own key so its other colours join it instead of
+      // each opening another review; approving a merge moves them all.
+      const listingProduct = await createFor(store, listing, brand, line, sizeClass, key);
+      await store.enqueueReview(listing.id, best.p.id, best.score, [
+        `similar line: "${best.p.line}" vs "${line.join(" ")}"`,
+        ...reasons,
+      ]);
+      return {
+        productId: listingProduct,
+        variantId: null,
+        method: "review",
+        reasons: [`near match (${best.score.toFixed(2)}) queued for review`],
+      };
     }
   }
 
@@ -134,19 +198,54 @@ export async function resolveListing(store: EngineStore, pack: CategoryPack, lis
     // its own. Only suitcases need a human look (their size is the identity wall);
     // a plug adapter or a pouch without a size is just itself.
     const productId = await createFor(store, listing, brand, line, sizeClass, null);
-    const suitcaseLike = /\b(spinner|suitcase|luggage|carry[-\s]?on|checked|check-in|hardside|softside|trolley|upright|valise)\b/i.test(listing.title);
+    const suitcaseLike =
+      /\b(spinner|suitcase|luggage|carry[-\s]?on|checked|check-in|hardside|softside|trolley|upright|valise)\b/i.test(
+        listing.title,
+      );
     if (suitcaseLike) {
-      await store.enqueueReview(listing.id, null, 0, [!brand ? "brand unknown" : "size class unknown", ...reasons]);
-      return { productId, variantId: null, method: "review", reasons: ["created, flagged for review"] };
+      await store.enqueueReview(listing.id, null, 0, [
+        !brand ? "brand unknown" : "size class unknown",
+        ...reasons,
+      ]);
+      return {
+        productId,
+        variantId: null,
+        method: "review",
+        reasons: ["created, flagged for review"],
+      };
     }
-    return { productId, variantId: null, method: "new", reasons: [...reasons, "no size class or brand: kept on its own"] };
+    return {
+      productId,
+      variantId: null,
+      method: "new",
+      reasons: [...reasons, "no size class or brand: kept on its own"],
+    };
   }
   const productId = await createFor(store, listing, brand, line, sizeClass, key);
-  return { productId, variantId: (await store.getListing(listing.id))?.variantId ?? null, method: "new", reasons };
+  return {
+    productId,
+    variantId: (await store.getListing(listing.id))?.variantId ?? null,
+    method: "new",
+    reasons,
+  };
 }
 
-async function createFor(store: EngineStore, listing: ListingRecord, brand: string | null, line: string[], sizeClass: string | null, key: string | null): Promise<string> {
-  const p = await store.createProduct({ category: "luggage", brand, line: line.join(" ") || null, name: listing.title.replace(/\s+-\s+[^-]{2,30}$/, ""), sizeClass, identityKey: key });
+async function createFor(
+  store: EngineStore,
+  listing: ListingRecord,
+  brand: string | null,
+  line: string[],
+  sizeClass: string | null,
+  key: string | null,
+): Promise<string> {
+  const p = await store.createProduct({
+    category: "luggage",
+    brand,
+    line: line.join(" ") || null,
+    name: listing.title.replace(/\s+-\s+[^-]{2,30}$/, ""),
+    sizeClass,
+    identityKey: key,
+  });
   const colourCode = colourCodeOf(listing);
   await attach(store, listing, p, colourCode);
   return p.id;

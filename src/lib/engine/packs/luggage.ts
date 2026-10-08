@@ -104,7 +104,10 @@ const BRAND_ALIASES: { alias: string; brand: string; re: RegExp }[] = Object.ent
   .map(({ alias, brand }) => ({
     alias,
     brand,
-    re: new RegExp(`(^|[^a-z0-9])${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`, "i"),
+    re: new RegExp(
+      `(^|[^a-z0-9])${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`,
+      "i",
+    ),
   }));
 
 /** Brands whose single-word names are also ordinary words: need extra context. */
@@ -116,7 +119,8 @@ function brandOf(text: string): string | null {
     if (!re.test(t)) continue;
     // "carry-on for getting away" is not the Away brand. Ambiguous names
     // only count at the very start of a title / query.
-    if (AMBIGUOUS_BRANDS.has(alias) && !new RegExp(`^\\s*(the\\s+)?${alias}\\b`, "i").test(t)) continue;
+    if (AMBIGUOUS_BRANDS.has(alias) && !new RegExp(`^\\s*(the\\s+)?${alias}\\b`, "i").test(t))
+      continue;
     return brand;
   }
   return null;
@@ -125,10 +129,15 @@ function brandOf(text: string): string | null {
 /** Remove the given brand's own spellings from a lower-cased title, as phrases. */
 function stripBrand(lower: string, brand: string | null): string {
   if (!brand) return lower;
-  const aliases = [...(BRANDS[brand] ?? []), brand.toLowerCase()].sort((a, b) => b.length - a.length);
+  const aliases = [...(BRANDS[brand] ?? []), brand.toLowerCase()].sort(
+    (a, b) => b.length - a.length,
+  );
   let out = lower;
   for (const a of aliases) {
-    out = out.replace(new RegExp(`(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^a-z0-9])`, "gi"), "$1 ");
+    out = out.replace(
+      new RegExp(`(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^a-z0-9])`, "gi"),
+      "$1 ",
+    );
   }
   return out;
 }
@@ -140,7 +149,9 @@ const ACCESSORY_RE =
 
 function isAccessory(title: string): boolean {
   // "TSA lock" is a suitcase feature, not an accessory.
-  return ACCESSORY_RE.test(title.replace(/\bTSA[- ]?(?:approved |accepted )?(?:combination )?locks?\b/gi, ""));
+  return ACCESSORY_RE.test(
+    title.replace(/\bTSA[- ]?(?:approved |accepted )?(?:combination )?locks?\b/gi, ""),
+  );
 }
 
 /** Inches → size class. Luggage sizes are quoted in whole inches 18–32. */
@@ -167,10 +178,18 @@ function sizeClassOf(text: string): SizeClass | null {
   const t = ` ${text.toLowerCase().replace(/[’`]/g, "'")} `;
 
   if (isAccessory(text)) return "accessory";
-  if (/\b(?:\d\s*-?\s*(?:pc|pcs|piece|pieces)\b|luggage set|set of \d|two-piece|three-piece)/.test(t)) return "set";
+  if (
+    /\b(?:\d\s*-?\s*(?:pc|pcs|piece|pieces)\b|luggage set|set of \d|two-piece|three-piece)/.test(t)
+  )
+    return "set";
   if (/\bunder[-\s]?seat(?:er)?\b|\bpersonal item\b/.test(t)) return "underseat";
   // (é isn't a regex word character, so no \b after "attaché")
-  if (/\battach[eé](?![a-z])|\bbriefcase\b|\blaptop (?:bag|case|sleeve|brief)\b|\bmessenger\b|\bportfolio\b/.test(t)) return "briefcase";
+  if (
+    /\battach[eé](?![a-z])|\bbriefcase\b|\blaptop (?:bag|case|sleeve|brief)\b|\bmessenger\b|\bportfolio\b/.test(
+      t,
+    )
+  )
+    return "briefcase";
   if (/\bbackpack\b|\bsac à dos\b/.test(t)) return "backpack";
   if (/\bduffel\b|\bduffle\b/.test(t)) return "duffel";
   if (/\bgarment bag\b|\bgarment\b/.test(t)) return "garment";
@@ -178,7 +197,8 @@ function sizeClassOf(text: string): SizeClass | null {
 
   // The store's own size word wins over a measurement: Delsey sells a
   // "23-Inch Expandable Carry-On".
-  if (/\bcarry[-\s]?on\b|\bcarryon\b|\bcabin\b|\bonboard\b|\bbagage à main\b|\bcabine\b/.test(t)) return "carry_on";
+  if (/\bcarry[-\s]?on\b|\bcarryon\b|\bcabin\b|\bonboard\b|\bbagage à main\b|\bcabine\b/.test(t))
+    return "carry_on";
   if (/\bextra[-\s]?large\b|\bx-?large\b|\bxl\b|\btrunk\b/.test(t)) return "extra_large";
   if (/\blarge\b|\bgrand(?:e)?\b/.test(t)) return "large";
   if (/\bmedium\b|\bmoyen(?:ne)?\b/.test(t)) return "medium";
@@ -207,9 +227,19 @@ function colourOf(text: string): string | null {
 /* ── Model numbers ──────────────────────────────────────────────────── */
 
 /** Samsonite Group brands share the model + 4-digit colour code scheme (1041 = Black). */
-const SAMSONITE_GROUP = new Set(["Samsonite", "American Tourister", "TUMI", "Lipault", "Gregory", "Hartmann"]);
+const SAMSONITE_GROUP = new Set([
+  "Samsonite",
+  "American Tourister",
+  "TUMI",
+  "Lipault",
+  "Gregory",
+  "Hartmann",
+]);
 
-function modelOf(text: string, brand: string | null): { model: string; colourCode: string | null } | null {
+function modelOf(
+  text: string,
+  brand: string | null,
+): { model: string; colourCode: string | null } | null {
   const t = text.trim();
   const group = brand ? SAMSONITE_GROUP.has(brand) : false;
 
@@ -240,13 +270,70 @@ function modelOf(text: string, brand: string | null): { model: string; colourCod
 /* ── Product-line words ─────────────────────────────────────────────── */
 
 const FILLER = new Set([
-  "luggage", "suitcase", "suitcases", "valise", "spinner", "spinners", "wheeled", "wheels", "wheel",
-  "upright", "trolley", "bag", "bags", "travel", "hardside", "hard", "side", "softside", "soft",
-  "hardshell", "expandable", "expansion", "lightweight", "with", "and", "the", "by", "for", "of", "in",
-  "collection", "series", "new", "sale", "carry", "on", "carryon", "cabin", "checked", "check",
-  "medium", "large", "small", "extra", "xl", "inch", "inches", "cm", "piece", "pieces", "pc",
-  "set", "tsa", "lock", "locks", "usb", "port", "two", "four", "eight", "x", "underseat",
-  "underseater", "international", "domestic", "global", "case", "edition",
+  "luggage",
+  "suitcase",
+  "suitcases",
+  "valise",
+  "spinner",
+  "spinners",
+  "wheeled",
+  "wheels",
+  "wheel",
+  "upright",
+  "trolley",
+  "bag",
+  "bags",
+  "travel",
+  "hardside",
+  "hard",
+  "side",
+  "softside",
+  "soft",
+  "hardshell",
+  "lightweight",
+  "with",
+  "and",
+  "the",
+  "by",
+  "for",
+  "of",
+  "in",
+  "collection",
+  "series",
+  "new",
+  "sale",
+  "carry",
+  "on",
+  "carryon",
+  "cabin",
+  "checked",
+  "check",
+  "medium",
+  "large",
+  "small",
+  "extra",
+  "xl",
+  "inch",
+  "inches",
+  "cm",
+  "piece",
+  "pieces",
+  "pc",
+  "set",
+  "tsa",
+  "lock",
+  "locks",
+  "usb",
+  "port",
+  "two",
+  "four",
+  "eight",
+  "x",
+  "underseat",
+  "underseater",
+  "global",
+  "case",
+  "edition",
 ]);
 
 /**
@@ -286,12 +373,49 @@ function lineOf(text: string, brand: string | null): string[] {
   return [...new Set(out)];
 }
 
+/**
+ * Line words that tell products apart (TUMI's International vs International
+ * Expandable Carry-On; Travelpro's International vs Domestic Carry-On) but
+ * that a person often leaves out. They stay in the product line for identity;
+ * a query or tracked name that omits one still matches, and one that says it
+ * ranks those listings first.
+ */
+const OPTIONAL_LINE_WORDS: ReadonlySet<string> = new Set([
+  "expandable",
+  "expansion",
+  "international",
+  "domestic",
+]);
+
 /* ── Queries ────────────────────────────────────────────────────────── */
 
 const QUERY_FILLER = new Set([
-  "price", "prices", "cheap", "cheapest", "best", "buy", "a", "an", "or", "under", "over", "below",
-  "above", "canada", "canadian", "deal", "deals", "online", "shop", "store", "lowest", "compare",
-  "less", "than", "around", "about",
+  "price",
+  "prices",
+  "cheap",
+  "cheapest",
+  "best",
+  "buy",
+  "a",
+  "an",
+  "or",
+  "under",
+  "over",
+  "below",
+  "above",
+  "canada",
+  "canadian",
+  "deal",
+  "deals",
+  "online",
+  "shop",
+  "store",
+  "lowest",
+  "compare",
+  "less",
+  "than",
+  "around",
+  "about",
 ]);
 
 function normaliseGtin(digits: string): string | null {
@@ -314,7 +438,9 @@ function parseQuery(raw: string): ParsedQuery {
   const model = modelHit ? modelHit.model : null;
   const sizeClass = sizeClassOf(withoutPrice);
   const colour = colourOf(withoutPrice);
-  const line = lineOf(withoutPrice, brand).filter((w) => !QUERY_FILLER.has(w) && !/^\d{12,14}$/.test(w));
+  const line = lineOf(withoutPrice, brand).filter(
+    (w) => !QUERY_FILLER.has(w) && !OPTIONAL_LINE_WORDS.has(w) && !/^\d{12,14}$/.test(w),
+  );
 
   const tokens = [
     ...new Set(
@@ -341,6 +467,7 @@ export const luggagePack: CategoryPack = {
   lineOf,
   modelOf,
   isAccessory,
+  optionalLineWords: OPTIONAL_LINE_WORDS,
 };
 
 export { normaliseGtin };

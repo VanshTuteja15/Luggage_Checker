@@ -21,9 +21,25 @@ const PROBED = "2026-10-07T21:08:22Z";
 
 type SeedInput = Omit<
   SourceRecord,
-  "currency" | "marketPathPrefix" | "visitWindow" | "domainWarnings" | "linkOnlySearchUrl" | "ucpEndpoint" | "enabled"
+  | "currency"
+  | "marketPathPrefix"
+  | "visitWindow"
+  | "domainWarnings"
+  | "linkOnlySearchUrl"
+  | "ucpEndpoint"
+  | "enabled"
 > &
-  Partial<Pick<SourceRecord, "marketPathPrefix" | "visitWindow" | "domainWarnings" | "linkOnlySearchUrl" | "ucpEndpoint" | "enabled">>;
+  Partial<
+    Pick<
+      SourceRecord,
+      | "marketPathPrefix"
+      | "visitWindow"
+      | "domainWarnings"
+      | "linkOnlySearchUrl"
+      | "ucpEndpoint"
+      | "enabled"
+    >
+  >;
 
 function source(s: SeedInput): SourceRecord {
   return {
@@ -60,13 +76,18 @@ export const SOURCE_SEED: SourceRecord[] = [
       clause: "agents.md lists product/collection JSON as agent-OK",
     },
     robots: {
-      summary: "allowed (* group); /search and /policies disallowed; ClaudeBot, GPTBot named as allowed",
+      summary:
+        "allowed (* group); /search and /policies disallowed; ClaudeBot, GPTBot named as allowed",
       crawlDelaySec: null,
       sitemaps: ["https://www.canadaluggagedepot.ca/sitemap.xml"],
     },
     crawlDelaySec: 1,
     ucpEndpoint: "https://canadaluggagedepot.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: true, notes: "Samsonite model-colour code in SKU (135955-1247)" },
+    identityQuality: {
+      barcode: "yes",
+      modelInSku: true,
+      notes: "Samsonite model-colour code in SKU (135955-1247)",
+    },
     routes: [
       { rank: 1, adapter: "shopify_ucp" },
       { rank: 2, adapter: "shopify_product_json", note: "sanctioned by the store's agents.md" },
@@ -76,7 +97,8 @@ export const SOURCE_SEED: SourceRecord[] = [
     domainWarnings: ["A Quebec competitor, NOT Luggage Depot Inc. (Calgary)."],
     evidence: {
       probedAt: PROBED,
-      summary: ".json/.js/JSON-LD all 200; 4/4 variants with UPC + model-colour SKU; JSON-LD has priceValidUntil and strikethrough list price",
+      summary:
+        ".json/.js/JSON-LD all 200; 4/4 variants with UPC + model-colour SKU; JSON-LD has priceValidUntil and strikethrough list price",
     },
   }),
   source({
@@ -92,18 +114,41 @@ export const SOURCE_SEED: SourceRecord[] = [
     liveClass: "official_api",
     permission: "allowed",
     terms: { stance: "silent", url: "https://delsey.ca/policies/terms-of-service", clause: null },
-    robots: { summary: "allowed (* group); agents pointed to UCP/MCP", crawlDelaySec: null, sitemaps: ["https://delsey.ca/sitemap.xml"] },
+    robots: {
+      summary: "allowed (* group); agents pointed to UCP/MCP",
+      crawlDelaySec: null,
+      sitemaps: ["https://delsey.ca/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://delseyus.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: false, notes: "JSON-LD mpn is the Shopify product id, not a manufacturer number" },
+    identityQuality: {
+      houseBrand: "Delsey",
+      barcode: "yes",
+      modelInSku: false,
+      notes: "JSON-LD mpn is the Shopify product id, not a manufacturer number",
+    },
     routes: [
-      { rank: 1, adapter: "shopify_ucp", note: "shared US shop: always send CA context and reject non-CAD" },
+      {
+        rank: 1,
+        adapter: "shopify_ucp",
+        note: "shared US shop: always send CA context and reject non-CAD",
+      },
       { rank: 2, adapter: "shopify_product_json" },
-      { rank: 3, adapter: "html_structured", crossCheckOnly: true, note: "JSON-LD offer URLs point to us.delsey.com; never used as listing URLs" },
+      {
+        rank: 3,
+        adapter: "html_structured",
+        crossCheckOnly: true,
+        note: "JSON-LD offer URLs point to us.delsey.com; never used as listing URLs",
+      },
     ],
     linkOnlySearchUrl: "https://delsey.ca/search?q={q}",
-    domainWarnings: ["delseyluggagecanada.ca and delseyluggageca.ca are look-alike sites, likely fraudulent. Never add them."],
-    evidence: { probedAt: PROBED, summary: ".json/.js 200 with UPC, CAD price and compare-at; JSON-LD unreliable for identity" },
+    domainWarnings: [
+      "delseyluggagecanada.ca and delseyluggageca.ca are look-alike sites, likely fraudulent. Never add them.",
+    ],
+    evidence: {
+      probedAt: PROBED,
+      summary: ".json/.js 200 with UPC, CAD price and compare-at; JSON-LD unreliable for identity",
+    },
   }),
 
   /* ── Shopify: terms unread (⚖) — UCP, product JSON behind a flag ──── */
@@ -119,18 +164,43 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "unluggage.com",
     liveClass: "official_api",
     permission: "unclear",
-    terms: { stance: "unknown", url: "https://unluggage.com/policies/terms-of-service", clause: null },
-    robots: { summary: "allowed (* group); agents pointed to UCP/MCP", crawlDelaySec: null, sitemaps: ["https://unluggage.com/sitemap.xml"] },
+    terms: {
+      stance: "unknown",
+      url: "https://unluggage.com/policies/terms-of-service",
+      clause: null,
+    },
+    robots: {
+      summary: "allowed (* group); agents pointed to UCP/MCP",
+      crawlDelaySec: null,
+      sitemaps: ["https://unluggage.com/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://u-n-luggage.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: true, notes: "SKU = Samsonite model + colour name (137394-Black)" },
+    identityQuality: {
+      barcode: "yes",
+      modelInSku: true,
+      notes: "SKU = Samsonite model + colour name (137394-Black)",
+    },
     routes: [
       { rank: 1, adapter: "shopify_ucp" },
-      { rank: 2, adapter: "shopify_product_json", flag: "source.unluggage.product_json", note: "enable after a human reads the terms" },
-      { rank: 3, adapter: "html_structured", crossCheckOnly: true, flag: "source.unluggage.product_json" },
+      {
+        rank: 2,
+        adapter: "shopify_product_json",
+        flag: "source.unluggage.product_json",
+        note: "enable after a human reads the terms",
+      },
+      {
+        rank: 3,
+        adapter: "html_structured",
+        crossCheckOnly: true,
+        flag: "source.unluggage.product_json",
+      },
     ],
     linkOnlySearchUrl: "https://unluggage.com/search?q={q}",
-    evidence: { probedAt: PROBED, summary: ".json/.js/JSON-LD all 200 and consistent; 4/4 UPC; terms not yet read" },
+    evidence: {
+      probedAt: PROBED,
+      summary: ".json/.js/JSON-LD all 200 and consistent; 4/4 UPC; terms not yet read",
+    },
   }),
   source({
     id: "bentley",
@@ -144,19 +214,36 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.shopbentley.com",
     liveClass: "official_api",
     permission: "unclear",
-    terms: { stance: "unknown", url: null, clause: "/policies is disallowed by robots, so the terms were not read" },
-    robots: { summary: "allowed (* group); /search and /policies disallowed", crawlDelaySec: null, sitemaps: ["https://www.shopbentley.com/sitemap.xml"] },
+    terms: {
+      stance: "unknown",
+      url: null,
+      clause: "/policies is disallowed by robots, so the terms were not read",
+    },
+    robots: {
+      summary: "allowed (* group); /search and /policies disallowed",
+      crawlDelaySec: null,
+      sitemaps: ["https://www.shopbentley.com/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://shop-bentley.myshopify.com/api/ucp/mcp",
     identityQuality: { barcode: "yes", modelInSku: false },
     routes: [
       { rank: 1, adapter: "shopify_ucp", note: "confirm it returns the discounted price" },
       { rank: 2, adapter: "shopify_product_json", flag: "source.bentley.product_json" },
-      { rank: 3, adapter: "html_structured", crossCheckOnly: true, flag: "source.bentley.product_json", note: "displayed vs data price guard (audit saw a render-time discount)" },
+      {
+        rank: 3,
+        adapter: "html_structured",
+        crossCheckOnly: true,
+        flag: "source.bentley.product_json",
+        note: "displayed vs data price guard (audit saw a render-time discount)",
+      },
     ],
     linkOnlySearchUrl: "https://www.shopbentley.com/search?q={q}",
     domainWarnings: ["bentley.ca no longer resolves; never use it."],
-    evidence: { probedAt: PROBED, summary: "JSON now carries the sale (125.99 / compare-at 179.99) and matches og:price" },
+    evidence: {
+      probedAt: PROBED,
+      summary: "JSON now carries the sale (125.99 / compare-at 179.99) and matches og:price",
+    },
   }),
 
   /* ── Shopify: terms restrict scraping (⚖) — store agent channel only ─ */
@@ -172,14 +259,25 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "travelpro.ca",
     liveClass: "official_api",
     permission: "restricted",
-    terms: { stance: "restricts", url: "https://travelpro.ca/policies/terms-of-service", clause: "robot, spider ... to retrieve, index, 'data mine'" },
-    robots: { summary: "allowed; Claude/ChatGPT/Gemini named on products; UCP/MCP named in robots.txt", crawlDelaySec: null, sitemaps: ["https://travelpro.ca/sitemap.xml"] },
+    terms: {
+      stance: "restricts",
+      url: "https://travelpro.ca/policies/terms-of-service",
+      clause: "robot, spider ... to retrieve, index, 'data mine'",
+    },
+    robots: {
+      summary: "allowed; Claude/ChatGPT/Gemini named on products; UCP/MCP named in robots.txt",
+      crawlDelaySec: null,
+      sitemaps: ["https://travelpro.ca/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://canadatravelpro.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: false },
+    identityQuality: { houseBrand: "Travelpro", barcode: "yes", modelInSku: false },
     routes: [{ rank: 1, adapter: "shopify_ucp", flag: "policy.ucp_on_restricted_stores" }],
     linkOnlySearchUrl: "https://travelpro.ca/search?q={q}",
-    evidence: { probedAt: PROBED, summary: "robots + /.well-known/ucp 200; catalog not called (agent profile not configured)" },
+    evidence: {
+      probedAt: PROBED,
+      summary: "robots + /.well-known/ucp 200; catalog not called (agent profile not configured)",
+    },
   }),
   source({
     id: "briggs-riley-ca",
@@ -193,11 +291,24 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "briggs-riley.ca",
     liveClass: "official_api",
     permission: "restricted",
-    terms: { stance: "restricts", url: "https://briggs-riley.ca/policies/terms-of-service", clause: SHOPIFY_TERMS_CLAUSE },
-    robots: { summary: "allowed (* group)", crawlDelaySec: null, sitemaps: ["https://briggs-riley.ca/sitemap.xml"] },
+    terms: {
+      stance: "restricts",
+      url: "https://briggs-riley.ca/policies/terms-of-service",
+      clause: SHOPIFY_TERMS_CLAUSE,
+    },
+    robots: {
+      summary: "allowed (* group)",
+      crawlDelaySec: null,
+      sitemaps: ["https://briggs-riley.ca/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://briggs-riley-canada.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: false, notes: "vendor field holds the product line, not the brand" },
+    identityQuality: {
+      houseBrand: "Briggs & Riley",
+      barcode: "yes",
+      modelInSku: false,
+      notes: "vendor field holds the product line, not the brand",
+    },
     routes: [{ rank: 1, adapter: "shopify_ucp", flag: "policy.ucp_on_restricted_stores" }],
     linkOnlySearchUrl: "https://briggs-riley.ca/search?q={q}",
     domainWarnings: ["briggs-riley.com is the separate US store (USD). Never use it."],
@@ -215,11 +326,19 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "ca.heys.com",
     liveClass: "official_api",
     permission: "restricted",
-    terms: { stance: "restricts", url: "https://ca.heys.com/policies/terms-of-service", clause: SHOPIFY_TERMS_CLAUSE },
-    robots: { summary: "allowed (* group)", crawlDelaySec: null, sitemaps: ["https://ca.heys.com/sitemap.xml"] },
+    terms: {
+      stance: "restricts",
+      url: "https://ca.heys.com/policies/terms-of-service",
+      clause: SHOPIFY_TERMS_CLAUSE,
+    },
+    robots: {
+      summary: "allowed (* group)",
+      crawlDelaySec: null,
+      sitemaps: ["https://ca.heys.com/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://heysluggage.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: false },
+    identityQuality: { houseBrand: "Heys", barcode: "yes", modelInSku: false },
     routes: [{ rank: 1, adapter: "shopify_ucp", flag: "policy.ucp_on_restricted_stores" }],
     linkOnlySearchUrl: "https://ca.heys.com/search?q={q}",
     evidence: { probedAt: PROBED, summary: "robots + /.well-known/ucp 200; catalog not called" },
@@ -236,12 +355,20 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "ca.monos.com",
     liveClass: "official_api",
     permission: "restricted",
-    terms: { stance: "restricts", url: "https://monos.com/policies/terms-of-service", clause: SHOPIFY_TERMS_CLAUSE },
-    robots: { summary: "allowed; free-text agent guidance (use UCP/MCP)", crawlDelaySec: null, sitemaps: ["https://ca.monos.com/sitemap.xml"] },
+    terms: {
+      stance: "restricts",
+      url: "https://monos.com/policies/terms-of-service",
+      clause: SHOPIFY_TERMS_CLAUSE,
+    },
+    robots: {
+      summary: "allowed; free-text agent guidance (use UCP/MCP)",
+      crawlDelaySec: null,
+      sitemaps: ["https://ca.monos.com/sitemap.xml"],
+    },
     // MCP is rate-limited per IP: be gentler than the other stores.
     crawlDelaySec: 3,
     ucpEndpoint: "https://monostravel-can.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: false },
+    identityQuality: { houseBrand: "Monos", barcode: "yes", modelInSku: false },
     routes: [{ rank: 1, adapter: "shopify_ucp", flag: "policy.ucp_on_restricted_stores" }],
     linkOnlySearchUrl: "https://ca.monos.com/search?q={q}",
     domainWarnings: ["monos.com serves USD by geo. Always use ca.monos.com."],
@@ -260,12 +387,27 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketPathPrefix: "/en-ca",
     liveClass: "official_api",
     permission: "restricted",
-    terms: { stance: "restricts", url: "https://www.awaytravel.com/pages/terms", clause: "spiders, robots, crawlers, data mining tools or the like" },
-    robots: { summary: "allowed; GPTBot, ClaudeBot and others named as allowed", crawlDelaySec: null, sitemaps: ["https://www.awaytravel.com/sitemap.xml"] },
+    terms: {
+      stance: "restricts",
+      url: "https://www.awaytravel.com/pages/terms",
+      clause: "spiders, robots, crawlers, data mining tools or the like",
+    },
+    robots: {
+      summary: "allowed; GPTBot, ClaudeBot and others named as allowed",
+      crawlDelaySec: null,
+      sitemaps: ["https://www.awaytravel.com/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://766ad1-ab.myshopify.com/api/ucp/mcp",
-    identityQuality: { barcode: "yes", modelInSku: false },
-    routes: [{ rank: 1, adapter: "shopify_ucp", flag: "policy.ucp_on_restricted_stores", note: "global shop: send CA context, reject non-CAD" }],
+    identityQuality: { houseBrand: "Away", barcode: "yes", modelInSku: false },
+    routes: [
+      {
+        rank: 1,
+        adapter: "shopify_ucp",
+        flag: "policy.ucp_on_restricted_stores",
+        note: "global shop: send CA context, reject non-CAD",
+      },
+    ],
     linkOnlySearchUrl: "https://www.awaytravel.com/en-ca/search?q={q}",
     evidence: { probedAt: PROBED, summary: "robots + /.well-known/ucp 200; catalog not called" },
   }),
@@ -281,12 +423,27 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.luggagecity.ca",
     liveClass: "official_api",
     permission: "restricted",
-    terms: { stance: "restricts", url: "https://www.luggagecity.ca/policies/terms-of-service", clause: SHOPIFY_TERMS_CLAUSE },
-    robots: { summary: "allowed; UCP/MCP advertised", crawlDelaySec: null, sitemaps: ["https://www.luggagecity.ca/sitemap.xml"] },
+    terms: {
+      stance: "restricts",
+      url: "https://www.luggagecity.ca/policies/terms-of-service",
+      clause: SHOPIFY_TERMS_CLAUSE,
+    },
+    robots: {
+      summary: "allowed; UCP/MCP advertised",
+      crawlDelaySec: null,
+      sitemaps: ["https://www.luggagecity.ca/sitemap.xml"],
+    },
     crawlDelaySec: 1,
     ucpEndpoint: "https://kjamson.myshopify.com/api/ucp/mcp",
     identityQuality: { barcode: "partial", modelInSku: false, notes: "barcodes often empty" },
-    routes: [{ rank: 1, adapter: "shopify_ucp", flag: "source.luggagecity.ucp", note: "audit: only after legal review of terms vs agent channel" }],
+    routes: [
+      {
+        rank: 1,
+        adapter: "shopify_ucp",
+        flag: "source.luggagecity.ucp",
+        note: "audit: only after legal review of terms vs agent channel",
+      },
+    ],
     linkOnlySearchUrl: "https://www.luggagecity.ca/search?q={q}",
     evidence: { probedAt: PROBED, summary: "robots + /.well-known/ucp 200; catalog not called" },
   }),
@@ -306,19 +463,38 @@ export const SOURCE_SEED: SourceRecord[] = [
     permission: "allowed",
     terms: { stance: "silent", url: "https://www.samsonite.ca/en/terms-of-use.html", clause: null },
     robots: {
-      summary: "allowed (* group, crawl-delay 10); OpenAI/Claude/Perplexity named; /dw/shop/ and /on/demandware.store/ disallowed",
+      summary:
+        "allowed (* group, crawl-delay 10); OpenAI/Claude/Perplexity named; /dw/shop/ and /on/demandware.store/ disallowed",
       crawlDelaySec: 10,
       sitemaps: ["https://www.samsonite.ca/sitemap_index.xml"],
     },
     crawlDelaySec: 10,
-    identityQuality: { barcode: "unknown", modelInSku: true, notes: "model + colour code, e.g. 137394-1041" },
+    identityQuality: {
+      houseBrand: "Samsonite",
+      barcode: "unknown",
+      modelInSku: true,
+      notes: "model + colour code, e.g. 137394-1041",
+    },
     routes: [
-      { rank: 1, adapter: "feed_import", note: "dealer price list / EDI via the Samsonite Canada rep" },
+      {
+        rank: 1,
+        adapter: "feed_import",
+        note: "dealer price list / EDI via the Samsonite Canada rep",
+      },
       { rank: 2, adapter: "manual_entry" },
-      { rank: 3, adapter: "html_structured", flag: "source.samsonite-ca.html_structured", note: "off: PerimeterX CAPTCHA on every page from our network" },
+      {
+        rank: 3,
+        adapter: "html_structured",
+        flag: "source.samsonite-ca.html_structured",
+        note: "off: PerimeterX CAPTCHA on every page from our network",
+      },
     ],
     linkOnlySearchUrl: "https://www.samsonite.ca/en/search?q={q}",
-    evidence: { probedAt: PROBED, summary: "BLOCKED: every page and the sitemap return 307 + PerimeterX CAPTCHA ('Access to this page has been denied')" },
+    evidence: {
+      probedAt: PROBED,
+      summary:
+        "BLOCKED: every page and the sitemap return 307 + PerimeterX CAPTCHA ('Access to this page has been denied')",
+    },
   }),
   source({
     id: "tumi-ca",
@@ -334,20 +510,38 @@ export const SOURCE_SEED: SourceRecord[] = [
     permission: "allowed",
     terms: { stance: "silent", url: "https://ca.tumi.com/en/terms-and-conditions/", clause: null },
     robots: {
-      summary: "allowed (crawl-delay 5, Visit-time 05:15-09:15 ET); ca.tumi.com/sitemap.xml disallowed",
+      summary:
+        "allowed (crawl-delay 5, Visit-time 05:15-09:15 ET); ca.tumi.com/sitemap.xml disallowed",
       crawlDelaySec: 5,
       sitemaps: ["https://www.tumi.com/sitemap_index.xml"],
     },
     crawlDelaySec: 5,
     visitWindow: { start: "05:15", end: "09:15", timeZone: "America/Toronto" },
-    identityQuality: { barcode: "unknown", modelInSku: true, notes: "style + colour id" },
+    identityQuality: {
+      houseBrand: "TUMI",
+      barcode: "unknown",
+      modelInSku: true,
+      notes: "style + colour id",
+    },
     routes: [
-      { rank: 1, adapter: "feed_import", note: "dealer feed via Samsonite Canada (Samsonite Group brand)" },
+      {
+        rank: 1,
+        adapter: "feed_import",
+        note: "dealer feed via Samsonite Canada (Samsonite Group brand)",
+      },
       { rank: 2, adapter: "manual_entry" },
-      { rank: 3, adapter: "html_structured", flag: "source.tumi-ca.html_structured", note: "off: PerimeterX CAPTCHA from our network" },
+      {
+        rank: 3,
+        adapter: "html_structured",
+        flag: "source.tumi-ca.html_structured",
+        note: "off: PerimeterX CAPTCHA from our network",
+      },
     ],
     linkOnlySearchUrl: "https://ca.tumi.com/en/search?q={q}",
-    evidence: { probedAt: PROBED, summary: "BLOCKED: product page returns the same 307 PerimeterX CAPTCHA as Samsonite" },
+    evidence: {
+      probedAt: PROBED,
+      summary: "BLOCKED: product page returns the same 307 PerimeterX CAPTCHA as Samsonite",
+    },
   }),
 
   /* ── Specialty retailers without an automated route ──────────────── */
@@ -364,12 +558,19 @@ export const SOURCE_SEED: SourceRecord[] = [
     liveClass: "unknown",
     permission: "unclear",
     terms: { stance: "unknown", url: null, clause: null },
-    robots: { summary: "robots.txt now 200 (* group, sitemap listed); the audit had seen 403", crawlDelaySec: null, sitemaps: ["https://jpgrimard.com/sitemap.xml"] },
+    robots: {
+      summary: "robots.txt now 200 (* group, sitemap listed); the audit had seen 403",
+      crawlDelaySec: null,
+      sitemaps: ["https://jpgrimard.com/sitemap.xml"],
+    },
     crawlDelaySec: 5,
     identityQuality: { barcode: "unknown", modelInSku: false },
     routes: [{ rank: 1, adapter: "manual_entry", note: "ask the store for permission or a feed" }],
     linkOnlySearchUrl: "https://jpgrimard.com/en/catalogsearch/result/?q={q}",
-    evidence: { probedAt: PROBED, summary: "robots.txt only; terms unknown; extra in-store discounts are not online" },
+    evidence: {
+      probedAt: PROBED,
+      summary: "robots.txt only; terms unknown; extra in-store discounts are not online",
+    },
   }),
   source({
     id: "luggagewarehouse-van",
@@ -405,11 +606,29 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.ebay.ca",
     liveClass: "official_api",
     permission: "forbidden",
-    terms: { stance: "prohibits", url: "https://www.ebay.ca/help/policies/member-behaviour-policies/user-agreement", clause: "robot, spider, scraper ... LLM-driven bots" },
-    robots: { summary: "AI bots fully disallowed; never fetch HTML", crawlDelaySec: null, sitemaps: [] },
+    terms: {
+      stance: "prohibits",
+      url: "https://www.ebay.ca/help/policies/member-behaviour-policies/user-agreement",
+      clause: "robot, spider, scraper ... LLM-driven bots",
+    },
+    robots: {
+      summary: "AI bots fully disallowed; never fetch HTML",
+      crawlDelaySec: null,
+      sitemaps: [],
+    },
     crawlDelaySec: 1,
-    identityQuality: { barcode: "partial", modelInSku: false, notes: "GTIN/MPN when the seller provides them" },
-    routes: [{ rank: 1, adapter: "ebay_browse_api", note: "Browse API, marketplace EBAY_CA, new condition, CAD only" }],
+    identityQuality: {
+      barcode: "partial",
+      modelInSku: false,
+      notes: "GTIN/MPN when the seller provides them",
+    },
+    routes: [
+      {
+        rank: 1,
+        adapter: "ebay_browse_api",
+        note: "Browse API, marketplace EBAY_CA, new condition, CAD only",
+      },
+    ],
     linkOnlySearchUrl: "https://www.ebay.ca/sch/i.html?_nkw={q}",
     evidence: { probedAt: PROBED, summary: "not configured (no keys); HTML never fetched" },
   }),
@@ -426,11 +645,22 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.amazon.ca",
     liveClass: "not_permitted",
     permission: "forbidden",
-    terms: { stance: "prohibits", url: "https://www.amazon.ca/gp/help/customer/display.html?nodeId=918816", clause: "data mining, robots, or similar data gathering and extraction tools" },
+    terms: {
+      stance: "prohibits",
+      url: "https://www.amazon.ca/gp/help/customer/display.html?nodeId=918816",
+      clause: "data mining, robots, or similar data gathering and extraction tools",
+    },
     robots: { summary: "refuses AI agents site-wide", crawlDelaySec: null, sitemaps: [] },
     crawlDelaySec: 1,
     identityQuality: { barcode: "partial", modelInSku: false, notes: "ASIN" },
-    routes: [{ rank: 1, adapter: "amazon_creators_api", flag: "adapter.amazon_creators_api", note: "needs an approved Associates account with qualifying sales" }],
+    routes: [
+      {
+        rank: 1,
+        adapter: "amazon_creators_api",
+        flag: "adapter.amazon_creators_api",
+        note: "needs an approved Associates account with qualifying sales",
+      },
+    ],
     linkOnlySearchUrl: "https://www.amazon.ca/s?k={q}",
     evidence: { probedAt: null, summary: "not touched (terms forbid automated access)" },
   }),
@@ -446,11 +676,26 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.walmart.ca",
     liveClass: "not_permitted",
     permission: "forbidden",
-    terms: { stance: "prohibits", url: "https://www.walmart.ca/en/help/terms-of-use", clause: "spiders, robots, avatars or intelligent agents" },
-    robots: { summary: "canonical product URLs allowed, but terms forbid agents", crawlDelaySec: null, sitemaps: [] },
+    terms: {
+      stance: "prohibits",
+      url: "https://www.walmart.ca/en/help/terms-of-use",
+      clause: "spiders, robots, avatars or intelligent agents",
+    },
+    robots: {
+      summary: "canonical product URLs allowed, but terms forbid agents",
+      crawlDelaySec: null,
+      sitemaps: [],
+    },
     crawlDelaySec: 10,
     identityQuality: { barcode: "unknown", modelInSku: false, notes: "item id" },
-    routes: [{ rank: 1, adapter: "feed_import", flag: "feed.walmart-ca", note: "Rakuten affiliate product feed, once approved" }],
+    routes: [
+      {
+        rank: 1,
+        adapter: "feed_import",
+        flag: "feed.walmart-ca",
+        note: "Rakuten affiliate product feed, once approved",
+      },
+    ],
     linkOnlySearchUrl: "https://www.walmart.ca/search?q={q}",
     evidence: { probedAt: null, summary: "not touched (terms forbid automated access)" },
   }),
@@ -466,10 +711,22 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.costco.ca",
     liveClass: "not_permitted",
     permission: "forbidden",
-    terms: { stance: "prohibits", url: null, clause: "data mining, bots, spiders, automated tools" },
-    robots: { summary: "not probed: terms forbid automated access", crawlDelaySec: null, sitemaps: [] },
+    terms: {
+      stance: "prohibits",
+      url: null,
+      clause: "data mining, bots, spiders, automated tools",
+    },
+    robots: {
+      summary: "not probed: terms forbid automated access",
+      crawlDelaySec: null,
+      sitemaps: [],
+    },
     crawlDelaySec: 10,
-    identityQuality: { barcode: "no", modelInSku: false, notes: "mostly Costco-exclusive set SKUs" },
+    identityQuality: {
+      barcode: "no",
+      modelInSku: false,
+      notes: "mostly Costco-exclusive set SKUs",
+    },
     routes: [{ rank: 1, adapter: "manual_entry" }],
     linkOnlySearchUrl: "https://www.costco.ca/CatalogSearch?keyword={q}",
     evidence: { probedAt: null, summary: "not touched (terms forbid automated access)" },
@@ -486,11 +743,23 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.bestbuy.ca",
     liveClass: "needs_js",
     permission: "forbidden",
-    terms: { stance: "prohibits", url: null, clause: "affiliate terms: no individual product pricing without express prior written permission" },
+    terms: {
+      stance: "prohibits",
+      url: null,
+      clause:
+        "affiliate terms: no individual product pricing without express prior written permission",
+    },
     robots: { summary: "not probed (MASTER_PROMPT rule 2)", crawlDelaySec: null, sitemaps: [] },
     crawlDelaySec: 10,
     identityQuality: { barcode: "unknown", modelInSku: false },
-    routes: [{ rank: 1, adapter: "feed_import", flag: "feed.bestbuy-ca", note: "Impact affiliate feed + written permission to show prices" }],
+    routes: [
+      {
+        rank: 1,
+        adapter: "feed_import",
+        flag: "feed.bestbuy-ca",
+        note: "Impact affiliate feed + written permission to show prices",
+      },
+    ],
     linkOnlySearchUrl: "https://www.bestbuy.ca/en-ca/search?search={q}",
     evidence: { probedAt: null, summary: "not touched" },
   }),
@@ -506,12 +775,21 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.canadiantire.ca",
     liveClass: "needs_js",
     permission: "forbidden",
-    terms: { stance: "prohibits", url: null, clause: "content limited to personal, non-commercial use" },
+    terms: {
+      stance: "prohibits",
+      url: null,
+      clause: "content limited to personal, non-commercial use",
+    },
     robots: { summary: "not probed (MASTER_PROMPT rule 2)", crawlDelaySec: 10, sitemaps: [] },
     crawlDelaySec: 10,
     identityQuality: { barcode: "unknown", modelInSku: false, notes: "mostly house brands" },
     routes: [
-      { rank: 1, adapter: "feed_import", flag: "feed.canadiantire", note: "SportChek affiliate via Impact; ask about a catalog feed" },
+      {
+        rank: 1,
+        adapter: "feed_import",
+        flag: "feed.canadiantire",
+        note: "SportChek affiliate via Impact; ask about a catalog feed",
+      },
       { rank: 2, adapter: "manual_entry" },
     ],
     linkOnlySearchUrl: "https://www.canadiantire.ca/en/search-results.html?q={q}",
@@ -529,7 +807,11 @@ export const SOURCE_SEED: SourceRecord[] = [
     marketHost: "www.londondrugs.com",
     liveClass: "needs_js",
     permission: "forbidden",
-    terms: { stance: "unknown", url: null, clause: "listed by MASTER_PROMPT rule 2 as never-fetch" },
+    terms: {
+      stance: "unknown",
+      url: null,
+      clause: "listed by MASTER_PROMPT rule 2 as never-fetch",
+    },
     robots: { summary: "not probed (MASTER_PROMPT rule 2)", crawlDelaySec: null, sitemaps: [] },
     crawlDelaySec: 10,
     identityQuality: { barcode: "unknown", modelInSku: false },
@@ -550,15 +832,28 @@ export const SOURCE_SEED: SourceRecord[] = [
     liveClass: "blocked",
     permission: "unclear",
     terms: { stance: "silent", url: null, clause: null },
-    robots: { summary: "robots.txt itself behind a Cloudflare challenge (7 Oct): treated as not permitted", crawlDelaySec: null, sitemaps: [] },
+    robots: {
+      summary: "robots.txt itself behind a Cloudflare challenge (7 Oct): treated as not permitted",
+      crawlDelaySec: null,
+      sitemaps: [],
+    },
     crawlDelaySec: 10,
     identityQuality: { barcode: "unknown", modelInSku: false },
     routes: [
       { rank: 1, adapter: "manual_entry" },
-      { rank: 2, adapter: "html_structured", flag: "source.sportinglife.html_structured", note: "off: Cloudflare challenge" },
+      {
+        rank: 2,
+        adapter: "html_structured",
+        flag: "source.sportinglife.html_structured",
+        note: "off: Cloudflare challenge",
+      },
     ],
     linkOnlySearchUrl: "https://www.sportinglife.ca/en-CA/search?q={q}",
-    evidence: { probedAt: PROBED, summary: "BLOCKED: Cloudflare managed challenge (cf-mitigated) on robots.txt and product page" },
+    evidence: {
+      probedAt: PROBED,
+      summary:
+        "BLOCKED: Cloudflare managed challenge (cf-mitigated) on robots.txt and product page",
+    },
   }),
   source({
     id: "simons",
@@ -573,15 +868,27 @@ export const SOURCE_SEED: SourceRecord[] = [
     liveClass: "blocked",
     permission: "unclear",
     terms: { stance: "silent", url: null, clause: null },
-    robots: { summary: "robots.txt behind a Cloudflare challenge (7 Oct): treated as not permitted", crawlDelaySec: null, sitemaps: [] },
+    robots: {
+      summary: "robots.txt behind a Cloudflare challenge (7 Oct): treated as not permitted",
+      crawlDelaySec: null,
+      sitemaps: [],
+    },
     crawlDelaySec: 10,
     identityQuality: { barcode: "no", modelInSku: false, notes: "name only" },
     routes: [
       { rank: 1, adapter: "manual_entry" },
-      { rank: 2, adapter: "html_structured", flag: "source.simons.html_structured", note: "off: Cloudflare challenge" },
+      {
+        rank: 2,
+        adapter: "html_structured",
+        flag: "source.simons.html_structured",
+        note: "off: Cloudflare challenge",
+      },
     ],
     linkOnlySearchUrl: "https://www.simons.ca/en/search?q={q}",
-    evidence: { probedAt: PROBED, summary: "BLOCKED: Cloudflare managed challenge on robots.txt and product page" },
+    evidence: {
+      probedAt: PROBED,
+      summary: "BLOCKED: Cloudflare managed challenge on robots.txt and product page",
+    },
   }),
 
   /* ── Gone ─────────────────────────────────────────────────────────── */
@@ -608,4 +915,4 @@ export const SOURCE_SEED: SourceRecord[] = [
   }),
 ];
 
-export const SEED_VERSION = "2026-10-07.1";
+export const SEED_VERSION = "2026-10-08.1";

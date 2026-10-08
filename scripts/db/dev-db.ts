@@ -5,7 +5,7 @@
 /*  A persistent Docker container (lt-dev-db, port 54331) with the       */
 /*  Supabase shim, the migrations and the registry seed. Point the app   */
 /*  or the worker at it with                                            */
-/*    DATABASE_URL=postgres://postgres:dev@localhost:54331/postgres      */
+/*    DATABASE_URL=postgres://postgres:dev@127.0.0.1:54331/postgres      */
 /*  Never used in production; the real database is Supabase.            */
 /* ------------------------------------------------------------------ */
 
@@ -18,7 +18,9 @@ import { SOURCE_SEED } from "../../src/lib/engine/registry/seed";
 
 const CONTAINER = "lt-dev-db";
 const PORT = 54331;
-const URL_ = `postgres://postgres:dev@localhost:${PORT}/postgres`;
+// 127.0.0.1, not localhost: on Windows "localhost" tries IPv6 first and each
+// new connection paid ~1 s for it in the P4 measurement.
+const URL_ = `postgres://postgres:dev@127.0.0.1:${PORT}/postgres`;
 
 async function connect(): Promise<Client> {
   const started = Date.now();
@@ -36,16 +38,33 @@ async function connect(): Promise<Client> {
 }
 
 async function up(): Promise<void> {
-  const running = execFileSync("docker", ["ps", "-q", "-f", `name=^${CONTAINER}$`], { encoding: "utf8" }).trim();
+  const running = execFileSync("docker", ["ps", "-q", "-f", `name=^${CONTAINER}$`], {
+    encoding: "utf8",
+  }).trim();
   if (!running) {
-    execFileSync("docker", ["run", "-d", "--name", CONTAINER, "-e", "POSTGRES_PASSWORD=dev", "-p", `${PORT}:5432`, "postgres:17-alpine"], { stdio: "ignore" });
+    execFileSync(
+      "docker",
+      [
+        "run",
+        "-d",
+        "--name",
+        CONTAINER,
+        "-e",
+        "POSTGRES_PASSWORD=dev",
+        "-p",
+        `${PORT}:5432`,
+        "postgres:17-alpine",
+      ],
+      { stdio: "ignore" },
+    );
   }
   const c = await connect();
   await c.query(readFileSync(resolve("supabase/tests/shim.sql"), "utf8"));
   const migrations = readdirSync(resolve("supabase/migrations"))
     .filter((f) => /^\d{3}_.*\.sql$/.test(f) && (f.startsWith("000") || Number(f.slice(0, 3)) >= 3))
     .sort();
-  for (const f of migrations) await c.query(readFileSync(resolve("supabase/migrations", f), "utf8"));
+  for (const f of migrations)
+    await c.query(readFileSync(resolve("supabase/migrations", f), "utf8"));
   await c.query(registrySeedSql(SOURCE_SEED));
   await c.end();
   console.log(`dev database ready: DATABASE_URL=${URL_}`);

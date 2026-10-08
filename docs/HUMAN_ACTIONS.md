@@ -73,3 +73,17 @@ Until a worker is connected, research runs inline on Vercel (slower but works) a
 ## 9. Rotate the credentials that were pasted into chat earlier
 
 The project brief records that the Supabase secret key and the SerpAPI key were once pasted into a chat. Rotate both in their dashboards and update `.env.local` / Vercel.
+
+## 10. Look at the new screens once, signed in (10 min)
+
+The engine was checked end to end without a browser session (real research runs from the CLI, HTTP checks of every route), because signing in means typing your password, which the assistant must not do. One look from you closes that gap.
+
+1. After items 7 (migrations + seed + `app_admins`) and, ideally, 1 and 8: open the deployed app (or `npm run dev`) and sign in.
+2. **Search** → switch to **Verified prices** → search `Samsonite Omni 3.0 Large`. Expect, within a few seconds:
+   - Canada Luggage Depot rows labelled "Verified live · <time>" with a source link;
+   - "Couldn't verify" rows for Samsonite.ca, TUMI.ca, Sporting Life and Simons (blocked), and "Link only" rows for Amazon, Walmart, Costco, Best Buy, Canadian Tire, London Drugs and eBay (until item 3).
+3. Press **Re-verify now** once; the times update.
+4. Open **Admin** (left menu). Check that **Sources** lists 24 stores with health, **Failures** shows the blocked stores' challenge responses, and **Flags** shows `engine.default_search` off.
+5. On a phone (or a narrow browser window) repeat step 2: rows stack, nothing scrolls sideways.
+
+**Local tip:** with the local dev database use `127.0.0.1`, not `localhost`, in `DATABASE_URL` (`npm run db:dev -- up` prints the right one). On Windows each new connection to "localhost" tries IPv6 first and cost ~1 s in our measurements. For a local sign-in, the signed-in user's id must exist in the local `auth.users` table (insert it once), because research sessions reference it.
