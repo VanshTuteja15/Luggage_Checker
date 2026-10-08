@@ -65,6 +65,7 @@ For local engine work without Supabase: `npm run db:dev -- up` starts a throwawa
 | [docs/SHADOW_REPORT.md](./docs/SHADOW_REPORT.md) | Engine vs Tavily on 35 products: accuracy, coverage, latency |
 | [docs/PROBE_REPORT.md](./docs/PROBE_REPORT.md) | What each store allows and what we could actually read |
 | [docs/PROGRESS.md](./docs/PROGRESS.md) | Build log, quality gates, decisions |
+| [docs/FINAL_REPORT.md](./docs/FINAL_REPORT.md) | What was built, results, coverage per store, steps to go live |
 
 ---
 
