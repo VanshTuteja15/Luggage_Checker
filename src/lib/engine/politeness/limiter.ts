@@ -60,11 +60,18 @@ export class HostLimiter {
    * be called when the request finishes. Throws LimiterTimeout when the turn
    * would start after `deadlineAt`, LimiterAborted when `signal` fires.
    */
-  async acquire(host: string, spacingMs: number, opts: { deadlineAt?: number; signal?: AbortSignal } = {}): Promise<() => void> {
+  async acquire(
+    host: string,
+    spacingMs: number,
+    opts: { deadlineAt?: number; signal?: AbortSignal } = {},
+  ): Promise<() => void> {
     const prev = this.tail.get(host) ?? Promise.resolve();
     let release!: () => void;
     const mine = new Promise<void>((r) => (release = r));
-    this.tail.set(host, prev.then(() => mine));
+    this.tail.set(
+      host,
+      prev.then(() => mine),
+    );
     this.pending.set(host, (this.pending.get(host) ?? 0) + 1);
 
     let released = false;
@@ -74,13 +81,17 @@ export class HostLimiter {
       release();
     };
     try {
-      if (opts.deadlineAt !== undefined && this.clock.now() + this.estimateWaitMs(host, spacingMs) - spacingMs > opts.deadlineAt) {
+      if (
+        opts.deadlineAt !== undefined &&
+        this.clock.now() + this.estimateWaitMs(host, spacingMs) - spacingMs > opts.deadlineAt
+      ) {
         throw new LimiterTimeout(host);
       }
       await this.waitFor(prev, opts);
       const last = this.lastStart.get(host);
       const wait = last === undefined ? 0 : Math.max(0, last + spacingMs - this.clock.now());
-      if (opts.deadlineAt !== undefined && this.clock.now() + wait > opts.deadlineAt) throw new LimiterTimeout(host);
+      if (opts.deadlineAt !== undefined && this.clock.now() + wait > opts.deadlineAt)
+        throw new LimiterTimeout(host);
       if (wait > 0) await this.clock.sleep(wait, opts.signal);
       this.lastStart.set(host, this.clock.now());
       return done;
@@ -93,14 +104,21 @@ export class HostLimiter {
     }
   }
 
-  private async waitFor(prev: Promise<void>, opts: { deadlineAt?: number; signal?: AbortSignal }): Promise<void> {
+  private async waitFor(
+    prev: Promise<void>,
+    opts: { deadlineAt?: number; signal?: AbortSignal },
+  ): Promise<void> {
     if (opts.deadlineAt === undefined && !opts.signal) return prev;
     const guards: Promise<never>[] = [];
     let timer: ReturnType<typeof setTimeout> | undefined;
     let onAbort: (() => void) | undefined;
     if (opts.deadlineAt !== undefined) {
       const ms = Math.max(0, opts.deadlineAt - this.clock.now());
-      guards.push(new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new LimiterTimeout("queue")), ms))));
+      guards.push(
+        new Promise<never>(
+          (_, reject) => (timer = setTimeout(() => reject(new LimiterTimeout("queue")), ms)),
+        ),
+      );
     }
     if (opts.signal) {
       const signal = opts.signal;

@@ -12,7 +12,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { userId } = await requireAdmin(req);
     const { id } = await params;
     const body = (await req.json().catch(() => ({}))) as { decision?: unknown };
-    if (body.decision !== "approved" && body.decision !== "rejected") return badRequest('decision must be "approved" or "rejected"');
+    if (body.decision !== "approved" && body.decision !== "rejected")
+      return badRequest('decision must be "approved" or "rejected"');
     const r = await decideReview(getEngine().rt.store, id, body.decision, userId);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 409 });
     return NextResponse.json({ item: r.item });

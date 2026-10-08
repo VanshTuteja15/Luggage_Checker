@@ -31,9 +31,22 @@ export type FetchRecord = {
 };
 
 const KEEP_HEADERS = [
-  "date", "last-modified", "etag", "age", "cache-control", "expires",
-  "cf-cache-status", "cf-ray", "cf-mitigated", "server", "x-cache", "x-served-by",
-  "content-language", "x-shopify-stage", "retry-after", "set-cookie-count",
+  "date",
+  "last-modified",
+  "etag",
+  "age",
+  "cache-control",
+  "expires",
+  "cf-cache-status",
+  "cf-ray",
+  "cf-mitigated",
+  "server",
+  "x-cache",
+  "x-served-by",
+  "content-language",
+  "x-shopify-stage",
+  "retry-after",
+  "set-cookie-count",
 ];
 
 const CHALLENGE_MARKERS = [
@@ -70,7 +83,14 @@ export type ProbeResponse = { record: FetchRecord; body: string };
 
 export async function probeFetch(
   url: string,
-  init: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number; maxBytes?: number; skipPacing?: boolean } = {},
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+    timeoutMs?: number;
+    maxBytes?: number;
+    skipPacing?: boolean;
+  } = {},
 ): Promise<ProbeResponse> {
   const host = new URL(url).hostname;
   if (!init.skipPacing) await waitForSlot(host);
@@ -94,7 +114,12 @@ export async function probeFetch(
   try {
     const res = await fetch(url, {
       method: init.method ?? "GET",
-      headers: { "User-Agent": userAgent(), Accept: "*/*", "Accept-Language": "en-CA,en;q=0.8", ...init.headers },
+      headers: {
+        "User-Agent": userAgent(),
+        Accept: "*/*",
+        "Accept-Language": "en-CA,en;q=0.8",
+        ...init.headers,
+      },
       body: init.body,
       redirect: "follow",
       signal: controller.signal,
@@ -132,11 +157,13 @@ export function classify(status: number, body: string, headers: Record<string, s
   if (headers["cf-mitigated"]) return "challenge";
   if (status === 429) return "rate_limited";
   if (status === 404 || status === 410) return "not_found";
-  if ((status === 403 || status === 503) && CHALLENGE_MARKERS.some((re) => re.test(head))) return "challenge";
+  if ((status === 403 || status === 503) && CHALLENGE_MARKERS.some((re) => re.test(head)))
+    return "challenge";
   // fetch follows real redirects, so a 3xx that reaches us had no usable
   // Location. Bot managers answer like this: samsonite.ca and ca.tumi.com
   // return a 307 PerimeterX CAPTCHA page that never redirects (7 Oct probe).
-  if (status >= 300 && status < 400 && CHALLENGE_MARKERS.some((re) => re.test(head))) return "challenge";
+  if (status >= 300 && status < 400 && CHALLENGE_MARKERS.some((re) => re.test(head)))
+    return "challenge";
   if (status === 401 || status === 403) return "blocked";
   if (status >= 200 && status < 300) {
     // A 200 can still be an interstitial.

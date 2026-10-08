@@ -18,7 +18,13 @@ export async function followSession(
   sessionId: string,
   afterSeq: number,
   onEvent: (e: SessionEvent) => void,
-  opts: { signal?: AbortSignal; maxMs?: number; pollMs?: number; idleMs?: number; onIdle?: () => void } = {},
+  opts: {
+    signal?: AbortSignal;
+    maxMs?: number;
+    pollMs?: number;
+    idleMs?: number;
+    onIdle?: () => void;
+  } = {},
 ): Promise<"done" | "aborted" | "timeout"> {
   const maxMs = opts.maxMs ?? 45_000;
   const pollMs = opts.pollMs ?? 250;
@@ -42,7 +48,12 @@ export async function followSession(
       if (events.length === 0) {
         // A session that ended without a terminal event (process died) shouldn't hang the stream.
         const s = await engine.rt.store.getSession(sessionId);
-        if (s && (s.status === "done" || s.status === "failed" || s.status === "cancelled") && (await engine.rt.store.listEvents(sessionId, last)).length === 0) return "done";
+        if (
+          s &&
+          (s.status === "done" || s.status === "failed" || s.status === "cancelled") &&
+          (await engine.rt.store.listEvents(sessionId, last)).length === 0
+        )
+          return "done";
       }
       if (Date.now() - started > maxMs) return "timeout";
       if (Date.now() - lastSent > idleMs) {

@@ -16,14 +16,26 @@ import type { FetchAttempt, SourceRecord } from "@/lib/engine/types";
 export const fixture = (path: string) => readFileSync(resolve("scripts/fixtures", path), "utf8");
 
 export type StubResponse = { status?: number; body: string; headers?: Record<string, string> };
-export type Seen = { url: string; method: string; headers: Record<string, string>; body: string | null };
+export type Seen = {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: string | null;
+};
 
 /** Serves `routes` by exact URL; robots.txt allows everything unless a route overrides it. */
-export function stubNet(routes: Record<string, StubResponse | ((init: RequestInit) => StubResponse)>) {
+export function stubNet(
+  routes: Record<string, StubResponse | ((init: RequestInit) => StubResponse)>,
+) {
   const seen: Seen[] = [];
   const fetchImpl = (async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = String(input);
-    seen.push({ url, method: init.method ?? "GET", headers: { ...((init.headers ?? {}) as Record<string, string>) }, body: typeof init.body === "string" ? init.body : null });
+    seen.push({
+      url,
+      method: init.method ?? "GET",
+      headers: { ...((init.headers ?? {}) as Record<string, string>) },
+      body: typeof init.body === "string" ? init.body : null,
+    });
     const route = routes[url];
     if (route) {
       const r = typeof route === "function" ? route(init) : route;
@@ -68,8 +80,24 @@ export function makeCtx(
   };
 }
 
-type ProbeVariant = { id: string; title: string | null; sku: string | null; barcode: string | null; price: number | null; compareAt: number | null; available: boolean | null; inventory: number | null; options: string[] };
-type ProbeProduct = { id: string | null; title: string | null; vendor: string | null; type: string | null; variants: ProbeVariant[] };
+type ProbeVariant = {
+  id: string;
+  title: string | null;
+  sku: string | null;
+  barcode: string | null;
+  price: number | null;
+  compareAt: number | null;
+  available: boolean | null;
+  inventory: number | null;
+  options: string[];
+};
+type ProbeProduct = {
+  id: string | null;
+  title: string | null;
+  vendor: string | null;
+  type: string | null;
+  variants: ProbeVariant[];
+};
 
 /**
  * Rebuild a Shopify .json / .js body from the values the 7 Oct probe
@@ -100,7 +128,13 @@ export function probeShopifyBodies(storeId: string, handle: string): { json: str
           barcode: v.barcode,
           price_currency: "CAD",
           option1: v.options[0] ?? v.title,
-          ...(v.inventory !== null ? { inventory_quantity: v.inventory, inventory_management: "shopify", inventory_policy: "deny" } : {}),
+          ...(v.inventory !== null
+            ? {
+                inventory_quantity: v.inventory,
+                inventory_management: "shopify",
+                inventory_policy: "deny",
+              }
+            : {}),
         })),
       },
     }),

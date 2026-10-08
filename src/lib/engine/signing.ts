@@ -16,9 +16,17 @@ function canonical(method: string, path: string, ts: number, nonce: string, body
   return `${method.toUpperCase()}\n${path}\n${ts}\n${nonce}\n${bodyHash}`;
 }
 
-export function signRequest(secret: string, method: string, path: string, body: string, now = Date.now()): string {
+export function signRequest(
+  secret: string,
+  method: string,
+  path: string,
+  body: string,
+  now = Date.now(),
+): string {
   const nonce = randomBytes(12).toString("hex");
-  const mac = createHmac("sha256", secret).update(canonical(method, path, now, nonce, body)).digest("hex");
+  const mac = createHmac("sha256", secret)
+    .update(canonical(method, path, now, nonce, body))
+    .digest("hex");
   return `t=${now},n=${nonce},v1=${mac}`;
 }
 
@@ -28,7 +36,8 @@ export class NonceCache {
   constructor(private readonly ttlMs = MAX_SKEW_MS * 2) {}
   /** false if the nonce was already used. */
   claim(nonce: string, now = Date.now()): boolean {
-    if (this.seen.size > 10_000) for (const [n, at] of this.seen) if (now - at > this.ttlMs) this.seen.delete(n);
+    if (this.seen.size > 10_000)
+      for (const [n, at] of this.seen) if (now - at > this.ttlMs) this.seen.delete(n);
     if (this.seen.has(nonce)) return false;
     this.seen.set(nonce, now);
     return true;
@@ -57,11 +66,15 @@ export function verifyRequest(
   const ts = Number(parts.t);
   const nonce = parts.n ?? "";
   const given = parts.v1 ?? "";
-  if (!Number.isFinite(ts) || !/^[0-9a-f]{24}$/.test(nonce) || !/^[0-9a-f]{64}$/.test(given)) return { ok: false, reason: "malformed signature" };
+  if (!Number.isFinite(ts) || !/^[0-9a-f]{24}$/.test(nonce) || !/^[0-9a-f]{64}$/.test(given))
+    return { ok: false, reason: "malformed signature" };
   if (Math.abs(now - ts) > MAX_SKEW_MS) return { ok: false, reason: "signature expired" };
-  const expected = createHmac("sha256", secret).update(canonical(method, path, ts, nonce, body)).digest();
+  const expected = createHmac("sha256", secret)
+    .update(canonical(method, path, ts, nonce, body))
+    .digest();
   const actual = Buffer.from(given, "hex");
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return { ok: false, reason: "bad signature" };
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
+    return { ok: false, reason: "bad signature" };
   if (!nonces.claim(nonce, now)) return { ok: false, reason: "replayed request" };
   return { ok: true };
 }

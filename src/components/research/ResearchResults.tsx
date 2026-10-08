@@ -26,9 +26,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { usd } from "@/lib/format";
 import { SIZE_LABELS, luggagePack, type SizeClass } from "@/lib/engine/packs/luggage";
-import { compareOffers, freshnessLabel, groupOffers, rankProducts } from "@/lib/engine/research/answer";
+import {
+  compareOffers,
+  freshnessLabel,
+  groupOffers,
+  rankProducts,
+} from "@/lib/engine/research/answer";
 import { haystackFor, matchScore } from "@/lib/engine/store/terms";
-import type { AnswerOffer, AnswerProduct, StoreStatusRow, StoreTaskState } from "@/lib/engine/types";
+import type {
+  AnswerOffer,
+  AnswerProduct,
+  StoreStatusRow,
+  StoreTaskState,
+} from "@/lib/engine/types";
 import type { ResearchView } from "@/lib/research-client";
 import { retailerColor } from "@/lib/retailers";
 import { cn } from "@/lib/utils";
@@ -37,7 +47,8 @@ import { toSearchProduct } from "./track";
 export type ResearchSort = "price-asc" | "price-desc" | "stores";
 type View = "products" | "stores";
 
-const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+const FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const STATE_TEXT: Record<StoreTaskState, string> = {
   pending: "Waiting",
@@ -93,7 +104,13 @@ export function FreshnessBadge({ offer }: { offer: AnswerOffer }) {
 
 /* ── progress ─────────────────────────────────────────────────────── */
 
-function StoreProgress({ rows, status }: { rows: StoreStatusRow[]; status: ResearchView["status"] }) {
+function StoreProgress({
+  rows,
+  status,
+}: {
+  rows: StoreStatusRow[];
+  status: ResearchView["status"];
+}) {
   const working = rows.filter((r) => r.state === "running" || r.state === "pending");
   const verified = rows.filter((r) => r.state === "verified");
   const checked = rows.filter((r) => r.state !== "link_only" && r.state !== "not_configured");
@@ -129,27 +146,52 @@ function OfferLine({ offer, position }: { offer: AnswerOffer; position: number }
   return (
     <li className="flex flex-col gap-1 py-2 text-sm sm:flex-row sm:items-center sm:gap-3">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{position}</span>
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: retailerColor(offer.retailer) }} aria-hidden />
+        <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+          {position}
+        </span>
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: retailerColor(offer.retailer) }}
+          aria-hidden
+        />
         <span className="truncate font-medium">{offer.retailer}</span>
         {offer.colour && <span className="truncate text-muted-foreground">· {offer.colour}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-2 pl-7 sm:pl-0">
         <FreshnessBadge offer={offer} />
-        {offer.availability === "out_of_stock" && <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[11px] text-danger">Out of stock</span>}
-        {offer.lowConfidence && (
-          <span className="inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-[11px] text-warning" title={offer.reasons.join("; ")}>
-            <AlertTriangle className="h-3 w-3" aria-hidden /> Check: {offer.reasons[0] ?? "low confidence"}
+        {offer.availability === "out_of_stock" && (
+          <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[11px] text-danger">
+            Out of stock
           </span>
         )}
-        <span className={cn("w-20 text-right tabular-nums", offer.freshness.kind === "stale" ? "text-muted-foreground line-through decoration-1" : "font-semibold")} title={offer.evidence ?? undefined}>
+        {offer.lowConfidence && (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-[11px] text-warning"
+            title={offer.reasons.join("; ")}
+          >
+            <AlertTriangle className="h-3 w-3" aria-hidden /> Check:{" "}
+            {offer.reasons[0] ?? "low confidence"}
+          </span>
+        )}
+        <span
+          className={cn(
+            "w-20 text-right tabular-nums",
+            offer.freshness.kind === "stale"
+              ? "text-muted-foreground line-through decoration-1"
+              : "font-semibold",
+          )}
+          title={offer.evidence ?? undefined}
+        >
           {usd(offer.price)}
         </span>
         <a
           href={offer.url}
           target="_blank"
           rel="noopener noreferrer"
-          className={cn("inline-flex items-center gap-1 text-xs text-primary hover:underline", FOCUS)}
+          className={cn(
+            "inline-flex items-center gap-1 text-xs text-primary hover:underline",
+            FOCUS,
+          )}
           aria-label={`Open ${offer.retailer}'s page (source of this price)`}
         >
           Source <ExternalLink className="h-3 w-3" aria-hidden />
@@ -176,15 +218,26 @@ function ProductCard({
   const current = product.offers.filter((o) => o.freshness.kind !== "stale");
   const best = current[0];
   const trackable = !!toSearchProduct(product);
-  const size = product.sizeClass && product.sizeClass in SIZE_LABELS ? SIZE_LABELS[product.sizeClass as SizeClass] : null;
+  const size =
+    product.sizeClass && product.sizeClass in SIZE_LABELS
+      ? SIZE_LABELS[product.sizeClass as SizeClass]
+      : null;
 
   return (
-    <article className="rounded-xl border border-border bg-card" aria-labelledby={`p-${product.key}`}>
+    <article
+      className="rounded-xl border border-border bg-card"
+      aria-labelledby={`p-${product.key}`}
+    >
       <div className="flex flex-col gap-3 p-4 sm:flex-row">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.imageUrl} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+            <img
+              src={product.imageUrl}
+              alt=""
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+            />
           ) : (
             <ShoppingBag className="h-6 w-6 text-muted-foreground" aria-hidden />
           )}
@@ -195,10 +248,13 @@ function ProductCard({
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {[product.brand, size].filter(Boolean).join(" · ")}
-            {product.identifiers.find((i) => i.kind === "gtin") ? ` · UPC ${product.identifiers.find((i) => i.kind === "gtin")!.value.replace(/^0+(?=\d{12})/, "")}` : ""}
+            {product.identifiers.find((i) => i.kind === "gtin")
+              ? ` · UPC ${product.identifiers.find((i) => i.kind === "gtin")!.value.replace(/^0+(?=\d{12})/, "")}`
+              : ""}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {new Set(current.map((o) => o.sourceId)).size} store{new Set(current.map((o) => o.sourceId)).size === 1 ? "" : "s"} with a current price
+            {new Set(current.map((o) => o.sourceId)).size} store
+            {new Set(current.map((o) => o.sourceId)).size === 1 ? "" : "s"} with a current price
           </p>
         </div>
         <div className="flex shrink-0 items-start justify-between gap-3 sm:flex-col sm:items-end">
@@ -220,7 +276,13 @@ function ProductCard({
             onClick={() => onTrack(product)}
             title={trackable ? undefined : "Only current prices can be tracked"}
           >
-            {trackPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : tracked ? <BookmarkCheck className="h-3.5 w-3.5" aria-hidden /> : <BookmarkPlus className="h-3.5 w-3.5" aria-hidden />}
+            {trackPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : tracked ? (
+              <BookmarkCheck className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <BookmarkPlus className="h-3.5 w-3.5" aria-hidden />
+            )}
             {tracked ? "Tracked" : "Track"}
           </Button>
         </div>
@@ -230,10 +292,17 @@ function ProductCard({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className={cn("flex w-full items-center justify-between py-2 text-xs font-medium text-primary", FOCUS)}
+          className={cn(
+            "flex w-full items-center justify-between py-2 text-xs font-medium text-primary",
+            FOCUS,
+          )}
         >
-          {open ? "Hide" : "Show"} all {product.offers.length} price{product.offers.length === 1 ? "" : "s"}, cheapest first
-          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} aria-hidden />
+          {open ? "Hide" : "Show"} all {product.offers.length} price
+          {product.offers.length === 1 ? "" : "s"}, cheapest first
+          <ChevronDown
+            className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")}
+            aria-hidden
+          />
         </button>
         {open && (
           <ul className="divide-y divide-border pb-2">
@@ -271,20 +340,34 @@ function AllStores({ products, sort }: { products: AnswerProduct[]; sort: Resear
 function CouldntVerify({ rows }: { rows: StoreStatusRow[] }) {
   if (rows.length === 0) return null;
   return (
-    <section className="mt-5 rounded-xl border border-dashed border-border px-4 py-3" aria-labelledby="couldnt-verify">
+    <section
+      className="mt-5 rounded-xl border border-dashed border-border px-4 py-3"
+      aria-labelledby="couldnt-verify"
+    >
       <h2 id="couldnt-verify" className="mb-2 text-xs font-medium text-muted-foreground">
         Couldn&rsquo;t verify at these stores — no price shown for them
       </h2>
       <ul className="space-y-1.5">
         {rows.map((r) => (
-          <li key={r.sourceId} className="flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:gap-2">
+          <li
+            key={r.sourceId}
+            className="flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:gap-2"
+          >
             <span className="inline-flex items-center gap-1.5 font-medium">
               <StateIcon state={r.state} />
               Couldn&rsquo;t verify at {r.retailer}
             </span>
             <span className="text-muted-foreground">— {r.message}</span>
             {r.url && (
-              <a href={r.url} target="_blank" rel="noopener noreferrer" className={cn("inline-flex items-center gap-1 text-primary hover:underline sm:ml-auto", FOCUS)}>
+              <a
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "inline-flex items-center gap-1 text-primary hover:underline sm:ml-auto",
+                  FOCUS,
+                )}
+              >
                 Check on their site <ExternalLink className="h-3 w-3" aria-hidden />
               </a>
             )}
@@ -317,22 +400,34 @@ export function ResearchResults({
   trackPending: boolean;
 }) {
   const [tab, setTab] = useState<View>("products");
-  const rows = useMemo(() => Object.values(view.rows).sort((a, b) => a.retailer.localeCompare(b.retailer)), [view.rows]);
+  const rows = useMemo(
+    () => Object.values(view.rows).sort((a, b) => a.retailer.localeCompare(b.retailer)),
+    [view.rows],
+  );
 
   const products = useMemo(() => {
     const parsed = luggagePack.parseQuery(view.query);
     const base =
       view.answer?.products ??
-      rankProducts(groupOffers(view.offers, luggagePack), (p) => matchScore(parsed, haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }), p.sizeClass));
+      rankProducts(groupOffers(view.offers, luggagePack), (p) =>
+        matchScore(
+          parsed,
+          haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }),
+          p.sizeClass,
+        ),
+      );
     if (sort === "price-asc") return base;
     return [...base].sort((a, b) =>
       sort === "price-desc"
         ? (b.lowestPrice ?? -1) - (a.lowestPrice ?? -1)
-        : new Set(b.offers.map((o) => o.sourceId)).size - new Set(a.offers.map((o) => o.sourceId)).size,
+        : new Set(b.offers.map((o) => o.sourceId)).size -
+          new Set(a.offers.map((o) => o.sourceId)).size,
     );
   }, [view.answer, view.offers, view.query, sort]);
 
-  const unverified = rows.filter((r) => r.state !== "verified" && r.state !== "running" && r.state !== "pending");
+  const unverified = rows.filter(
+    (r) => r.state !== "verified" && r.state !== "running" && r.state !== "pending",
+  );
   const running = view.status === "running" || view.status === "starting";
   const answer = view.answer;
 
@@ -342,11 +437,15 @@ export function ResearchResults({
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {products.length} product{products.length === 1 ? "" : "s"} · {products.reduce((n, p) => n + p.offers.length, 0)} price
+          {products.length} product{products.length === 1 ? "" : "s"} ·{" "}
+          {products.reduce((n, p) => n + p.offers.length, 0)} price
           {products.reduce((n, p) => n + p.offers.length, 0) === 1 ? "" : "s"}
           {answer && (
             <>
-              {" "}· first price {answer.firstPriceMs !== null ? `${(answer.firstPriceMs / 1000).toFixed(1)} s` : "—"}, done in {(answer.totalMs / 1000).toFixed(1)} s
+              {" "}
+              · first price{" "}
+              {answer.firstPriceMs !== null ? `${(answer.firstPriceMs / 1000).toFixed(1)} s` : "—"},
+              done in {(answer.totalMs / 1000).toFixed(1)} s
             </>
           )}
         </p>
@@ -357,19 +456,33 @@ export function ResearchResults({
             </Button>
           ) : (
             view.sessionId && (
-              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onReverify} aria-label="Re-verify these prices now">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={onReverify}
+                aria-label="Re-verify these prices now"
+              >
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Re-verify now
               </Button>
             )
           )}
-          <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-xs" role="group" aria-label="View">
+          <div
+            className="inline-flex rounded-lg border border-border bg-card p-0.5 text-xs"
+            role="group"
+            aria-label="View"
+          >
             {(["products", "stores"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 aria-pressed={tab === t}
                 onClick={() => setTab(t)}
-                className={cn("rounded-md px-2.5 py-1", tab === t ? "bg-muted font-medium text-foreground" : "text-muted-foreground", FOCUS)}
+                className={cn(
+                  "rounded-md px-2.5 py-1",
+                  tab === t ? "bg-muted font-medium text-foreground" : "text-muted-foreground",
+                  FOCUS,
+                )}
               >
                 {t === "products" ? "By product" : "All stores"}
               </button>
@@ -377,7 +490,11 @@ export function ResearchResults({
           </div>
           <label className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
             <span className="sr-only">Sort</span>
-            <select value={sort} onChange={(e) => onSort(e.target.value as ResearchSort)} className={cn("bg-transparent text-foreground", FOCUS)}>
+            <select
+              value={sort}
+              onChange={(e) => onSort(e.target.value as ResearchSort)}
+              className={cn("bg-transparent text-foreground", FOCUS)}
+            >
               <option value="price-asc">Price: low to high</option>
               <option value="price-desc">Price: high to low</option>
               <option value="stores">Most stores</option>
@@ -387,13 +504,23 @@ export function ResearchResults({
       </div>
 
       {view.status === "error" && (
-        <p role="alert" className="mb-3 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
+        <p
+          role="alert"
+          className="mb-3 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger"
+        >
           {view.error}
         </p>
       )}
-      {view.status === "cancelled" && <p className="mb-3 text-sm text-muted-foreground">Stopped. Prices found so far are shown.</p>}
+      {view.status === "cancelled" && (
+        <p className="mb-3 text-sm text-muted-foreground">
+          Stopped. Prices found so far are shown.
+        </p>
+      )}
       {answer?.deadlineHit && (
-        <p className="mb-3 text-xs text-muted-foreground">Answered at the {Math.round((answer.totalMs ?? 0) / 1000)}-second limit; stores still checking are listed below.</p>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Answered at the {Math.round((answer.totalMs ?? 0) / 1000)}-second limit; stores still
+          checking are listed below.
+        </p>
       )}
 
       {products.length === 0 && !running ? (
@@ -403,7 +530,14 @@ export function ResearchResults({
       ) : tab === "products" ? (
         <div className="space-y-3">
           {products.map((p, i) => (
-            <ProductCard key={p.key} product={p} rank={i} tracked={trackedKeys.has(p.key)} onTrack={onTrack} trackPending={trackPending} />
+            <ProductCard
+              key={p.key}
+              product={p}
+              rank={i}
+              tracked={trackedKeys.has(p.key)}
+              onTrack={onTrack}
+              trackPending={trackPending}
+            />
           ))}
         </div>
       ) : (

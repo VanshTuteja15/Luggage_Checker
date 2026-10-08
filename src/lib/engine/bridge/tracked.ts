@@ -11,7 +11,12 @@
 
 import type { Pool } from "pg";
 
-export type Watcher = { userId: string; targetPrice: number | null; alertEnabled: boolean; email: string | null };
+export type Watcher = {
+  userId: string;
+  targetPrice: number | null;
+  alertEnabled: boolean;
+  email: string | null;
+};
 
 export type TrackedItem = {
   productId: string;
@@ -25,14 +30,27 @@ export type TrackedItem = {
   watchers: Watcher[];
 };
 
-export type BridgeOffer = { retailer: string; price: number; inStock: boolean; url: string; title: string };
+export type BridgeOffer = {
+  retailer: string;
+  price: number;
+  inStock: boolean;
+  url: string;
+  title: string;
+};
 
 export interface TrackedBridge {
   /** Tracked products, least recently checked first. */
   listTracked(limit: number): Promise<TrackedItem[]>;
   writeOffers(productId: string, offers: BridgeOffer[], at: string): Promise<void>;
   /** true if this (user, product, day) alert was not sent before (and is now recorded). */
-  recordAlert(userId: string, productId: string, retailer: string, price: number, target: number, day: string): Promise<boolean>;
+  recordAlert(
+    userId: string,
+    productId: string,
+    retailer: string,
+    price: number,
+    target: number,
+    day: string,
+  ): Promise<boolean>;
   startRun(job: string, trigger: "cron" | "admin" | "worker" | "manual"): Promise<string>;
   finishRun(id: string, ok: boolean, stats: Record<string, unknown>): Promise<void>;
 }
@@ -64,9 +82,14 @@ export class PgTrackedBridge implements TrackedBridge {
       model: r.model ?? "",
       color: r.color ?? "",
       upc: r.upc,
-      offers: (r.offers as { retailer: string; url: string | null; price: number | string }[]).map((o) => ({ ...o, price: Number(o.price) })),
+      offers: (r.offers as { retailer: string; url: string | null; price: number | string }[]).map(
+        (o) => ({ ...o, price: Number(o.price) }),
+      ),
       lastCheckedAt: r.last_checked_at ? new Date(r.last_checked_at).toISOString() : null,
-      watchers: (r.watchers as Watcher[]).map((w) => ({ ...w, targetPrice: w.targetPrice === null ? null : Number(w.targetPrice) })),
+      watchers: (r.watchers as Watcher[]).map((w) => ({
+        ...w,
+        targetPrice: w.targetPrice === null ? null : Number(w.targetPrice),
+      })),
     }));
   }
 
@@ -98,7 +121,14 @@ export class PgTrackedBridge implements TrackedBridge {
     }
   }
 
-  async recordAlert(userId: string, productId: string, retailer: string, price: number, target: number, day: string): Promise<boolean> {
+  async recordAlert(
+    userId: string,
+    productId: string,
+    retailer: string,
+    price: number,
+    target: number,
+    day: string,
+  ): Promise<boolean> {
     const { rowCount } = await this.pool.query(
       `INSERT INTO price_alerts_sent (user_id, product_id, retailer, price, target_price, sent_on)
        VALUES ($1, $2, $3, $4, $5, $6::date) ON CONFLICT (user_id, product_id, sent_on) DO NOTHING`,
@@ -108,12 +138,18 @@ export class PgTrackedBridge implements TrackedBridge {
   }
 
   async startRun(job: string, trigger: "cron" | "admin" | "worker" | "manual"): Promise<string> {
-    const { rows } = await this.pool.query("INSERT INTO engine_runs (job, trigger) VALUES ($1, $2) RETURNING id", [job, trigger]);
+    const { rows } = await this.pool.query(
+      "INSERT INTO engine_runs (job, trigger) VALUES ($1, $2) RETURNING id",
+      [job, trigger],
+    );
     return String(rows[0].id);
   }
 
   async finishRun(id: string, ok: boolean, stats: Record<string, unknown>): Promise<void> {
-    await this.pool.query("UPDATE engine_runs SET finished_at = now(), ok = $2, stats = $3::jsonb WHERE id = $1", [id, ok, JSON.stringify(stats)]);
+    await this.pool.query(
+      "UPDATE engine_runs SET finished_at = now(), ok = $2, stats = $3::jsonb WHERE id = $1",
+      [id, ok, JSON.stringify(stats)],
+    );
   }
 }
 
@@ -122,12 +158,15 @@ export class MemoryTrackedBridge implements TrackedBridge {
   readonly offers = new Map<string, Map<string, BridgeOffer & { at: string }>>();
   readonly history: { productId: string; retailer: string; price: number; date: string }[] = [];
   readonly alerts = new Set<string>();
-  readonly runs: { id: string; job: string; ok: boolean | null; stats: Record<string, unknown> }[] = [];
+  readonly runs: { id: string; job: string; ok: boolean | null; stats: Record<string, unknown> }[] =
+    [];
 
   constructor(private readonly items: TrackedItem[]) {}
 
   async listTracked(limit: number): Promise<TrackedItem[]> {
-    return [...this.items].sort((a, b) => (a.lastCheckedAt ?? "").localeCompare(b.lastCheckedAt ?? "")).slice(0, limit);
+    return [...this.items]
+      .sort((a, b) => (a.lastCheckedAt ?? "").localeCompare(b.lastCheckedAt ?? ""))
+      .slice(0, limit);
   }
 
   async writeOffers(productId: string, offers: BridgeOffer[], at: string): Promise<void> {
@@ -135,7 +174,9 @@ export class MemoryTrackedBridge implements TrackedBridge {
     for (const o of offers) {
       m.set(o.retailer, { ...o, at });
       const day = at.slice(0, 10);
-      const i = this.history.findIndex((h) => h.productId === productId && h.retailer === o.retailer && h.date === day);
+      const i = this.history.findIndex(
+        (h) => h.productId === productId && h.retailer === o.retailer && h.date === day,
+      );
       if (i >= 0) this.history[i].price = o.price;
       else this.history.push({ productId, retailer: o.retailer, price: o.price, date: day });
     }
@@ -144,7 +185,14 @@ export class MemoryTrackedBridge implements TrackedBridge {
     if (item) item.lastCheckedAt = at;
   }
 
-  async recordAlert(userId: string, productId: string, _retailer: string, _price: number, _target: number, day: string): Promise<boolean> {
+  async recordAlert(
+    userId: string,
+    productId: string,
+    _retailer: string,
+    _price: number,
+    _target: number,
+    day: string,
+  ): Promise<boolean> {
     const key = `${userId}|${productId}|${day}`;
     if (this.alerts.has(key)) return false;
     this.alerts.add(key);

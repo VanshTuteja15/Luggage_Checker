@@ -26,7 +26,10 @@ export class ResearchManager {
   constructor(
     private readonly rt: EngineRuntime,
     private readonly pack: CategoryPack,
-    private readonly opts: { maxConcurrent: number; onError?: (sessionId: string, err: unknown) => void } = { maxConcurrent: 4 },
+    private readonly opts: {
+      maxConcurrent: number;
+      onError?: (sessionId: string, err: unknown) => void;
+    } = { maxConcurrent: 4 },
   ) {
     this.bus.setMaxListeners(200);
     this.shared = new SingleFlight<AdapterResult>(rt.config.singleFlightMs);
@@ -50,7 +53,8 @@ export class ResearchManager {
           shared: this.shared,
           signal: controller.signal,
           onEvent: (e) => this.bus.emit(sessionId, e),
-          isCancelled: async () => (await this.rt.store.getSession(sessionId))?.status === "cancelled",
+          isCancelled: async () =>
+            (await this.rt.store.getSession(sessionId))?.status === "cancelled",
         }),
       )
       .catch((err: unknown) => {
@@ -85,7 +89,10 @@ export class ResearchManager {
   }
 
   async drain(timeoutMs: number): Promise<void> {
-    await Promise.race([Promise.allSettled([...this.running.values()]), new Promise((r) => setTimeout(r, timeoutMs))]);
+    await Promise.race([
+      Promise.allSettled([...this.running.values()]),
+      new Promise((r) => setTimeout(r, timeoutMs)),
+    ]);
   }
 
   private slot(): Promise<void> {

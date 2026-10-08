@@ -7,7 +7,13 @@
 
 import { resolveListing, type Resolution } from "./identity/resolve";
 import { EXTRACTOR_VERSION, VALIDATOR_VERSION, type EngineStore } from "./store/port";
-import type { CategoryPack, ListingRecord, RawOffer, SourceRecord, ValidationResult } from "./types";
+import type {
+  CategoryPack,
+  ListingRecord,
+  RawOffer,
+  SourceRecord,
+  ValidationResult,
+} from "./types";
 import { validateOffer, type ExpectedIdentity } from "./validate";
 
 export type Observed = {
@@ -50,7 +56,13 @@ export async function observeOffer(
     productId: opts.parent?.productId ?? null,
   });
   const history = (await store.priceRanges(listing.id, 6)).map((r) => r.price);
-  const validation = validateOffer(o, { source, pack, expected: opts.expected ?? null, history, now: opts.now ?? Date.now() });
+  const validation = validateOffer(o, {
+    source,
+    pack,
+    expected: opts.expected ?? null,
+    history,
+    now: opts.now ?? Date.now(),
+  });
 
   let observationId: string | null = null;
   if (opts.persist) {

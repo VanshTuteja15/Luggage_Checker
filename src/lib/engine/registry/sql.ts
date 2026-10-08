@@ -35,11 +35,13 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   "engine.default_search": "Search uses the new engine by default (after shadow mode passes)",
   "discovery.tavily": "Tavily as a discovery fallback: URLs only, never prices",
   "shadow.enabled": "Run old and new search side by side and record the comparison",
-  "policy.ucp_on_restricted_stores": "Use the store-published UCP channel on stores whose terms carry a generic anti-scrape clause (legal sign-off pending)",
+  "policy.ucp_on_restricted_stores":
+    "Use the store-published UCP channel on stores whose terms carry a generic anti-scrape clause (legal sign-off pending)",
   "source.luggagecity.ucp": "Luggage City UCP (audit: legal review first)",
   "source.unluggage.product_json": "U.N. Luggage product JSON (turn on after reading the terms)",
   "source.bentley.product_json": "Bentley product JSON (turn on after reading the terms)",
-  "source.samsonite-ca.html_structured": "Samsonite.ca pages (blocked by PerimeterX from our network)",
+  "source.samsonite-ca.html_structured":
+    "Samsonite.ca pages (blocked by PerimeterX from our network)",
   "source.tumi-ca.html_structured": "TUMI.ca pages (blocked by PerimeterX from our network)",
   "source.sportinglife.html_structured": "Sporting Life pages (Cloudflare challenge)",
   "source.simons.html_structured": "Simons pages (Cloudflare challenge)",
@@ -89,7 +91,8 @@ function sourceUpsert(s: SourceRecord): string {
 
 export function registrySeedSql(sources: SourceRecord[] = SOURCE_SEED): string {
   const flagRows = Object.entries(FLAG_DEFAULTS).map(
-    ([key, enabled]) => `(${sqlLiteral(key)}, ${sqlLiteral(enabled)}, ${sqlLiteral(FLAG_DESCRIPTIONS[key] ?? null)})`,
+    ([key, enabled]) =>
+      `(${sqlLiteral(key)}, ${sqlLiteral(enabled)}, ${sqlLiteral(FLAG_DESCRIPTIONS[key] ?? null)})`,
   );
   return [
     "-- ============================================================",

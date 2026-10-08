@@ -22,7 +22,11 @@ export class SingleFlight<T> {
    * and later callers within the window reuse the finished value when
    * `keep(value)` says it's worth keeping (failures are never shared).
    */
-  async run(key: string, fn: () => Promise<T>, keep: (v: T) => boolean = () => true): Promise<{ value: T; shared: boolean }> {
+  async run(
+    key: string,
+    fn: () => Promise<T>,
+    keep: (v: T) => boolean = () => true,
+  ): Promise<{ value: T; shared: boolean }> {
     const hit = this.done.get(key);
     if (hit && this.now() - hit.at < this.windowMs) return { value: hit.value, shared: true };
 

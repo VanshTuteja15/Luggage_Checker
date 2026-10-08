@@ -23,7 +23,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const engine = getEngine();
     const session = await ownedSession(engine.rt.store, id, userId);
     if (!session) return NextResponse.json({ error: "Search not found." }, { status: 404 });
-    const after = Math.max(0, Number.parseInt(req.nextUrl.searchParams.get("after") ?? "0", 10) || 0);
+    const after = Math.max(
+      0,
+      Number.parseInt(req.nextUrl.searchParams.get("after") ?? "0", 10) || 0,
+    );
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
@@ -52,7 +55,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     });
     return new Response(stream, {
-      headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" },
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store, no-transform",
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch (err) {
     return errorResponse(err, "GET /api/research/[id]/stream");

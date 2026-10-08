@@ -82,7 +82,12 @@ export type PriceRange = {
   observationCount: number;
 };
 
-export type FlagRow = { key: string; enabled: boolean; description: string | null; updatedAt: string };
+export type FlagRow = {
+  key: string;
+  enabled: boolean;
+  description: string | null;
+  updatedAt: string;
+};
 
 export type SessionInput = {
   userId: string;
@@ -93,7 +98,9 @@ export type SessionInput = {
   mode: "worker" | "inline" | "cron" | "shadow";
 };
 
-export type SessionPatch = Partial<Pick<ResearchSessionRecord, "status" | "startedAt" | "finishedAt" | "answer" | "error">>;
+export type SessionPatch = Partial<
+  Pick<ResearchSessionRecord, "status" | "startedAt" | "finishedAt" | "answer" | "error">
+>;
 
 export type SourceHealthStat = {
   sourceId: string;
@@ -174,7 +181,10 @@ export interface EngineStore {
   getListing(id: string): Promise<ListingRecord | null>;
   findListingByUrl(sourceId: string, url: string): Promise<ListingRecord | null>;
   /** Full-text search over the listings index. Zero external requests. */
-  searchListings(q: ParsedQuery, opts: { limit: number; sourceIds?: string[] }): Promise<ListingRecord[]>;
+  searchListings(
+    q: ParsedQuery,
+    opts: { limit: number; sourceIds?: string[] },
+  ): Promise<ListingRecord[]>;
   listingsForProduct(productId: string): Promise<ListingRecord[]>;
   listingsBySource(sourceId: string, limit: number): Promise<ListingRecord[]>;
   countListingsBySource(): Promise<Record<string, number>>;
@@ -186,12 +196,37 @@ export interface EngineStore {
   findProductByIdentityKey(key: string): Promise<CatalogProduct | null>;
   /** Active products of one brand + size class (candidates for line matching). */
   candidateProducts(brand: string, sizeClass: string | null): Promise<CatalogProduct[]>;
-  findProductsByIdentifier(kind: IdentifierKind, value: string, sourceId?: string): Promise<string[]>;
-  addIdentifier(productId: string, variantId: string | null, kind: IdentifierKind, value: string, sourceId?: string): Promise<"added" | "exists" | "conflict">;
-  findOrCreateVariant(productId: string, colour: string | null, colourCode: string | null, title: string | null, imageUrl: string | null): Promise<CatalogVariant>;
-  enqueueReview(listingId: string, candidateProductId: string | null, score: number, reasons: string[]): Promise<void>;
+  findProductsByIdentifier(
+    kind: IdentifierKind,
+    value: string,
+    sourceId?: string,
+  ): Promise<string[]>;
+  addIdentifier(
+    productId: string,
+    variantId: string | null,
+    kind: IdentifierKind,
+    value: string,
+    sourceId?: string,
+  ): Promise<"added" | "exists" | "conflict">;
+  findOrCreateVariant(
+    productId: string,
+    colour: string | null,
+    colourCode: string | null,
+    title: string | null,
+    imageUrl: string | null,
+  ): Promise<CatalogVariant>;
+  enqueueReview(
+    listingId: string,
+    candidateProductId: string | null,
+    score: number,
+    reasons: string[],
+  ): Promise<void>;
   listReviews(status: ReviewItem["status"], limit: number): Promise<ReviewItem[]>;
-  decideReview(id: string, decision: "approved" | "rejected", userId: string | null): Promise<ReviewItem | null>;
+  decideReview(
+    id: string,
+    decision: "approved" | "rejected",
+    userId: string | null,
+  ): Promise<ReviewItem | null>;
   /** Move everything of `fromId` onto `intoId` and retire `fromId`. */
   mergeProducts(fromId: string, intoId: string): Promise<void>;
   /** Detach a listing from its product into a new product of its own. */

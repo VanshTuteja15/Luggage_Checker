@@ -22,7 +22,11 @@ function loadEnv(): void {
     const i = t.indexOf("=");
     if (i <= 0) continue;
     const k = t.slice(0, i).trim();
-    if (!(k in process.env)) process.env[k] = t.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+    if (!(k in process.env))
+      process.env[k] = t
+        .slice(i + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "");
   }
 }
 
@@ -35,7 +39,9 @@ async function main(): Promise<void> {
   console.log(`Wrote ${out} (${SOURCE_SEED.length} sources).`);
 
   if (!process.argv.includes("--apply")) {
-    console.log("Paste it into the Supabase SQL Editor after migration 004, or re-run with --apply and DATABASE_URL set.");
+    console.log(
+      "Paste it into the Supabase SQL Editor after migration 004, or re-run with --apply and DATABASE_URL set.",
+    );
     return;
   }
   const url = process.env.DATABASE_URL;

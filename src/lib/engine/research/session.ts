@@ -21,7 +21,13 @@ import { discoverViaTavily } from "../discovery";
 import { flagOn } from "../flags";
 import type { SingleFlight } from "../politeness/singleflight";
 import type { EngineRuntime } from "../recorder";
-import { LIVE_ADAPTERS, checkRoutes, linkOnlyUrl, unverifiableReason, type RouteContext } from "../registry";
+import {
+  LIVE_ADAPTERS,
+  checkRoutes,
+  linkOnlyUrl,
+  unverifiableReason,
+  type RouteContext,
+} from "../registry";
 import { haystackFor, matchScore } from "../store/terms";
 import type {
   AdapterId,
@@ -61,7 +67,11 @@ export type SessionRunDeps = {
 };
 
 const STALE_WINDOW_MS = 30 * 86_400_000;
-const SEARCH_ADAPTERS: ReadonlySet<AdapterId> = new Set(["shopify_ucp", "ebay_browse_api", "amazon_creators_api"]);
+const SEARCH_ADAPTERS: ReadonlySet<AdapterId> = new Set([
+  "shopify_ucp",
+  "ebay_browse_api",
+  "amazon_creators_api",
+]);
 
 class EventWriter {
   private seq = 0;
@@ -73,7 +83,14 @@ class EventWriter {
   ) {}
 
   emit(type: SessionEventType, sourceId: string | null, payload: Record<string, unknown>): void {
-    const e: SessionEvent = { sessionId: this.sessionId, seq: ++this.seq, type, sourceId, payload, createdAt: new Date().toISOString() };
+    const e: SessionEvent = {
+      sessionId: this.sessionId,
+      seq: ++this.seq,
+      type,
+      sourceId,
+      payload,
+      createdAt: new Date().toISOString(),
+    };
     try {
       this.onEvent?.(e);
     } catch {
@@ -100,8 +117,20 @@ function answerUrl(source: SourceRecord, url: string, title: string): string {
 
 function evidenceLine(o: Pick<RawOffer, "adapter" | "evidence">): string {
   const e = o.evidence as Record<string, unknown>;
-  const where = typeof e.request === "string" ? e.request : typeof e.endpoint === "string" ? e.endpoint : typeof e.feed === "string" ? `feed ${e.feed}` : "";
-  const field = typeof e.field === "string" ? ` → ${e.field}` : typeof e.from === "string" ? ` (${e.from})` : "";
+  const where =
+    typeof e.request === "string"
+      ? e.request
+      : typeof e.endpoint === "string"
+        ? e.endpoint
+        : typeof e.feed === "string"
+          ? `feed ${e.feed}`
+          : "";
+  const field =
+    typeof e.field === "string"
+      ? ` → ${e.field}`
+      : typeof e.from === "string"
+        ? ` (${e.from})`
+        : "";
   return `${o.adapter}${where ? ` ${where}` : ""}${field}`.slice(0, 300);
 }
 
@@ -139,7 +168,13 @@ function toAnswerOffer(
   };
 }
 
-function offerFromObservation(source: SourceRecord, pack: CategoryPack, l: ListingRecord, obs: Observation, freshness: Freshness): AnswerOffer {
+function offerFromObservation(
+  source: SourceRecord,
+  pack: CategoryPack,
+  l: ListingRecord,
+  obs: Observation,
+  freshness: Freshness,
+): AnswerOffer {
   return {
     sourceId: source.id,
     retailer: source.retailerLabel,
@@ -162,7 +197,8 @@ function offerFromObservation(source: SourceRecord, pack: CategoryPack, l: Listi
     observationId: obs.id,
     listingId: l.id,
     productId: l.productId,
-    evidence: `${obs.adapter} ${String((obs.evidence as Record<string, unknown>).request ?? "")}`.trim(),
+    evidence:
+      `${obs.adapter} ${String((obs.evidence as Record<string, unknown>).request ?? "")}`.trim(),
   };
 }
 
@@ -186,7 +222,10 @@ const MESSAGE_FOR: Partial<Record<StoreTaskState, string>> = {
   error: "couldn't read a price",
 };
 
-export async function runResearchSession(sessionId: string, deps: SessionRunDeps): Promise<ResearchAnswer | null> {
+export async function runResearchSession(
+  sessionId: string,
+  deps: SessionRunDeps,
+): Promise<ResearchAnswer | null> {
   const { rt, pack } = deps;
   const store = rt.store;
   const now = deps.now ?? Date.now;
@@ -200,7 +239,11 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
   const writer = new EventWriter(rt, sessionId, deps.onEvent);
   const parsed = pack.parseQuery(session.query);
   const deadlineAt = started + session.deadlineMs;
-  writer.emit("session_started", null, { query: session.query, deadlineMs: session.deadlineMs, parsed });
+  writer.emit("session_started", null, {
+    query: session.query,
+    deadlineMs: session.deadlineMs,
+    parsed,
+  });
 
   const controller = new AbortController();
   const onOuterAbort = () => controller.abort();
@@ -208,7 +251,8 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
 
   try {
     const flags = await rt.flags();
-    if (!flagOn(flags, "engine.enabled")) throw new Error("the price engine is switched off (engine.enabled)");
+    if (!flagOn(flags, "engine.enabled"))
+      throw new Error("the price engine is switched off (engine.enabled)");
 
     /* ── plan ─────────────────────────────────────────────────────── */
     const [sources, feedSources, manualSources] = await Promise.all([
@@ -246,38 +290,85 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     const addOffers = (sourceId: string, offers: AnswerOffer[]) => {
       if (finished || offers.length === 0) return;
       collected.push(...offers);
-      if (firstPriceMs === null && offers.some((o) => o.freshness.kind === "live")) firstPriceMs = now() - started;
+      if (firstPriceMs === null && offers.some((o) => o.freshness.kind === "live"))
+        firstPriceMs = now() - started;
       writer.emit("store_offers", sourceId, { offers });
     };
 
-    const active = sources.filter((s) => s.status === "active" && s.enabled && (!session.storeIds || session.storeIds.includes(s.id)));
+    const active = sources.filter(
+      (s) =>
+        s.status === "active" &&
+        s.enabled &&
+        (!session.storeIds || session.storeIds.includes(s.id)),
+    );
     for (const source of active) {
       const checks = checkRoutes(source, routeCtx);
-      const live = checks.filter((c) => c.usable && !c.route.crossCheckOnly && LIVE_ADAPTERS.has(c.route.adapter)).map((c) => c.route);
-      const stored = checks.filter((c) => c.usable && (c.route.adapter === "feed_import" || c.route.adapter === "manual_entry")).map((c) => c.route);
+      const live = checks
+        .filter((c) => c.usable && !c.route.crossCheckOnly && LIVE_ADAPTERS.has(c.route.adapter))
+        .map((c) => c.route);
+      const stored = checks
+        .filter(
+          (c) =>
+            c.usable && (c.route.adapter === "feed_import" || c.route.adapter === "manual_entry"),
+        )
+        .map((c) => c.route);
       const listings = bySource.get(source.id) ?? [];
       const link = linkOnlyUrl(source, session.query);
-      const base = { sourceId: source.id, retailer: source.retailerLabel, url: link, durationMs: null };
+      const base = {
+        sourceId: source.id,
+        retailer: source.retailerLabel,
+        url: link,
+        durationMs: null,
+      };
 
       if (live.length && listings.length) {
         rows.set(source.id, { ...base, state: "pending", message: "queued" });
         tasks.push({ sourceId: source.id, run: () => verifyStore(source, live, listings) });
       } else if (live.some((r) => SEARCH_ADAPTERS.has(r.adapter) && ADAPTERS[r.adapter].search)) {
         rows.set(source.id, { ...base, state: "pending", message: "queued" });
-        tasks.push({ sourceId: source.id, run: () => searchStore(source, live.filter((r) => SEARCH_ADAPTERS.has(r.adapter)), listings) });
+        tasks.push({
+          sourceId: source.id,
+          run: () =>
+            searchStore(
+              source,
+              live.filter((r) => SEARCH_ADAPTERS.has(r.adapter)),
+              listings,
+            ),
+        });
       } else if (stored.length && listings.length) {
         rows.set(source.id, { ...base, state: "pending", message: "queued" });
         tasks.push({ sourceId: source.id, run: () => storedStore(source, listings) });
       } else if (live.length) {
-        rows.set(source.id, { ...base, state: "no_match", message: "not in our product index yet" });
+        rows.set(source.id, {
+          ...base,
+          state: "no_match",
+          message: "not in our product index yet",
+        });
       } else if (source.liveClass === "none") {
-        rows.set(source.id, { ...base, url: null, state: "link_only", message: `${source.retailerLabel} doesn't publish prices online` });
+        rows.set(source.id, {
+          ...base,
+          url: null,
+          state: "link_only",
+          message: `${source.retailerLabel} doesn't publish prices online`,
+        });
       } else if (source.permission === "forbidden" || source.liveClass === "not_permitted") {
-        rows.set(source.id, { ...base, state: "link_only", message: `${unverifiableReason(source, routeCtx)}: check the price on their site` });
+        rows.set(source.id, {
+          ...base,
+          state: "link_only",
+          message: `${unverifiableReason(source, routeCtx)}: check the price on their site`,
+        });
       } else if (source.liveClass === "blocked") {
-        rows.set(source.id, { ...base, state: "blocked", message: unverifiableReason(source, routeCtx) });
+        rows.set(source.id, {
+          ...base,
+          state: "blocked",
+          message: unverifiableReason(source, routeCtx),
+        });
       } else {
-        rows.set(source.id, { ...base, state: "not_configured", message: unverifiableReason(source, routeCtx) });
+        rows.set(source.id, {
+          ...base,
+          state: "not_configured",
+          message: unverifiableReason(source, routeCtx),
+        });
       }
     }
     writer.emit("plan", null, { stores: [...rows.values()] });
@@ -285,19 +376,37 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     /* ── per-store tasks ──────────────────────────────────────────── */
 
     function ctxFor(source: SourceRecord): AdapterContext {
-      return { source, fetcher: rt.fetcher, config: rt.config, pack, now, signal: controller.signal, deadlineAt, sessionId };
+      return {
+        source,
+        fetcher: rt.fetcher,
+        config: rt.config,
+        pack,
+        now,
+        signal: controller.signal,
+        deadlineAt,
+        sessionId,
+      };
     }
 
     function begin(source: SourceRecord): number {
       const t = now();
       if (!finished) {
-        rows.set(source.id, { ...(rows.get(source.id) as StoreStatusRow), state: "running", message: "checking" });
+        rows.set(source.id, {
+          ...(rows.get(source.id) as StoreStatusRow),
+          state: "running",
+          message: "checking",
+        });
         writer.emit("store_started", source.id, {});
       }
       return t;
     }
 
-    function finish(source: SourceRecord, t0: number, state: StoreTaskState, message: string | null) {
+    function finish(
+      source: SourceRecord,
+      t0: number,
+      state: StoreTaskState,
+      message: string | null,
+    ) {
       setRow(
         {
           sourceId: source.id,
@@ -312,11 +421,21 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     }
 
     /** Validate, store and convert one adapter result. Late readings are stored, not shown. */
-    async function record(source: SourceRecord, res: AdapterResult, shared: boolean, discoveredVia: ListingRecord["discoveredVia"], parent: ListingRecord | null): Promise<AnswerOffer[]> {
+    async function record(
+      source: SourceRecord,
+      res: AdapterResult,
+      shared: boolean,
+      discoveredVia: ListingRecord["discoveredVia"],
+      parent: ListingRecord | null,
+    ): Promise<AnswerOffer[]> {
       const out: AnswerOffer[] = [];
       for (const o of res.offers) {
         // Identity is resolved after the prices are on screen (below), not before.
-        const { listing, validation: v, observationId } = await observeOffer(store, pack, source, o, {
+        const {
+          listing,
+          validation: v,
+          observationId,
+        } = await observeOffer(store, pack, source, o, {
           sessionId,
           discoveredVia,
           parent,
@@ -326,7 +445,16 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
           now: now(),
         });
         if (v.outcome !== "rejected" && o.price !== null) {
-          out.push(toAnswerOffer(source, pack, o, v, { kind: "live", fetchedAt: o.fetchedAt }, { listingId: listing.id, observationId, productId: listing.productId }));
+          out.push(
+            toAnswerOffer(
+              source,
+              pack,
+              o,
+              v,
+              { kind: "live", fetchedAt: o.fetchedAt },
+              { listingId: listing.id, observationId, productId: listing.productId },
+            ),
+          );
           if (!listing.productId) toResolve.push(listing);
         }
       }
@@ -334,13 +462,31 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     }
 
     /** Primary route, then at most one alternate when the first fails or yields nothing showable. */
-    async function verifyPage(source: SourceRecord, routes: RouteSpec[], page: ListingRecord): Promise<{ status: string; message: string | null; offers: AnswerOffer[] }> {
-      let last: { status: string; message: string | null; offers: AnswerOffer[] } = { status: "error", message: null, offers: [] };
+    async function verifyPage(
+      source: SourceRecord,
+      routes: RouteSpec[],
+      page: ListingRecord,
+    ): Promise<{ status: string; message: string | null; offers: AnswerOffer[] }> {
+      let last: { status: string; message: string | null; offers: AnswerOffer[] } = {
+        status: "error",
+        message: null,
+        offers: [],
+      };
       for (const route of routes.slice(0, 2)) {
         const adapter = ADAPTERS[route.adapter];
-        const ref: ListingRef = { url: page.url, externalId: page.externalId, identifiers: page.identifiers, title: page.title, brand: page.brand };
+        const ref: ListingRef = {
+          url: page.url,
+          externalId: page.externalId,
+          identifiers: page.identifiers,
+          title: page.title,
+          brand: page.brand,
+        };
         const key = `${route.adapter}:${canonicalUrl(page.url)}`;
-        const { value, shared } = await deps.shared.run(key, () => adapter.verify(ctxFor(source), ref), (r) => r.status === "ok");
+        const { value, shared } = await deps.shared.run(
+          key,
+          () => adapter.verify(ctxFor(source), ref),
+          (r) => r.status === "ok",
+        );
         if (value.status === "ok") {
           const offers = await record(source, value, shared, page.discoveredVia, page);
           if (offers.length) return { status: "ok", message: null, offers };
@@ -353,7 +499,11 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
       return last;
     }
 
-    async function verifyStore(source: SourceRecord, routes: RouteSpec[], listings: ListingRecord[]): Promise<void> {
+    async function verifyStore(
+      source: SourceRecord,
+      routes: RouteSpec[],
+      listings: ListingRecord[],
+    ): Promise<void> {
       const t0 = begin(source);
       // Variant listings share one product page: verify each page once.
       const pages = new Map<string, ListingRecord>();
@@ -382,10 +532,19 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
       }
       if (shown === 0) await addStale(source, listings);
       const state = shown ? "verified" : (STATE_FOR[lastStatus] ?? "error");
-      finish(source, t0, state, shown ? `verified live (${shown} price${shown === 1 ? "" : "s"})` : lastMessage);
+      finish(
+        source,
+        t0,
+        state,
+        shown ? `verified live (${shown} price${shown === 1 ? "" : "s"})` : lastMessage,
+      );
     }
 
-    async function searchStore(source: SourceRecord, routes: RouteSpec[], listings: ListingRecord[]): Promise<void> {
+    async function searchStore(
+      source: SourceRecord,
+      routes: RouteSpec[],
+      listings: ListingRecord[],
+    ): Promise<void> {
       const t0 = begin(source);
       let lastStatus = "no_match";
       let lastMessage: string | null = null;
@@ -393,7 +552,11 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
         const adapter = ADAPTERS[route.adapter];
         if (!adapter.search) continue;
         const key = `${route.adapter}:search:${source.id}:${parsed.tokens.join(" ")}`;
-        const { value, shared } = await deps.shared.run(key, () => adapter.search!(ctxFor(source), parsed, 10), (r) => r.status === "ok");
+        const { value, shared } = await deps.shared.run(
+          key,
+          () => adapter.search!(ctxFor(source), parsed, 10),
+          (r) => r.status === "ok",
+        );
         if (value.status !== "ok") {
           lastStatus = value.status;
           lastMessage = value.message;
@@ -401,12 +564,30 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
           continue;
         }
         // Only offers that actually match the query are kept (and indexed).
-        const relevant = value.offers.filter((o) => matchScore(parsed, haystackFor({ brand: o.brand, title: o.title, identifiers: o.identifiers }), pack.sizeClassOf(o.title)) > 0);
-        const offers = await record(source, { ...value, offers: relevant }, shared, "live_search", null);
+        const relevant = value.offers.filter(
+          (o) =>
+            matchScore(
+              parsed,
+              haystackFor({ brand: o.brand, title: o.title, identifiers: o.identifiers }),
+              pack.sizeClassOf(o.title),
+            ) > 0,
+        );
+        const offers = await record(
+          source,
+          { ...value, offers: relevant },
+          shared,
+          "live_search",
+          null,
+        );
         if (offers.length) {
           addOffers(source.id, offers);
           drainResolve();
-          finish(source, t0, "verified", `verified live (${offers.length} price${offers.length === 1 ? "" : "s"})`);
+          finish(
+            source,
+            t0,
+            "verified",
+            `verified live (${offers.length} price${offers.length === 1 ? "" : "s"})`,
+          );
           return;
         }
         lastStatus = "not_found";
@@ -424,10 +605,25 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
         const obs = await store.latestObservation(l.id, { shownOnly: true });
         if (!obs || (obs.adapter !== "feed_import" && obs.adapter !== "manual_entry")) continue;
         const date = obs.asOf ?? obs.fetchedAt;
-        offers.push(offerFromObservation(source, pack, l, obs, obs.adapter === "feed_import" ? { kind: "feed", asOf: date } : { kind: "manual", checkedAt: date }));
+        offers.push(
+          offerFromObservation(
+            source,
+            pack,
+            l,
+            obs,
+            obs.adapter === "feed_import"
+              ? { kind: "feed", asOf: date }
+              : { kind: "manual", checkedAt: date },
+          ),
+        );
       }
       addOffers(source.id, offers);
-      finish(source, t0, offers.length ? "verified" : "no_match", offers.length ? "from a dealer feed / manual check (dated)" : "no matching product on file");
+      finish(
+        source,
+        t0,
+        offers.length ? "verified" : "no_match",
+        offers.length ? "from a dealer feed / manual check (dated)" : "no matching product on file",
+      );
     }
 
     /** A store we couldn't check now: show its last accepted price, clearly marked not current. */
@@ -435,8 +631,15 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
       const stale: AnswerOffer[] = [];
       for (const l of listings.slice(0, 6)) {
         const obs = await store.latestObservation(l.id, { shownOnly: true });
-        if (!obs || !LIVE_ADAPTERS.has(obs.adapter) || now() - Date.parse(obs.fetchedAt) > STALE_WINDOW_MS) continue;
-        stale.push(offerFromObservation(source, pack, l, obs, { kind: "stale", lastSeenAt: obs.fetchedAt }));
+        if (
+          !obs ||
+          !LIVE_ADAPTERS.has(obs.adapter) ||
+          now() - Date.parse(obs.fetchedAt) > STALE_WINDOW_MS
+        )
+          continue;
+        stale.push(
+          offerFromObservation(source, pack, l, obs, { kind: "stale", lastSeenAt: obs.fetchedAt }),
+        );
       }
       addOffers(source.id, stale);
     }
@@ -464,7 +667,16 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
       tasks.map((t) =>
         t.run().catch((err: unknown) => {
           const row = rows.get(t.sourceId);
-          if (row) setRow({ ...row, state: "error", message: err instanceof Error ? err.message.slice(0, 200) : "failed", durationMs: now() - started }, true);
+          if (row)
+            setRow(
+              {
+                ...row,
+                state: "error",
+                message: err instanceof Error ? err.message.slice(0, 200) : "failed",
+                durationMs: now() - started,
+              },
+              true,
+            );
         }),
       ),
     ).then(() => "done" as const);
@@ -477,7 +689,10 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
       cancelled = true;
       finished = true;
       controller.abort();
-      await store.updateSession(sessionId, { status: "cancelled", finishedAt: new Date(now()).toISOString() });
+      await store.updateSession(sessionId, {
+        status: "cancelled",
+        finishedAt: new Date(now()).toISOString(),
+      });
       writer.emit("session_cancelled", null, {});
       await writer.flush();
       return null;
@@ -486,13 +701,26 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     // Freeze the answer. Tasks still running carry on and store what they
     // read, but nothing more reaches this answer or its event stream.
     const finalRows = [...rows.values()].map((r) =>
-      r.state === "running" || r.state === "pending" ? { ...r, state: "timed_out" as const, message: MESSAGE_FOR.timed_out!, durationMs: now() - started } : r,
+      r.state === "running" || r.state === "pending"
+        ? {
+            ...r,
+            state: "timed_out" as const,
+            message: MESSAGE_FOR.timed_out!,
+            durationMs: now() - started,
+          }
+        : r,
     );
-    for (const r of finalRows) if (rows.get(r.sourceId)?.state !== r.state) writer.emit("store_done", r.sourceId, { row: r });
+    for (const r of finalRows)
+      if (rows.get(r.sourceId)?.state !== r.state)
+        writer.emit("store_done", r.sourceId, { row: r });
     finished = true;
 
     const products = rankProducts(groupOffers(collected, pack), (p) =>
-      matchScore(parsed, haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }), p.sizeClass),
+      matchScore(
+        parsed,
+        haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }),
+        p.sizeClass,
+      ),
     );
     const finishedAt = now();
     const answer: ResearchAnswer = {
@@ -505,7 +733,12 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
       firstPriceMs,
       totalMs: finishedAt - started,
       deadlineHit: outcome === "deadline",
-      notes: candidates.length === 0 ? ["Nothing in the product index matched; only stores with a live search channel were asked."] : [],
+      notes:
+        candidates.length === 0
+          ? [
+              "Nothing in the product index matched; only stores with a live search channel were asked.",
+            ]
+          : [],
     };
     await store.updateSession(sessionId, { status: "done", finishedAt: answer.finishedAt, answer });
     writer.emit("session_done", null, { answer });
@@ -515,7 +748,13 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     return answer;
   } catch (err) {
     const message = err instanceof Error ? err.message : "research failed";
-    await store.updateSession(sessionId, { status: "failed", finishedAt: new Date(now()).toISOString(), error: message.slice(0, 500) }).catch(() => undefined);
+    await store
+      .updateSession(sessionId, {
+        status: "failed",
+        finishedAt: new Date(now()).toISOString(),
+        error: message.slice(0, 500),
+      })
+      .catch(() => undefined);
     writer.emit("session_failed", null, { error: message.slice(0, 300) });
     await writer.flush();
     return null;
@@ -525,18 +764,35 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
 }
 
 /** Listings to verify: the parent session's (re-verify), else the index. */
-async function planListings(session: ResearchSessionRecord, parsed: ParsedQuery, deps: SessionRunDeps): Promise<ListingRecord[]> {
+async function planListings(
+  session: ResearchSessionRecord,
+  parsed: ParsedQuery,
+  deps: SessionRunDeps,
+): Promise<ListingRecord[]> {
   const store = deps.rt.store;
   if (session.parentSessionId) {
     const parent = await store.getSession(session.parentSessionId);
-    const ids = [...new Set((parent?.answer?.products ?? []).flatMap((p) => p.offers.map((o) => o.listingId)).filter((x): x is string => !!x))];
-    const listings = (await Promise.all(ids.slice(0, 200).map((id) => store.getListing(id)))).filter((l): l is ListingRecord => !!l);
+    const ids = [
+      ...new Set(
+        (parent?.answer?.products ?? [])
+          .flatMap((p) => p.offers.map((o) => o.listingId))
+          .filter((x): x is string => !!x),
+      ),
+    ];
+    const listings = (
+      await Promise.all(ids.slice(0, 200).map((id) => store.getListing(id)))
+    ).filter((l): l is ListingRecord => !!l);
     if (listings.length) return listings;
   }
-  const found = await store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined });
+  const found = await store.searchListings(parsed, {
+    limit: 150,
+    sourceIds: session.storeIds ?? undefined,
+  });
   if (found.length > 0) return found;
   // Nothing indexed: optional Tavily discovery (flag discovery.tavily) may add
   // listing URLs on verifiable stores; their prices are then read by us.
   const added = await discoverViaTavily(deps.rt, deps.pack, parsed);
-  return added ? store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined }) : found;
+  return added
+    ? store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined })
+    : found;
 }

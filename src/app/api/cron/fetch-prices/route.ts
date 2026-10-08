@@ -70,7 +70,11 @@ export async function POST(req: NextRequest) {
     try {
       engine = await runScheduledEngine({ timeLimitMs: 120_000 });
     } catch (err) {
-      engine = { mode: "error", error: err instanceof Error ? err.message : "engine run failed", verifiedProductIds: [] };
+      engine = {
+        mode: "error",
+        error: err instanceof Error ? err.message : "engine run failed",
+        verifiedProductIds: [],
+      };
     }
     const engineVerified = new Set(engine.verifiedProductIds);
     if (flagOn(await getEngine().rt.flags(), "engine.default_search")) {
@@ -107,7 +111,8 @@ export async function POST(req: NextRequest) {
 
     if (spendable === 0) {
       return NextResponse.json({
-        message: "Skipped — monthly research credits are at the reserve kept for interactive searches",
+        message:
+          "Skipped — monthly research credits are at the reserve kept for interactive searches",
         provider,
         budget,
         checked: 0,
@@ -123,9 +128,7 @@ export async function POST(req: NextRequest) {
     const creditsAtStart = processCreditsSpent();
     const runBudgetSpent = () => processCreditsSpent() - creditsAtStart >= spendable;
 
-    const { data: allSettings } = await supabase
-      .from("user_settings")
-      .select("user_id, retailers");
+    const { data: allSettings } = await supabase.from("user_settings").select("user_id, retailers");
 
     const retailersByUser = new Map<string, string[]>(
       (allSettings ?? []).map((s) => [
@@ -136,9 +139,7 @@ export async function POST(req: NextRequest) {
 
     // A product tracked by several users only needs checking once.
     const seen = new Set<string>();
-    const totalDistinctProducts = new Set(
-      [...byUser.values()].flat(),
-    ).size;
+    const totalDistinctProducts = new Set([...byUser.values()].flat()).size;
     const summary: { userId: string; checked: number; updated: number; failed: number }[] = [];
 
     for (const [userId, productIds] of byUser) {

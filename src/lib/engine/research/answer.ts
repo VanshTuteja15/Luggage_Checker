@@ -55,7 +55,9 @@ export function compareOffers(a: AnswerOffer, b: AnswerOffer): number {
 
 function productName(offers: AnswerOffer[]): string {
   // The shortest title, with a trailing " - Colour" variant suffix removed.
-  const titles = offers.map((o) => o.title.replace(/\s+-\s+[^-]{2,30}$/, "").trim()).sort((a, b) => a.length - b.length);
+  const titles = offers
+    .map((o) => o.title.replace(/\s+-\s+[^-]{2,30}$/, "").trim())
+    .sort((a, b) => a.length - b.length);
   return titles[0] ?? offers[0]?.title ?? "";
 }
 
@@ -72,7 +74,12 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
         // A shared barcode joins offers unless they disagree on size; model and
         // name keys already include the size class.
         // product: keys come from identity resolution, which already enforced the size wall.
-        if (k.startsWith("product:") || a === b || (k.startsWith("gtin:") && (a === null || b === null))) uf.union(prev, i);
+        if (
+          k.startsWith("product:") ||
+          a === b ||
+          (k.startsWith("gtin:") && (a === null || b === null))
+        )
+          uf.union(prev, i);
       }
     }
   });
@@ -86,13 +93,17 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
   for (const list of groups.values()) {
     const sorted = [...list].sort(compareOffers);
     const identifiers = new Map<string, Identifier>();
-    for (const o of sorted) for (const i of o.identifiers) if (i.kind !== "store_sku") identifiers.set(`${i.kind}:${i.value}`, i);
+    for (const o of sorted)
+      for (const i of o.identifiers)
+        if (i.kind !== "store_sku") identifiers.set(`${i.kind}:${i.value}`, i);
     const current = sorted.filter((o) => o.freshness.kind !== "stale");
     const first = sorted[0];
     const gtin = [...identifiers.values()].find((i) => i.kind === "gtin")?.value;
     const brand = first.brand ?? pack.brandOf(first.title);
     products.push({
-      key: gtin ? `gtin-${gtin}` : `${(brand ?? "x").toLowerCase()}-${pack.lineOf(first.title, brand).join("-")}-${first.sizeClass ?? "any"}`,
+      key: gtin
+        ? `gtin-${gtin}`
+        : `${(brand ?? "x").toLowerCase()}-${pack.lineOf(first.title, brand).join("-")}-${first.sizeClass ?? "any"}`,
       productId: sorted.find((o) => o.productId)?.productId ?? null,
       name: productName(sorted),
       brand,
@@ -107,7 +118,10 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
 }
 
 /** Products ordered by how well they match the query, then lowest current price. */
-export function rankProducts(products: AnswerProduct[], relevance: (p: AnswerProduct) => number): AnswerProduct[] {
+export function rankProducts(
+  products: AnswerProduct[],
+  relevance: (p: AnswerProduct) => number,
+): AnswerProduct[] {
   return [...products].sort((a, b) => {
     const r = relevance(b) - relevance(a);
     if (Math.abs(r) > 1e-9) return r;
@@ -117,11 +131,25 @@ export function rankProducts(products: AnswerProduct[], relevance: (p: AnswerPro
 
 /* ── Freshness labels ─────────────────────────────────────────────── */
 
-const TIME = new Intl.DateTimeFormat("en-CA", { hour: "numeric", minute: "2-digit", timeZone: "America/Edmonton" });
-const DATE = new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Edmonton" });
+const TIME = new Intl.DateTimeFormat("en-CA", {
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "America/Edmonton",
+});
+const DATE = new Intl.DateTimeFormat("en-CA", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "America/Edmonton",
+});
 // Feed and manual dates are calendar days stored as midnight UTC; showing them
 // in Calgary time would move them to the day before.
-const DAY = new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const DAY = new Intl.DateTimeFormat("en-CA", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 /**
  * The label every price is shown with. There is no unlabelled price:

@@ -19,7 +19,8 @@ export async function decideReview(
   if (!pending) return { ok: false, error: "That review item is not pending." };
 
   if (decision === "approved") {
-    if (!pending.candidateProductId) return { ok: false, error: "No candidate product to approve; split or leave it instead." };
+    if (!pending.candidateProductId)
+      return { ok: false, error: "No candidate product to approve; split or leave it instead." };
     const listing = await store.getListing(pending.listingId);
     if (!listing) return { ok: false, error: "The listing no longer exists." };
     try {

@@ -11,7 +11,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await requireAdmin(req);
     const { id } = await params;
     const store = getEngine().rt.store;
-    if (!(await store.getListing(id))) return NextResponse.json({ error: "Listing not found." }, { status: 404 });
+    if (!(await store.getListing(id)))
+      return NextResponse.json({ error: "Listing not found." }, { status: 404 });
     const product = await store.splitListing(id);
     return NextResponse.json({ productId: product.id });
   } catch (err) {

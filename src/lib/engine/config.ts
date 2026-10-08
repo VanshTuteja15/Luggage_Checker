@@ -62,7 +62,10 @@ export function engineConfig(): EngineConfig {
     contact: str("CRAWLER_CONTACT") ?? str("PROBE_CONTACT") ?? DEFAULT_CONTACT,
     ucpAgentProfileUrl: str("UCP_AGENT_PROFILE_URL"),
     ebay: ebayId && ebaySecret ? { clientId: ebayId, clientSecret: ebaySecret } : null,
-    amazon: amzId && amzSecret && amzTag ? { credentialId: amzId, credentialSecret: amzSecret, partnerTag: amzTag } : null,
+    amazon:
+      amzId && amzSecret && amzTag
+        ? { credentialId: amzId, credentialSecret: amzSecret, partnerTag: amzTag }
+        : null,
     sessionDeadlineMs: int("ENGINE_SESSION_DEADLINE_MS", 11_000, 3_000, 12_000),
     singleFlightMs: int("ENGINE_SINGLE_FLIGHT_MS", 90_000, 0, 600_000),
     fetchTimeoutMs: int("ENGINE_FETCH_TIMEOUT_MS", 8_000, 1_000, 30_000),
@@ -71,7 +74,10 @@ export function engineConfig(): EngineConfig {
       windowMs: int("ENGINE_RATE_LIMIT_WINDOW_MS", 10 * 60_000, 10_000, 24 * 3_600_000),
       maxConcurrent: int("ENGINE_MAX_CONCURRENT_SESSIONS", 2, 1, 20),
     },
-    worker: workerUrl && workerSecret ? { url: workerUrl.replace(/\/+$/, ""), secret: workerSecret } : null,
+    worker:
+      workerUrl && workerSecret
+        ? { url: workerUrl.replace(/\/+$/, ""), secret: workerSecret }
+        : null,
     databaseUrl: str("DATABASE_URL"),
     cron: {
       maxFetchesPerRun: int("ENGINE_CRON_MAX_FETCHES", 300, 0, 10_000),

@@ -14,7 +14,13 @@ export const CIRCUIT_THRESHOLD = 3;
 export const CIRCUIT_COOLDOWN_MS = 30 * 60_000;
 
 export function closedHealth(sourceId: string): SourceHealth {
-  return { sourceId, circuit: "closed", circuitOpenedAt: null, circuitReason: null, consecutiveFailures: 0 };
+  return {
+    sourceId,
+    circuit: "closed",
+    circuitOpenedAt: null,
+    circuitReason: null,
+    consecutiveFailures: 0,
+  };
 }
 
 /** May we send a request to this source right now? */
@@ -48,7 +54,12 @@ export function recordOutcome(h: SourceHealth, outcome: FetchOutcome, now: numbe
 /** Is `now` inside the store's stated visit window (robots.txt Visit-time)? */
 export function inVisitWindow(w: VisitWindow | null, now: Date): boolean {
   if (!w) return true;
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: w.timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: w.timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
   const hh = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
   const mm = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
   const minutes = hh * 60 + mm;

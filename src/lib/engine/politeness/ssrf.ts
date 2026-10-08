@@ -72,7 +72,11 @@ export function isPublicAddress(ip: string): boolean {
 }
 
 /** Throws SsrfRejected unless `rawUrl` is safe to fetch for `source`. */
-export async function assertFetchable(rawUrl: string, source: Pick<SourceRecord, "fetchHosts" | "id">, resolve: Resolver): Promise<URL> {
+export async function assertFetchable(
+  rawUrl: string,
+  source: Pick<SourceRecord, "fetchHosts" | "id">,
+  resolve: Resolver,
+): Promise<URL> {
   let url: URL;
   try {
     url = new URL(rawUrl);

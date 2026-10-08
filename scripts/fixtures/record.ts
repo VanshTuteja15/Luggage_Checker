@@ -21,7 +21,10 @@ type Target = { sourceId: string; handle: string };
 
 const TARGETS: Target[] = [
   { sourceId: "canadaluggagedepot", handle: "samsonite-omni-3-0-large-spinner-expandable-luggage" },
-  { sourceId: "delsey-ca", handle: "40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black" },
+  {
+    sourceId: "delsey-ca",
+    handle: "40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black",
+  },
 ];
 
 const OUT = resolve("scripts/fixtures");
@@ -30,7 +33,9 @@ function reduceHtml(html: string): string {
   const head = html.match(/<head[\s\S]*?<\/head>/i)?.[0] ?? "";
   const metas = head.match(/<meta\s[^>]*>/gi) ?? [];
   const title = head.match(/<title[\s\S]*?<\/title>/i)?.[0] ?? "";
-  const lds = html.match(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) ?? [];
+  const lds =
+    html.match(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) ??
+    [];
   return [
     "<!doctype html>",
     "<!-- Reduced recording: <head> meta + JSON-LD only. See scripts/fixtures/README.md -->",
@@ -47,9 +52,22 @@ function reduceHtml(html: string): string {
 async function main(): Promise<void> {
   const fetcher = new PoliteFetcher();
   console.log(`Recording with UA: ${fetcher.userAgent}`);
-  const manifest: { file: string; url: string; status: number | null; outcome: string; recordedAt: string }[] = [];
+  const manifest: {
+    file: string;
+    url: string;
+    status: number | null;
+    outcome: string;
+    recordedAt: string;
+  }[] = [];
 
-  const save = (dir: string, name: string, body: string, url: string, status: number | null, outcome: string) => {
+  const save = (
+    dir: string,
+    name: string,
+    body: string,
+    url: string,
+    status: number | null,
+    outcome: string,
+  ) => {
     mkdirSync(resolve(OUT, dir), { recursive: true });
     const file = `${dir}/${name}`;
     writeFileSync(resolve(OUT, file), body);
@@ -64,33 +82,87 @@ async function main(): Promise<void> {
     const key = `${t.sourceId}__${t.handle.slice(0, 60)}`;
 
     for (const ext of ["json", "js"] as const) {
-      const r = await fetcher.fetch({ source, url: `${base}.${ext}`, adapter: "shopify_product_json" });
-      save("shopify", `${key}.${ext === "json" ? "product.json" : "product.js.json"}`, r.body, `${base}.${ext}`, r.status, r.outcome);
+      const r = await fetcher.fetch({
+        source,
+        url: `${base}.${ext}`,
+        adapter: "shopify_product_json",
+      });
+      save(
+        "shopify",
+        `${key}.${ext === "json" ? "product.json" : "product.js.json"}`,
+        r.body,
+        `${base}.${ext}`,
+        r.status,
+        r.outcome,
+      );
     }
     const page = await fetcher.fetch({ source, url: base, adapter: "html_structured" });
     save("html", `${key}.html`, reduceHtml(page.body), base, page.status, page.outcome);
 
-    const wk = await fetcher.fetch({ source, url: `https://${source.marketHost}/.well-known/ucp`, adapter: "shopify_ucp" });
-    save("ucp", `${t.sourceId}__well-known.json`, wk.body, `https://${source.marketHost}/.well-known/ucp`, wk.status, wk.outcome);
+    const wk = await fetcher.fetch({
+      source,
+      url: `https://${source.marketHost}/.well-known/ucp`,
+      adapter: "shopify_ucp",
+    });
+    save(
+      "ucp",
+      `${t.sourceId}__well-known.json`,
+      wk.body,
+      `https://${source.marketHost}/.well-known/ucp`,
+      wk.status,
+      wk.outcome,
+    );
   }
 
   // A real miss: a handle that doesn't exist.
   const cld = SOURCE_SEED.find((s) => s.id === "canadaluggagedepot")!;
   const missing = `https://${cld.marketHost}/products/luggagetracker-fixture-no-such-product.json`;
   const miss = await fetcher.fetch({ source: cld, url: missing, adapter: "shopify_product_json" });
-  save("shopify", "canadaluggagedepot__missing.product.json", miss.body, missing, miss.status, miss.outcome);
+  save(
+    "shopify",
+    "canadaluggagedepot__missing.product.json",
+    miss.body,
+    missing,
+    miss.status,
+    miss.outcome,
+  );
 
   // Sitemaps for discovery: the index as served, and the first product
   // sitemap reduced to its first 25 <url> entries (format otherwise untouched).
-  const index = await fetcher.fetch({ source: cld, url: `https://${cld.marketHost}/sitemap.xml`, adapter: "sitemap" });
-  save("sitemap", "canadaluggagedepot__sitemap.xml", index.body, `https://${cld.marketHost}/sitemap.xml`, index.status, index.outcome);
-  const child = [...index.body.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/g)].map((m) => m[1].replace(/&amp;/g, "&")).find((u) => /sitemap_products_\d+/.test(u));
+  const index = await fetcher.fetch({
+    source: cld,
+    url: `https://${cld.marketHost}/sitemap.xml`,
+    adapter: "sitemap",
+  });
+  save(
+    "sitemap",
+    "canadaluggagedepot__sitemap.xml",
+    index.body,
+    `https://${cld.marketHost}/sitemap.xml`,
+    index.status,
+    index.outcome,
+  );
+  const child = [...index.body.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/g)]
+    .map((m) => m[1].replace(/&amp;/g, "&"))
+    .find((u) => /sitemap_products_\d+/.test(u));
   if (child) {
-    const c = await fetcher.fetch({ source: cld, url: child, adapter: "sitemap", maxBytes: 20_000_000 });
+    const c = await fetcher.fetch({
+      source: cld,
+      url: child,
+      adapter: "sitemap",
+      maxBytes: 20_000_000,
+    });
     const urls = c.body.match(/<url>[\s\S]*?<\/url>/g) ?? [];
     const head = c.body.slice(0, c.body.indexOf("<url>"));
     const reduced = `${head}${urls.slice(0, 25).join("\n")}\n</urlset>\n`;
-    save("sitemap", "canadaluggagedepot__products_1.xml", reduced, child, c.status, `${c.outcome} (first 25 of ${urls.length} urls)`);
+    save(
+      "sitemap",
+      "canadaluggagedepot__products_1.xml",
+      reduced,
+      child,
+      c.status,
+      `${c.outcome} (first 25 of ${urls.length} urls)`,
+    );
   }
 
   writeFileSync(resolve(OUT, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

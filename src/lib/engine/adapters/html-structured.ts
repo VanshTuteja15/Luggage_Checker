@@ -9,12 +9,31 @@
 /*  render-time discount case from the store audit).                    */
 /* ------------------------------------------------------------------ */
 
-import { displayedPrice, extractStructured, schemaAvailability, type StructuredOffer, type StructuredProduct } from "../extract/structured";
+import {
+  displayedPrice,
+  extractStructured,
+  schemaAvailability,
+  type StructuredOffer,
+  type StructuredProduct,
+} from "../extract/structured";
 import { normaliseHost } from "../registry";
 import type { RawOffer } from "../types";
-import { blankOffer, buildIdentifiers, result, statusFromOutcome, type Adapter, type AdapterContext, type AdapterResult, type ListingRef } from "./base";
+import {
+  blankOffer,
+  buildIdentifiers,
+  result,
+  statusFromOutcome,
+  type Adapter,
+  type AdapterContext,
+  type AdapterResult,
+  type ListingRef,
+} from "./base";
 
-type Candidate = { node: StructuredProduct; offer: StructuredOffer; parent: StructuredProduct | null };
+type Candidate = {
+  node: StructuredProduct;
+  offer: StructuredOffer;
+  parent: StructuredProduct | null;
+};
 
 function candidates(products: StructuredProduct[]): Candidate[] {
   const out: Candidate[] = [];
@@ -23,7 +42,8 @@ function candidates(products: StructuredProduct[]): Candidate[] {
     // no SKU or GTIN); when the variants carry offers, those are the items.
     const variantOffers = p.variants.some((v) => v.offers.length > 0);
     if (!variantOffers) for (const o of p.offers) out.push({ node: p, offer: o, parent: null });
-    for (const v of p.variants) for (const o of v.offers) out.push({ node: v, offer: o, parent: p });
+    for (const v of p.variants)
+      for (const o of v.offers) out.push({ node: v, offer: o, parent: p });
   }
   return out;
 }
@@ -52,26 +72,43 @@ export const htmlStructured: Adapter = {
       headers: { Accept: "text/html,application/xhtml+xml" },
       maxBytes: 4_000_000,
     });
-    if (res.outcome !== "ok") return result(statusFromOutcome(res.outcome), [], res.error ?? res.outcome);
+    if (res.outcome !== "ok")
+      return result(statusFromOutcome(res.outcome), [], res.error ?? res.outcome);
 
     const s = extractStructured(res.body);
     const shown = displayedPrice(s);
-    const isProductPage = (s.meta["og:type"] ?? "").toLowerCase() === "product" || s.products.length > 0;
-    const evidence = { request: listing.url, status: res.status, jsonLdBlocks: s.jsonLdBlocks, jsonLdErrors: s.jsonLdParseErrors, meta: s.meta };
+    const isProductPage =
+      (s.meta["og:type"] ?? "").toLowerCase() === "product" || s.products.length > 0;
+    const evidence = {
+      request: listing.url,
+      status: res.status,
+      jsonLdBlocks: s.jsonLdBlocks,
+      jsonLdErrors: s.jsonLdParseErrors,
+      meta: s.meta,
+    };
 
     // Offers that link off the store's own domains (Delsey's JSON-LD points to
     // us.delsey.com) can't be shown as this store's price.
     const all = candidates(s.products);
-    const usable = all.filter((c) => !c.offer.url || onAllowedDomain(c.offer.url, ctx.source.allowedDomains));
+    const usable = all.filter(
+      (c) => !c.offer.url || onAllowedDomain(c.offer.url, ctx.source.allowedDomains),
+    );
     const offers: RawOffer[] = [];
 
     // A single-price page: the meta price is the shown price of the same item.
-    const distinctPrices = new Set(usable.map((c) => c.offer.price).filter((p): p is number => p !== null));
+    const distinctPrices = new Set(
+      usable.map((c) => c.offer.price).filter((p): p is number => p !== null),
+    );
     const crossCheck = distinctPrices.size <= 1 ? shown.price : null;
 
     for (const c of usable) {
       const title = c.node.name ?? c.parent?.name ?? s.meta["og:title"] ?? listing.title;
-      const brand = ctx.pack.brandOf(c.node.brand ?? c.parent?.brand ?? "") ?? ctx.pack.brandOf(title) ?? c.node.brand ?? c.parent?.brand ?? null;
+      const brand =
+        ctx.pack.brandOf(c.node.brand ?? c.parent?.brand ?? "") ??
+        ctx.pack.brandOf(title) ??
+        c.node.brand ??
+        c.parent?.brand ??
+        null;
       const sku = c.offer.sku ?? c.node.sku;
       const gtin = c.offer.gtin ?? c.node.gtin;
       offers.push(
@@ -81,11 +118,21 @@ export const htmlStructured: Adapter = {
           variantExternalId: sku,
           title,
           brand,
-          identifiers: buildIdentifiers(ctx.pack, ctx.source.id, { brand, sku, barcode: gtin, title }),
+          identifiers: buildIdentifiers(ctx.pack, ctx.source.id, {
+            brand,
+            sku,
+            barcode: gtin,
+            title,
+          }),
           colour: c.node.color ?? ctx.pack.colourOf(title),
           options: [c.node.color, c.node.size].filter((x): x is string => !!x),
           price: c.offer.price,
-          listPrice: c.offer.listPrice !== null && c.offer.price !== null && c.offer.listPrice > c.offer.price ? c.offer.listPrice : null,
+          listPrice:
+            c.offer.listPrice !== null &&
+            c.offer.price !== null &&
+            c.offer.listPrice > c.offer.price
+              ? c.offer.listPrice
+              : null,
           currency: c.offer.priceCurrency ?? shown.currency,
           availability: schemaAvailability(c.offer.availability),
           seller: c.offer.seller,
@@ -110,18 +157,30 @@ export const htmlStructured: Adapter = {
           identifiers: [...listing.identifiers],
           price: shown.price,
           currency: shown.currency,
-          availability: schemaAvailability(s.meta["product:availability"] ?? s.microdata.availability),
+          availability: schemaAvailability(
+            s.meta["product:availability"] ?? s.microdata.availability,
+          ),
           imageUrl: s.meta["og:image"] ?? null,
           displayedPrice: shown.price,
           pageType: isProductPage ? "product" : "listing",
           cacheAgeSec: res.cacheAgeSec,
-          evidence: { ...evidence, from: s.meta["og:price:amount"] || s.meta["product:price:amount"] ? "meta" : "microdata" },
+          evidence: {
+            ...evidence,
+            from:
+              s.meta["og:price:amount"] || s.meta["product:price:amount"] ? "meta" : "microdata",
+          },
         }),
       );
     }
 
     if (offers.length === 0) {
-      return result("garbage", [], all.length ? "structured offers link to another store's domain" : "no structured product data on the page");
+      return result(
+        "garbage",
+        [],
+        all.length
+          ? "structured offers link to another store's domain"
+          : "no structured product data on the page",
+      );
     }
     return result("ok", offers);
   },

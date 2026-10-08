@@ -27,7 +27,11 @@ function patternToRegex(pattern: string): RegExp {
 }
 
 export function parseRobots(text: string, token: string, fetchedAt = Date.now()): RobotsRules {
-  type Group = { agents: string[]; rules: { allow: boolean; pattern: string }[]; delay: number | null };
+  type Group = {
+    agents: string[];
+    rules: { allow: boolean; pattern: string }[];
+    delay: number | null;
+  };
   const groups: Group[] = [];
   const sitemaps: string[] = [];
   let current: Group | null = null;
@@ -97,7 +101,8 @@ export function isAllowed(robots: RobotsRules, url: string): boolean {
   for (const rule of robots.rules) {
     if (!rule.re.test(path) && !rule.re.test(decoded)) continue;
     const length = rule.pattern.length;
-    if (!best || length > best.length || (length === best.length && rule.allow)) best = { allow: rule.allow, length };
+    if (!best || length > best.length || (length === best.length && rule.allow))
+      best = { allow: rule.allow, length };
   }
   return best ? best.allow : true;
 }

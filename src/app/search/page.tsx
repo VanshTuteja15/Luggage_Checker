@@ -38,7 +38,11 @@ import { useResearch, useResearchInfo } from "@/lib/research-client";
 
 const MODE_KEY = "luggagetracker.searchMode";
 
-const TIME = new Intl.DateTimeFormat("en-CA", { hour: "numeric", minute: "2-digit", timeZone: "America/Edmonton" });
+const TIME = new Intl.DateTimeFormat("en-CA", {
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "America/Edmonton",
+});
 
 /** Web-research prices are read by a search provider, not by us: say so. */
 function webResearchLabel(fetchedAt: string): string {
@@ -111,7 +115,9 @@ export default function SearchPage() {
     }
   }, []);
   const engineAvailable = researchInfo.data?.available === true;
-  const engineMode = engineAvailable && (modePref ? modePref === "verified" : researchInfo.data?.defaultEngine === true);
+  const engineMode =
+    engineAvailable &&
+    (modePref ? modePref === "verified" : researchInfo.data?.defaultEngine === true);
   const chooseMode = (m: "verified" | "web") => {
     setModePref(m);
     try {
@@ -150,7 +156,8 @@ export default function SearchPage() {
   const response = search.data;
   const notConfigured = !engineMode && provider.data && provider.data.configured === false;
   const lowBudget = (provider.data?.budgets ?? []).find((b) => b.remaining <= 25 && !b.exhausted);
-  const researchRunning = research.state.status === "running" || research.state.status === "starting";
+  const researchRunning =
+    research.state.status === "running" || research.state.status === "starting";
   const hasSearched = engineMode ? research.state.status !== "idle" : search.status !== "idle";
 
   const products = useMemo(
@@ -184,7 +191,11 @@ export default function SearchPage() {
 
         {engineAvailable && (
           <div className="mt-3 flex justify-center">
-            <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-xs" role="group" aria-label="Price source">
+            <div
+              className="inline-flex rounded-lg border border-border bg-card p-0.5 text-xs"
+              role="group"
+              aria-label="Price source"
+            >
               <button
                 type="button"
                 aria-pressed={engineMode}
@@ -209,8 +220,8 @@ export default function SearchPage() {
           {engineMode
             ? "Read directly from each store's own data or official channel · CAD · stores we can't check are listed, never guessed"
             : provider.data?.providerLabel
-            ? `Live prices via ${provider.data.providerLabel} · CAD`
-            : "Live prices from Amazon, Walmart, Samsonite and other Canadian retailers"}
+              ? `Live prices via ${provider.data.providerLabel} · CAD`
+              : "Live prices from Amazon, Walmart, Samsonite and other Canadian retailers"}
           {lowBudget && (
             <>
               {" · "}
@@ -227,7 +238,10 @@ export default function SearchPage() {
               key={name}
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] text-muted-foreground"
             >
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: retailerColor(name) }} />
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: retailerColor(name) }}
+              />
               {name.replace(".ca", "")}
             </span>
           ))}
@@ -349,7 +363,8 @@ export default function SearchPage() {
           {search.status === "reading" && (
             <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-              First results shown · reading prices from more store pages (brand store, Walmart, Best Buy…)
+              First results shown · reading prices from more store pages (brand store, Walmart, Best
+              Buy…)
             </div>
           )}
 
@@ -378,7 +393,9 @@ export default function SearchPage() {
               <ResultsToolbar
                 productCount={response.products.length}
                 listingCount={response.products.reduce((n, p) => n + p.offers.length, 0)}
-                storeCount={new Set(response.products.flatMap((p) => p.offers.map((o) => o.retailer))).size}
+                storeCount={
+                  new Set(response.products.flatMap((p) => p.offers.map((o) => o.retailer))).size
+                }
                 sort={sort}
                 onSort={setSort}
                 view={view}
@@ -393,7 +410,8 @@ export default function SearchPage() {
                       product={product}
                       rank={i}
                       alreadyTracked={
-                        trackedKeys.has(product.key) || (!!product.upc && trackedKeys.has(product.upc))
+                        trackedKeys.has(product.key) ||
+                        (!!product.upc && trackedKeys.has(product.upc))
                       }
                     />
                   ))}
@@ -507,7 +525,12 @@ function ProductResult({
         <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.imageUrl} alt={product.name} className="h-full w-full object-contain p-1" loading="lazy" />
+            <img
+              src={product.imageUrl}
+              alt={product.name}
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+            />
           ) : (
             <ShoppingBag className="h-7 w-7 text-muted-foreground" />
           )}
@@ -526,7 +549,9 @@ function ProductResult({
             {product.productType ? ` · ${product.productType}` : ""}
           </p>
           {specLine(product) && (
-            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground/80">{specLine(product)}</p>
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground/80">
+              {specLine(product)}
+            </p>
           )}
 
           {colours.length > 0 && (
@@ -551,7 +576,10 @@ function ProductResult({
                   i === 0 ? "font-semibold text-success" : "text-muted-foreground"
                 }`}
               >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: retailerColor(offer.retailer) }} />
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: retailerColor(offer.retailer) }}
+                />
                 {offer.retailer.replace(/\.ca$/, "")} {usd(offer.price)}
               </a>
             ))}
@@ -561,14 +589,18 @@ function ProductResult({
             <span>
               {product.retailerCount} store{product.retailerCount === 1 ? "" : "s"}
             </span>
-            {savings > 0 && <span className="font-medium text-success">Save {usd(savings)} vs highest</span>}
+            {savings > 0 && (
+              <span className="font-medium text-success">Save {usd(savings)} vs highest</span>
+            )}
             {product.retailerCount > 1 && (
               <button
                 onClick={() => setExpanded((v) => !v)}
                 className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
               >
                 {expanded ? "Hide" : "Compare"} all prices
-                <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`}
+                />
               </button>
             )}
           </div>
@@ -641,19 +673,36 @@ function specLine(product: SearchProduct): string {
     .join(" · ");
 }
 
-function OfferRow({ offer, position, isBest }: { offer: Offer; position: number; isBest: boolean }) {
+function OfferRow({
+  offer,
+  position,
+  isBest,
+}: {
+  offer: Offer;
+  position: number;
+  isBest: boolean;
+}) {
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{position}</span>
-      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: retailerColor(offer.retailer) }} />
+      <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        {position}
+      </span>
+      <span
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: retailerColor(offer.retailer) }}
+      />
       <span className="min-w-0 flex-1 truncate">
         {offer.retailer}
         {offer.colour && <span className="text-muted-foreground"> · {offer.colour}</span>}
       </span>
       {!offer.inStock && (
-        <span className="shrink-0 rounded bg-danger-soft px-1.5 py-0.5 text-xs text-danger">Out of stock</span>
+        <span className="shrink-0 rounded bg-danger-soft px-1.5 py-0.5 text-xs text-danger">
+          Out of stock
+        </span>
       )}
-      <span className="shrink-0 text-[11px] text-muted-foreground">{webResearchLabel(offer.fetchedAt)}</span>
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        {webResearchLabel(offer.fetchedAt)}
+      </span>
       <span
         className={`shrink-0 tabular-nums ${isBest ? "font-semibold text-success" : ""}`}
         title={offer.evidence ? `Read from the page: ${offer.evidence}` : undefined}
@@ -706,22 +755,31 @@ function AllStoresList({ products, sort }: { products: SearchProduct[]; sort: So
               i > 0 ? "border-t border-border" : ""
             }`}
           >
-            <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{i + 1}</span>
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: retailerColor(o.retailer) }} />
+            <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+              {i + 1}
+            </span>
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: retailerColor(o.retailer) }}
+            />
             <span className="w-32 shrink-0 truncate font-medium">{o.retailer}</span>
             <span className="min-w-0 flex-1 truncate text-muted-foreground">
               {p.name}
               {o.colour ? ` · ${o.colour}` : ""}
             </span>
             {!o.inStock && (
-              <span className="shrink-0 rounded bg-danger-soft px-1.5 py-0.5 text-xs text-danger">Out of stock</span>
+              <span className="shrink-0 rounded bg-danger-soft px-1.5 py-0.5 text-xs text-danger">
+                Out of stock
+              </span>
             )}
             {i === 0 && t === 0 && (
               <span className="shrink-0 rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success">
                 LOWEST
               </span>
             )}
-            <span className="shrink-0 text-[11px] text-muted-foreground">{webResearchLabel(o.fetchedAt)}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              {webResearchLabel(o.fetchedAt)}
+            </span>
             <span
               className={`w-24 shrink-0 text-right tabular-nums ${i === 0 && t === 0 ? "font-bold text-success" : "font-semibold"}`}
               title={o.evidence ? `Read from the page: ${o.evidence}` : undefined}
@@ -756,7 +814,10 @@ function AlsoCheckList({ links }: { links: AlsoCheck[] }) {
             title={l.title}
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs hover:bg-muted"
           >
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: retailerColor(l.retailer) }} />
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: retailerColor(l.retailer) }}
+            />
             {l.retailer}
             <ExternalLink className="h-3 w-3 text-muted-foreground" />
           </a>

@@ -12,13 +12,21 @@ export async function POST(req: NextRequest) {
   try {
     await requireAdmin(req);
     const body = (await req.json().catch(() => ({}))) as { fromId?: unknown; intoId?: unknown };
-    if (typeof body.fromId !== "string" || typeof body.intoId !== "string" || !UUID.test(body.fromId) || !UUID.test(body.intoId)) {
+    if (
+      typeof body.fromId !== "string" ||
+      typeof body.intoId !== "string" ||
+      !UUID.test(body.fromId) ||
+      !UUID.test(body.intoId)
+    ) {
       return badRequest("fromId and intoId must be product ids");
     }
     try {
       await getEngine().rt.store.mergeProducts(body.fromId, body.intoId);
     } catch (err) {
-      return NextResponse.json({ error: err instanceof Error ? err.message : "merge refused" }, { status: 409 });
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "merge refused" },
+        { status: 409 },
+      );
     }
     return NextResponse.json({ merged: true });
   } catch (err) {

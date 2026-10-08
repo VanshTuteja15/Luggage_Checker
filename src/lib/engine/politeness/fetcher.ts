@@ -17,7 +17,14 @@ import type { AdapterId, FetchAttempt, FetchOutcome, SourceHealth, SourceRecord 
 import { circuitAllows, closedHealth, inVisitWindow, recordOutcome } from "./circuit";
 import { classifyResponse } from "./classify";
 import { HostLimiter, LimiterAborted, LimiterTimeout } from "./limiter";
-import { RobotsCache, isAllowed, parseRobots, unavailableRobots, unreachableRobots, type RobotsRules } from "./robots";
+import {
+  RobotsCache,
+  isAllowed,
+  parseRobots,
+  unavailableRobots,
+  unreachableRobots,
+  type RobotsRules,
+} from "./robots";
 import { assertFetchable, SsrfRejected, systemResolver, type Resolver } from "./ssrf";
 
 export type HealthPort = {
@@ -66,7 +73,19 @@ export type PoliteResponse = {
 
 const MAX_REDIRECTS = 3;
 const LATE_GRACE_MS = 4_000;
-const KEEP_HEADERS = ["content-type", "age", "last-modified", "etag", "cache-control", "cf-cache-status", "cf-mitigated", "retry-after", "location", "content-language", "x-cache"];
+const KEEP_HEADERS = [
+  "content-type",
+  "age",
+  "last-modified",
+  "etag",
+  "cache-control",
+  "cf-cache-status",
+  "cf-mitigated",
+  "retry-after",
+  "location",
+  "content-language",
+  "x-cache",
+];
 
 /** In-process health when no store is wired (tests, scripts). */
 export function memoryHealth(): HealthPort {
@@ -121,7 +140,16 @@ export class PoliteFetcher {
   async fetch(req: PoliteRequest): Promise<PoliteResponse> {
     const startedAt = new Date(this.now()).toISOString();
     const refuse = (outcome: FetchOutcome, error: string): PoliteResponse => {
-      const res: PoliteResponse = { outcome, status: null, body: "", headers: {}, finalUrl: req.url, durationMs: 0, cacheAgeSec: null, error };
+      const res: PoliteResponse = {
+        outcome,
+        status: null,
+        body: "",
+        headers: {},
+        finalUrl: req.url,
+        durationMs: 0,
+        cacheAgeSec: null,
+        error,
+      };
       this.record(req, res, startedAt);
       return res;
     };
@@ -135,13 +163,19 @@ export class PoliteFetcher {
 
     // 2. visit window (robots.txt itself may be read any time)
     if (req.adapter !== "robots" && !inVisitWindow(req.source.visitWindow, new Date(this.now()))) {
-      return refuse("outside_visit_window", `${req.source.retailerLabel} asks crawlers to visit ${req.source.visitWindow?.start}–${req.source.visitWindow?.end} ${req.source.visitWindow?.timeZone}`);
+      return refuse(
+        "outside_visit_window",
+        `${req.source.retailerLabel} asks crawlers to visit ${req.source.visitWindow?.start}–${req.source.visitWindow?.end} ${req.source.visitWindow?.timeZone}`,
+      );
     }
 
     // 3. circuit breaker
     const health = await this.health.get(req.source.id);
     if (!circuitAllows(health, this.now()).allowed) {
-      return refuse("circuit_open", `paused after repeated refusals: ${health.circuitReason ?? "blocked"}`);
+      return refuse(
+        "circuit_open",
+        `paused after repeated refusals: ${health.circuitReason ?? "blocked"}`,
+      );
     }
 
     // 4. robots.txt
@@ -151,7 +185,9 @@ export class PoliteFetcher {
       if (!isAllowed(rules, req.url)) {
         return refuse(
           "robots_disallowed",
-          rules.state === "unreachable" ? "robots.txt could not be read (blocked or down), so we don't crawl" : "robots.txt disallows this path",
+          rules.state === "unreachable"
+            ? "robots.txt could not be read (blocked or down), so we don't crawl"
+            : "robots.txt disallows this path",
         );
       }
       if (rules.crawlDelaySec) spacingMs = Math.max(spacingMs, rules.crawlDelaySec * 1000);
@@ -161,9 +197,13 @@ export class PoliteFetcher {
     const host = new URL(req.url).hostname;
     let release: (() => void) | null = null;
     try {
-      release = await this.limiter.acquire(host, spacingMs, { deadlineAt: req.deadlineAt, signal: req.signal });
+      release = await this.limiter.acquire(host, spacingMs, {
+        deadlineAt: req.deadlineAt,
+        signal: req.signal,
+      });
     } catch (err) {
-      if (err instanceof LimiterTimeout) return refuse("timeout", "the store's crawl delay doesn't fit before the deadline");
+      if (err instanceof LimiterTimeout)
+        return refuse("timeout", "the store's crawl delay doesn't fit before the deadline");
       if (err instanceof LimiterAborted) return refuse("timeout", "cancelled");
       throw err;
     }
@@ -181,9 +221,18 @@ export class PoliteFetcher {
   }
 
   private async loadRobots(origin: string, req: PoliteRequest): Promise<RobotsRules> {
-    const res = await this.fetch({ ...req, url: `${origin}/robots.txt`, adapter: "robots", method: "GET", body: undefined, headers: {}, maxBytes: 512_000 });
+    const res = await this.fetch({
+      ...req,
+      url: `${origin}/robots.txt`,
+      adapter: "robots",
+      method: "GET",
+      body: undefined,
+      headers: {},
+      maxBytes: 512_000,
+    });
     if (res.outcome === "ok") return parseRobots(res.body, BOT_TOKEN, this.now());
-    if (res.status !== null && res.status >= 400 && res.status < 500 && res.outcome === "not_found") return unavailableRobots(this.now());
+    if (res.status !== null && res.status >= 400 && res.status < 500 && res.outcome === "not_found")
+      return unavailableRobots(this.now());
     // 401/403, challenges, 5xx, timeouts: we can't read the rules, so we don't crawl.
     return unreachableRobots(this.now());
   }
@@ -193,7 +242,9 @@ export class PoliteFetcher {
     const controller = new AbortController();
     // A request may finish a little after the session deadline: the answer
     // is already sent by then, but the reading is still stored as evidence.
-    const timeoutMs = req.deadlineAt ? Math.max(500, Math.min(this.timeoutMs, req.deadlineAt - this.now() + LATE_GRACE_MS)) : this.timeoutMs;
+    const timeoutMs = req.deadlineAt
+      ? Math.max(500, Math.min(this.timeoutMs, req.deadlineAt - this.now() + LATE_GRACE_MS))
+      : this.timeoutMs;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const onAbort = () => controller.abort();
     req.signal?.addEventListener("abort", onAbort, { once: true });
