@@ -17,6 +17,24 @@ Plan and rules: [`MASTER_PROMPT.md`](../MASTER_PROMPT.md). Things only a human c
 | P8 Shadow mode + test set | ⏳ | |
 | P9 Hardening + docs | ⏳ | |
 
+## Next steps (working notes)
+
+1. **P4 manual dev run.** Local Postgres `lt-dev-db` (`npm run db:dev -- up`, `DATABASE_URL=postgres://postgres:dev@localhost:54331/postgres`) already holds the real CLD + Delsey index. Run `npm run dev` with that `DATABASE_URL`, sign in, choose "Verified prices", search e.g. "Samsonite Omni 3.0 Large". The local `auth.users` needs the signed-in user's id, because `research_sessions.user_id` has a foreign key. Expect CLD/Delsey verified first, blocked stores (Samsonite, TUMI, Sporting Life, Simons) labelled, Amazon/Walmart link-only.
+2. **P7 `/admin` pages:**
+   - source health and block rates (`source_health` view)
+   - recent failures and extraction failures (`recentRejections`)
+   - identity review queue (API done)
+   - session timings
+   - flags
+   - feed upload and manual price entry
+   - discovery trigger
+   - admin role via `app_admins`
+3. **P8 shadow mode.** Test set of 30+ products in `scripts/shadow/testset.json` (expected identity and price sources); runner compares the engine against the old Tavily path; write `docs/SHADOW_REPORT.md` covering coverage, accuracy and latency; cut over only if the engine matches or beats Tavily.
+4. **P9 docs:**
+   - README, SETUP, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, HUMAN_ACTIONS, `.env.example`
+   - PROBE_REPORT note on Shopify `lastmod`
+   - privacy and terms pages, a GST/HST note in price display, a manual-only CI test workflow
+
 ## Quality gates (latest run)
 
 | Gate | Result |
