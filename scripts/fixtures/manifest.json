@@ -4,62 +4,76 @@
     "url": "https://www.canadaluggagedepot.ca/products/samsonite-omni-3-0-large-spinner-expandable-luggage.json",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:09.306Z"
+    "recordedAt": "2026-10-08T05:32:16.386Z"
   },
   {
     "file": "shopify/canadaluggagedepot__samsonite-omni-3-0-large-spinner-expandable-luggage.product.js.json",
     "url": "https://www.canadaluggagedepot.ca/products/samsonite-omni-3-0-large-spinner-expandable-luggage.js",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:10.313Z"
+    "recordedAt": "2026-10-08T05:32:17.391Z"
   },
   {
     "file": "html/canadaluggagedepot__samsonite-omni-3-0-large-spinner-expandable-luggage.html",
     "url": "https://www.canadaluggagedepot.ca/products/samsonite-omni-3-0-large-spinner-expandable-luggage",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:11.475Z"
+    "recordedAt": "2026-10-08T05:32:18.576Z"
   },
   {
     "file": "ucp/canadaluggagedepot__well-known.json",
     "url": "https://www.canadaluggagedepot.ca/.well-known/ucp",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:12.325Z"
+    "recordedAt": "2026-10-08T05:32:19.386Z"
   },
   {
     "file": "shopify/delsey-ca__40119980500us-wagram-23-inch-expandable-carry-on-suitcase-bl.product.json",
     "url": "https://delsey.ca/products/40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black.json",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:13.866Z"
+    "recordedAt": "2026-10-08T05:32:20.638Z"
   },
   {
     "file": "shopify/delsey-ca__40119980500us-wagram-23-inch-expandable-carry-on-suitcase-bl.product.js.json",
     "url": "https://delsey.ca/products/40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black.js",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:14.798Z"
+    "recordedAt": "2026-10-08T05:32:21.621Z"
   },
   {
     "file": "html/delsey-ca__40119980500us-wagram-23-inch-expandable-carry-on-suitcase-bl.html",
     "url": "https://delsey.ca/products/40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:16.311Z"
+    "recordedAt": "2026-10-08T05:32:23.303Z"
   },
   {
     "file": "ucp/delsey-ca__well-known.json",
     "url": "https://delsey.ca/.well-known/ucp",
     "status": 200,
     "outcome": "ok",
-    "recordedAt": "2026-10-08T04:27:16.836Z"
+    "recordedAt": "2026-10-08T05:32:23.619Z"
   },
   {
     "file": "shopify/canadaluggagedepot__missing.product.json",
     "url": "https://www.canadaluggagedepot.ca/products/luggagetracker-fixture-no-such-product.json",
     "status": 404,
     "outcome": "not_found",
-    "recordedAt": "2026-10-08T04:27:16.987Z"
+    "recordedAt": "2026-10-08T05:32:23.744Z"
+  },
+  {
+    "file": "sitemap/canadaluggagedepot__sitemap.xml",
+    "url": "https://www.canadaluggagedepot.ca/sitemap.xml",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T05:32:24.766Z"
+  },
+  {
+    "file": "sitemap/canadaluggagedepot__products_1.xml",
+    "url": "https://www.canadaluggagedepot.ca/sitemap_products_1.xml?from=86455552&to=7637232418992",
+    "status": 200,
+    "outcome": "ok (first 25 of 1001 urls)",
+    "recordedAt": "2026-10-08T05:32:26.346Z"
   }
 ]

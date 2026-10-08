@@ -17,11 +17,11 @@
 
 import { ADAPTERS, type AdapterContext, type AdapterResult, type ListingRef } from "../adapters";
 import { canonicalUrl } from "../adapters/base";
+import { discoverViaTavily } from "../discovery";
 import { flagOn } from "../flags";
 import type { SingleFlight } from "../politeness/singleflight";
 import type { EngineRuntime } from "../recorder";
 import { LIVE_ADAPTERS, checkRoutes, linkOnlyUrl, unverifiableReason, type RouteContext } from "../registry";
-import { EXTRACTOR_VERSION, VALIDATOR_VERSION } from "../store/port";
 import { haystackFor, matchScore } from "../store/terms";
 import type {
   AdapterId,
@@ -41,7 +41,9 @@ import type {
   StoreStatusRow,
   StoreTaskState,
 } from "../types";
-import { validateOffer, type ExpectedIdentity } from "../validate";
+import { resolveListing } from "../identity/resolve";
+import { observeOffer } from "../observe";
+import type { ExpectedIdentity } from "../validate";
 import { groupOffers, rankProducts } from "./answer";
 
 export type SessionRunDeps = {
@@ -109,7 +111,7 @@ function toAnswerOffer(
   o: RawOffer,
   v: { outcome: string; confidence: number; reasons: string[] },
   freshness: Freshness,
-  ids: { listingId: string | null; observationId: string | null },
+  ids: { listingId: string | null; observationId: string | null; productId: string | null },
 ): AnswerOffer {
   return {
     sourceId: source.id,
@@ -132,6 +134,7 @@ function toAnswerOffer(
     method: o.adapter,
     observationId: ids.observationId,
     listingId: ids.listingId,
+    productId: ids.productId,
     evidence: evidenceLine(o),
   };
 }
@@ -158,6 +161,7 @@ function offerFromObservation(source: SourceRecord, pack: CategoryPack, l: Listi
     method: obs.adapter,
     observationId: obs.id,
     listingId: l.id,
+    productId: l.productId,
     evidence: `${obs.adapter} ${String((obs.evidence as Record<string, unknown>).request ?? "")}`.trim(),
   };
 }
@@ -222,6 +226,17 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     const collected: AnswerOffer[] = [];
     let firstPriceMs: number | null = null;
     let finished = false;
+    // Listings seen for the first time this session: resolved to catalog
+    // products in the background, after their prices are already shown.
+    const toResolve: ListingRecord[] = [];
+    let resolving: Promise<void> = Promise.resolve();
+    const drainResolve = () => {
+      const batch = toResolve.splice(0);
+      if (batch.length === 0) return;
+      resolving = resolving.then(async () => {
+        for (const l of batch) await resolveListing(store, pack, l).catch(() => undefined);
+      });
+    };
 
     const setRow = (row: StoreStatusRow, emit: boolean) => {
       if (finished) return;
@@ -300,47 +315,19 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
     async function record(source: SourceRecord, res: AdapterResult, shared: boolean, discoveredVia: ListingRecord["discoveredVia"], parent: ListingRecord | null): Promise<AnswerOffer[]> {
       const out: AnswerOffer[] = [];
       for (const o of res.offers) {
-        const listing = await store.upsertListing({
-          sourceId: source.id,
-          url: o.url,
-          externalId: o.externalId,
-          title: o.title,
-          brand: o.brand,
-          sizeClass: pack.sizeClassOf([o.title, ...o.options].join(" ")),
-          colour: o.colour,
-          identifiers: o.identifiers,
-          imageUrl: o.imageUrl,
-          discoveredVia: parent?.discoveredVia ?? discoveredVia,
-          lastmod: null,
-          active: true,
-          productId: parent?.productId ?? null,
+        // Identity is resolved after the prices are on screen (below), not before.
+        const { listing, validation: v, observationId } = await observeOffer(store, pack, source, o, {
+          sessionId,
+          discoveredVia,
+          parent,
+          expected: expectedFrom(parsed),
+          persist: !shared,
+          resolve: false,
+          now: now(),
         });
-        const history = (await store.priceRanges(listing.id, 6)).map((r) => r.price);
-        const v = validateOffer(o, { source, pack, expected: expectedFrom(parsed), history, now: now() });
-        let observationId: string | null = null;
-        if (!shared) {
-          const obs = await store.insertObservation({
-            listingId: listing.id,
-            sourceId: source.id,
-            adapter: o.adapter,
-            price: o.price,
-            listPrice: o.listPrice,
-            currency: v.outcome === "rejected" ? (o.currency ?? "unknown") : "CAD",
-            availability: o.availability,
-            seller: o.seller,
-            condition: o.condition,
-            validation: v,
-            evidence: o.evidence,
-            extractorVersion: EXTRACTOR_VERSION,
-            validatorVersion: VALIDATOR_VERSION,
-            fetchedAt: o.fetchedAt,
-            asOf: o.asOf,
-            sessionId,
-          });
-          observationId = obs.id;
-        }
         if (v.outcome !== "rejected" && o.price !== null) {
-          out.push(toAnswerOffer(source, pack, o, v, { kind: "live", fetchedAt: o.fetchedAt }, { listingId: listing.id, observationId }));
+          out.push(toAnswerOffer(source, pack, o, v, { kind: "live", fetchedAt: o.fetchedAt }, { listingId: listing.id, observationId, productId: listing.productId }));
+          if (!listing.productId) toResolve.push(listing);
         }
       }
       return out;
@@ -389,6 +376,7 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
         if (r.offers.length) {
           shown += r.offers.length;
           addOffers(source.id, r.offers);
+          drainResolve();
         }
         if (r.status === "blocked") break;
       }
@@ -417,6 +405,7 @@ export async function runResearchSession(sessionId: string, deps: SessionRunDeps
         const offers = await record(source, { ...value, offers: relevant }, shared, "live_search", null);
         if (offers.length) {
           addOffers(source.id, offers);
+          drainResolve();
           finish(source, t0, "verified", `verified live (${offers.length} price${offers.length === 1 ? "" : "s"})`);
           return;
         }
@@ -544,5 +533,10 @@ async function planListings(session: ResearchSessionRecord, parsed: ParsedQuery,
     const listings = (await Promise.all(ids.slice(0, 200).map((id) => store.getListing(id)))).filter((l): l is ListingRecord => !!l);
     if (listings.length) return listings;
   }
-  return store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined });
+  const found = await store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined });
+  if (found.length > 0) return found;
+  // Nothing indexed: optional Tavily discovery (flag discovery.tavily) may add
+  // listing URLs on verifiable stores; their prices are then read by us.
+  const added = await discoverViaTavily(deps.rt, deps.pack, parsed);
+  return added ? store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined }) : found;
 }

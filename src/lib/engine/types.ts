@@ -356,6 +356,8 @@ export type AnswerOffer = {
   method: AdapterId;
   observationId: string | null;
   listingId: string | null;
+  /** Catalog product the listing resolved to, when known. */
+  productId: string | null;
   evidence: string | null;
 };
 

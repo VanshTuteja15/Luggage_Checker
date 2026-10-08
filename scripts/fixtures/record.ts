@@ -80,6 +80,19 @@ async function main(): Promise<void> {
   const miss = await fetcher.fetch({ source: cld, url: missing, adapter: "shopify_product_json" });
   save("shopify", "canadaluggagedepot__missing.product.json", miss.body, missing, miss.status, miss.outcome);
 
+  // Sitemaps for discovery: the index as served, and the first product
+  // sitemap reduced to its first 25 <url> entries (format otherwise untouched).
+  const index = await fetcher.fetch({ source: cld, url: `https://${cld.marketHost}/sitemap.xml`, adapter: "sitemap" });
+  save("sitemap", "canadaluggagedepot__sitemap.xml", index.body, `https://${cld.marketHost}/sitemap.xml`, index.status, index.outcome);
+  const child = [...index.body.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/g)].map((m) => m[1].replace(/&amp;/g, "&")).find((u) => /sitemap_products_\d+/.test(u));
+  if (child) {
+    const c = await fetcher.fetch({ source: cld, url: child, adapter: "sitemap", maxBytes: 20_000_000 });
+    const urls = c.body.match(/<url>[\s\S]*?<\/url>/g) ?? [];
+    const head = c.body.slice(0, c.body.indexOf("<url>"));
+    const reduced = `${head}${urls.slice(0, 25).join("\n")}\n</urlset>\n`;
+    save("sitemap", "canadaluggagedepot__products_1.xml", reduced, child, c.status, `${c.outcome} (first 25 of ${urls.length} urls)`);
+  }
+
   writeFileSync(resolve(OUT, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`\n${manifest.length} recordings written to scripts/fixtures/ (manifest.json)`);
 }

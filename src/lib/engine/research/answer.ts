@@ -31,7 +31,8 @@ class UnionFind {
 
 function keysFor(o: AnswerOffer, pack: CategoryPack): string[] {
   const size = o.sizeClass ?? "?";
-  const keys: string[] = [];
+  // Listings already resolved to one catalog product belong together.
+  const keys: string[] = o.productId ? [`product:${o.productId}`] : [];
   for (const i of o.identifiers) {
     if (i.kind === "gtin") keys.push(`gtin:${i.value}`);
     if (i.kind === "model") keys.push(`model:${i.value}|${size}`);
@@ -70,7 +71,8 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
         const b = o.sizeClass;
         // A shared barcode joins offers unless they disagree on size; model and
         // name keys already include the size class.
-        if (a === b || (k.startsWith("gtin:") && (a === null || b === null))) uf.union(prev, i);
+        // product: keys come from identity resolution, which already enforced the size wall.
+        if (k.startsWith("product:") || a === b || (k.startsWith("gtin:") && (a === null || b === null))) uf.union(prev, i);
       }
     }
   });
@@ -91,7 +93,7 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
     const brand = first.brand ?? pack.brandOf(first.title);
     products.push({
       key: gtin ? `gtin-${gtin}` : `${(brand ?? "x").toLowerCase()}-${pack.lineOf(first.title, brand).join("-")}-${first.sizeClass ?? "any"}`,
-      productId: null,
+      productId: sorted.find((o) => o.productId)?.productId ?? null,
       name: productName(sorted),
       brand,
       sizeClass: first.sizeClass,
