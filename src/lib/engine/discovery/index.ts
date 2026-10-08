@@ -17,6 +17,7 @@
 
 import { ADAPTERS } from "../adapters";
 import { canonicalUrl } from "../adapters/base";
+import { decodeHtmlText } from "../extract/structured";
 import { flagOn } from "../flags";
 import { observeOffer } from "../observe";
 import type { EngineRuntime } from "../recorder";
@@ -30,14 +31,7 @@ export type SitemapEntry = {
   image: string | null;
 };
 
-const decode = (s: string) =>
-  s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim();
+const decode = (s: string) => decodeHtmlText(s).trim();
 
 export function parseSitemap(xml: string): {
   kind: "index" | "urlset" | "unknown";

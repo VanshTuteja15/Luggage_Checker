@@ -63,6 +63,9 @@ export function sameBag(pack: CategoryPack, item: TrackedItem, o: RawOffer): boo
   const oSize = pack.sizeClassOf([o.title, ...o.options].join(" "));
   if (size && oSize && size !== oSize) return false;
   if (!size || !oSize) return false;
+  const inches = pack.inchesOf(item.name);
+  const oInches = pack.inchesOf(o.title);
+  if (inches && oInches && inches !== oInches) return false;
   const line = pack.lineOf(`${item.name}`, brand);
   // Words the tracked name leaves out but the store adds ("Expandable") don't count against it.
   const oLine = pack

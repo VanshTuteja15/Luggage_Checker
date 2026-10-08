@@ -39,7 +39,8 @@ function keysFor(o: AnswerOffer, pack: CategoryPack): string[] {
   }
   const brand = (o.brand ?? pack.brandOf(o.title) ?? "").toLowerCase();
   const line = pack.lineOf(o.title, o.brand).sort().join(" ");
-  if (brand && line) keys.push(`name:${brand}|${line}|${size}`);
+  const inches = pack.inchesOf(o.title);
+  if (brand && line) keys.push(`name:${brand}|${line}|${size}${inches ? `|${inches}in` : ""}`);
   return keys;
 }
 
@@ -53,10 +54,19 @@ export function compareOffers(a: AnswerOffer, b: AnswerOffer): number {
   return a.price - b.price;
 }
 
-function productName(offers: AnswerOffer[]): string {
-  // The shortest title, with a trailing " - Colour" variant suffix removed.
+function productName(offers: AnswerOffer[], pack: CategoryPack): string {
+  // The shortest title, without a trailing " - Colour" variant suffix or a
+  // ", Colour" one (Delsey: "ALU'R | 19-Inch Aluminum Carry-On Suitcase, Pink").
   const titles = offers
-    .map((o) => o.title.replace(/\s+-\s+[^-]{2,30}$/, "").trim())
+    .map((o) => {
+      const t = o.title.replace(/\s+-\s+[^-]{2,30}$/, "");
+      const m = t.match(/^(.*\S),\s*([^,]{2,30})$/);
+      const colour =
+        !!m &&
+        (!!pack.colourOf(m[2]) ||
+          (!!o.colour && m[2].toLowerCase().includes(o.colour.toLowerCase())));
+      return (colour && m ? m[1] : t).trim();
+    })
     .sort((a, b) => a.length - b.length);
   return titles[0] ?? offers[0]?.title ?? "";
 }
@@ -105,7 +115,7 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
         ? `gtin-${gtin}`
         : `${(brand ?? "x").toLowerCase()}-${pack.lineOf(first.title, brand).join("-")}-${first.sizeClass ?? "any"}`,
       productId: sorted.find((o) => o.productId)?.productId ?? null,
-      name: productName(sorted),
+      name: productName(sorted, pack),
       brand,
       sizeClass: first.sizeClass,
       identifiers: [...identifiers.values()],

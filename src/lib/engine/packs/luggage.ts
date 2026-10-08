@@ -174,6 +174,17 @@ function classFromCm(n: number): SizeClass | null {
   return "extra_large";
 }
 
+const INCH_RE = /\b(\d{2})(?:\.\d)?\s*(?:"|''|”|-?\s?inch(?:es)?\b|-?\s?in\b)/;
+
+/** "28\"", "28-Inch", "28 in", or CLD's "Large (28)"; 14–34 only. */
+function inchesOf(text: string): number | null {
+  const t = text.toLowerCase().replace(/[’`]/g, "'");
+  const m = t.match(INCH_RE) ?? t.match(/\((\d{2})\)/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return n >= 14 && n <= 34 ? n : null;
+}
+
 function sizeClassOf(text: string): SizeClass | null {
   const t = ` ${text.toLowerCase().replace(/[’`]/g, "'")} `;
 
@@ -203,7 +214,7 @@ function sizeClassOf(text: string): SizeClass | null {
   if (/\blarge\b|\bgrand(?:e)?\b/.test(t)) return "large";
   if (/\bmedium\b|\bmoyen(?:ne)?\b/.test(t)) return "medium";
 
-  const inch = t.match(/\b(\d{2})(?:\.\d)?\s*(?:"|''|”|-?\s?inch(?:es)?\b|-?\s?in\b)/);
+  const inch = t.match(INCH_RE);
   if (inch) {
     const c = classFromInches(Number(inch[1]));
     if (c) return c;
@@ -437,6 +448,7 @@ function parseQuery(raw: string): ParsedQuery {
   const modelHit = gtin ? null : modelOf(withoutPrice, brand);
   const model = modelHit ? modelHit.model : null;
   const sizeClass = sizeClassOf(withoutPrice);
+  const inches = inchesOf(withoutPrice);
   const colour = colourOf(withoutPrice);
   const line = lineOf(withoutPrice, brand).filter(
     (w) => !QUERY_FILLER.has(w) && !OPTIONAL_LINE_WORDS.has(w) && !/^\d{12,14}$/.test(w),
@@ -453,7 +465,7 @@ function parseQuery(raw: string): ParsedQuery {
     ),
   ];
 
-  return { raw: text, tokens, brand, line, sizeClass, colour, gtin, model, maxPrice };
+  return { raw: text, tokens, brand, line, sizeClass, inches, colour, gtin, model, maxPrice };
 }
 
 export const luggagePack: CategoryPack = {
@@ -462,6 +474,7 @@ export const luggagePack: CategoryPack = {
   priceBand: { min: 15, max: 6000 },
   parseQuery,
   sizeClassOf,
+  inchesOf,
   colourOf,
   brandOf,
   lineOf,

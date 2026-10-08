@@ -45,6 +45,19 @@ describe("size classes (identity boundary)", () => {
   });
 });
 
+describe("stated size in inches", () => {
+  it("reads inch marks, words and CLD's (NN) suffix, and ignores dimensions", () => {
+    expect(P.inchesOf("Samsonite Nexis Spinner Large Luggage (31)")).toBe(31);
+    expect(P.inchesOf("Samsonite Proxis Spinner Large (28) Luggage")).toBe(28);
+    expect(P.inchesOf("COSMIQUE | 23-Inch Expandable Carry-On Suitcase, Black")).toBe(23);
+    expect(P.inchesOf('Travelpro Maxlite 5 21" Carry-On')).toBe(21);
+    expect(P.inchesOf("Samsonite Omni 3.0 Large Spinner")).toBeNull();
+    expect(P.inchesOf("Carry-on 22 x 14 x 9 in")).toBeNull();
+    expect(P.inchesOf("Samsonite Rhapsody 2-Piece Set (Carry-On & Medium)")).toBeNull();
+    expect(P.parseQuery("Samsonite Nexis Large 28 inch").inches).toBe(28);
+  });
+});
+
 describe("manufacturer model numbers", () => {
   it("Samsonite model + colour code (Canada Luggage Depot SKU)", () => {
     expect(P.modelOf("135955-1247", "Samsonite")).toEqual({ model: "135955", colourCode: "1247" });

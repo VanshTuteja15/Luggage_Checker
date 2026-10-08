@@ -326,6 +326,8 @@ export type ParsedQuery = {
   /** Product line words (e.g. ["outline", "pro"]). */
   line: string[];
   sizeClass: string | null;
+  /** Size in inches when the query states one ("28\"", "28-inch", "(28)"). */
+  inches: number | null;
   colour: string | null;
   gtin: string | null;
   model: string | null;
@@ -454,6 +456,12 @@ export type CategoryPack = {
   parseQuery(raw: string): ParsedQuery;
   /** Size class from a title/options, e.g. "carry_on". null when unknown. */
   sizeClassOf(text: string): string | null;
+  /**
+   * Stated size in inches, null when the title gives none. Two stated sizes
+   * that differ are two products even within one size class (Samsonite Nexis
+   * Large 28 vs 31).
+   */
+  inchesOf(text: string): number | null;
   colourOf(text: string): string | null;
   brandOf(text: string): string | null;
   /** Significant product-line words (brand, size, colour, filler removed). */

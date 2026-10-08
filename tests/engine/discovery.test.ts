@@ -271,3 +271,13 @@ describe("one language per product page", () => {
     ]);
   });
 });
+
+describe("sitemap text", () => {
+  it("decodes named and numeric entities once (Delsey's ALU&apos;R)", () => {
+    const xml = `<urlset xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"><url><loc>https://delsey.ca/products/alu-r?a=1&amp;b=2</loc>
+<image:image><image:title>ALU&apos;R | 19-Inch Valise &#xE0; &amp;lt;b&amp;gt; &#8217;</image:title></image:image></url></urlset>`;
+    const [e] = parseSitemap(xml).entries;
+    expect(e.loc).toBe("https://delsey.ca/products/alu-r?a=1&b=2");
+    expect(e.title).toBe("ALU'R | 19-Inch Valise à &lt;b&gt; ’");
+  });
+});

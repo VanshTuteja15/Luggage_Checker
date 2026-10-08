@@ -198,6 +198,21 @@ describe("identity resolution", () => {
     expect(domestic.listing.productId).not.toBe(expandable.listing.productId);
   });
 
+  it("two stated sizes in one size class are two products, with no review (Nexis Large 28 vs 31)", async () => {
+    const store = new MemoryEngineStore(SOURCE_SEED);
+    const l28 = await resolveNew(
+      store,
+      input("canadaluggagedepot", "Samsonite Nexis Spinner Large Luggage (28)"),
+    );
+    const l31 = await resolveNew(
+      store,
+      input("canadaluggagedepot", "Samsonite Nexis Spinner Large Luggage (31)"),
+    );
+    expect(l31.listing.productId).not.toBe(l28.listing.productId);
+    expect(l31.r.method).toBe("new");
+    expect(await store.listReviews("pending", 10)).toHaveLength(0);
+  });
+
   it("an unknown size is kept apart and flagged; a GTIN conflict is flagged", async () => {
     const store = new MemoryEngineStore(SOURCE_SEED);
     const noSize = await resolveNew(

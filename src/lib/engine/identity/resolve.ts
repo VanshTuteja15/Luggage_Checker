@@ -24,14 +24,16 @@ export type Resolution = {
 const ids = (list: Identifier[], kind: Identifier["kind"]) =>
   list.filter((i) => i.kind === kind).map((i) => i.value);
 
-/** brand|line words (sorted)|size: the name-level identity of a product. */
+/** brand|line words (sorted)|size[|inches]: the name-level identity of a product. */
 export function identityKey(
   brand: string | null,
   line: string[],
   sizeClass: string | null,
+  inches: number | null = null,
 ): string | null {
   if (!brand || line.length === 0 || !sizeClass) return null;
-  return `${brand.toLowerCase()}|${[...line].sort().join(" ")}|${sizeClass}`;
+  const base = `${brand.toLowerCase()}|${[...line].sort().join(" ")}|${sizeClass}`;
+  return inches ? `${base}|${inches}in` : base;
 }
 
 function jaccard(a: string[], b: string[]): number {
@@ -113,6 +115,7 @@ export async function resolveListing(
   const sizeClass = listing.sizeClass ?? pack.sizeClassOf(listing.title);
   const brand = listing.brand ?? pack.brandOf(listing.title);
   const line = pack.lineOf(listing.title, brand);
+  const inches = pack.inchesOf(listing.title);
   const colourCode = colourCodeOf(listing);
   const reasons: string[] = [];
 
@@ -154,7 +157,7 @@ export async function resolveListing(
   }
 
   /* 3. brand + line + size class */
-  const key = identityKey(brand, line, sizeClass);
+  const key = identityKey(brand, line, sizeClass, inches);
   if (key) {
     const exact = await store.findProductByIdentityKey(key);
     if (exact) {
@@ -171,6 +174,9 @@ export async function resolveListing(
     for (const p of candidates) {
       const pLine = (p.line ?? "").split(" ").filter(Boolean);
       if (!versionsAgree(pLine, line)) continue;
+      // Both state a size and they differ (Nexis Large 28 vs 31): not the same bag.
+      const pInches = Number(p.identityKey?.match(/\|(\d+)in$/)?.[1]) || pack.inchesOf(p.name);
+      if (inches && pInches && inches !== pInches) continue;
       const score = jaccard(pLine, line);
       if (!best || score > best.score) best = { p, score };
     }

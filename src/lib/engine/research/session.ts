@@ -784,15 +784,24 @@ async function planListings(
     ).filter((l): l is ListingRecord => !!l);
     if (listings.length) return listings;
   }
-  const found = await store.searchListings(parsed, {
-    limit: 150,
-    sourceIds: session.storeIds ?? undefined,
-  });
+  // A query that states inches ("Nexis Large 28") skips listings that state another size.
+  const fits = (l: ListingRecord) => {
+    const n = parsed.inches ? deps.pack.inchesOf(l.title) : null;
+    return !n || n === parsed.inches;
+  };
+  const found = (
+    await store.searchListings(parsed, {
+      limit: 150,
+      sourceIds: session.storeIds ?? undefined,
+    })
+  ).filter(fits);
   if (found.length > 0) return found;
   // Nothing indexed: optional Tavily discovery (flag discovery.tavily) may add
   // listing URLs on verifiable stores; their prices are then read by us.
   const added = await discoverViaTavily(deps.rt, deps.pack, parsed);
   return added
-    ? store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined })
+    ? (
+        await store.searchListings(parsed, { limit: 150, sourceIds: session.storeIds ?? undefined })
+      ).filter(fits)
     : found;
 }

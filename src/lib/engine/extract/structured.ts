@@ -45,13 +45,25 @@ export type StructuredResult = {
 };
 
 const LD_RE = /<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-const META_RE = /<meta\s+[^>]*?(?:property|name|itemprop)\s*=\s*["']([^"']+)["'][^>]*?content\s*=\s*["']([^"']*)["'][^>]*>/gi;
-const META_RE_REV = /<meta\s+[^>]*?content\s*=\s*["']([^"']*)["'][^>]*?(?:property|name|itemprop)\s*=\s*["']([^"']+)["'][^>]*>/gi;
+const META_RE =
+  /<meta\s+[^>]*?(?:property|name|itemprop)\s*=\s*["']([^"']+)["'][^>]*?content\s*=\s*["']([^"']*)["'][^>]*>/gi;
+const META_RE_REV =
+  /<meta\s+[^>]*?content\s*=\s*["']([^"']*)["'][^>]*?(?:property|name|itemprop)\s*=\s*["']([^"']+)["'][^>]*>/gi;
 
 const META_KEYS = new Set([
-  "og:type", "og:title", "og:url", "og:image", "og:price:amount", "og:price:currency", "product:price:amount",
-  "product:price:currency", "product:availability", "product:sale_price:amount", "product:original_price:amount",
-  "product:retailer_item_id", "product:brand",
+  "og:type",
+  "og:title",
+  "og:url",
+  "og:image",
+  "og:price:amount",
+  "og:price:currency",
+  "product:price:amount",
+  "product:price:currency",
+  "product:availability",
+  "product:sale_price:amount",
+  "product:original_price:amount",
+  "product:retailer_item_id",
+  "product:brand",
 ]);
 
 export function decodeEntities(s: string): string {
@@ -61,6 +73,50 @@ export function decodeEntities(s: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
+}
+
+const NAMED_ENTITIES: Record<string, string> = {
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+  nbsp: " ",
+  rsquo: "’",
+  lsquo: "‘",
+  rdquo: "”",
+  ldquo: "“",
+  ndash: "–",
+  mdash: "—",
+  hellip: "…",
+  reg: "®",
+  trade: "™",
+  eacute: "é",
+  Eacute: "É",
+  egrave: "è",
+  ecirc: "ê",
+  agrave: "à",
+  acirc: "â",
+  ccedil: "ç",
+  icirc: "î",
+  iuml: "ï",
+  ocirc: "ô",
+  ucirc: "û",
+};
+
+/**
+ * Plain text (titles, meta values) → characters, in one pass so "&amp;lt;"
+ * stays "&lt;". Named French accents and numeric entities included: Delsey's
+ * sitemap says "ALU&apos;R". Not for JSON text (see decodeEntities).
+ */
+export function decodeHtmlText(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const cp = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+    }
+    if (e === "amp") return "&";
+    return NAMED_ENTITIES[e] ?? m;
+  });
 }
 
 function str(v: unknown): string | null {
@@ -126,7 +182,11 @@ function toOffers(raw: unknown): StructuredOffer[] {
         });
       continue;
     }
-    const specs = Array.isArray(node.priceSpecification) ? node.priceSpecification : node.priceSpecification ? [node.priceSpecification] : [];
+    const specs = Array.isArray(node.priceSpecification)
+      ? node.priceSpecification
+      : node.priceSpecification
+        ? [node.priceSpecification]
+        : [];
     let price = parsePrice(node.price);
     let listPrice: number | null = null;
     let currency = str(node.priceCurrency);
@@ -156,7 +216,9 @@ function toOffers(raw: unknown): StructuredOffer[] {
 
 function toProduct(node: Record<string, unknown>): StructuredProduct {
   const variants = Array.isArray(node.hasVariant)
-    ? (node.hasVariant as unknown[]).filter((v): v is Record<string, unknown> => !!v && typeof v === "object").map(toProduct)
+    ? (node.hasVariant as unknown[])
+        .filter((v): v is Record<string, unknown> => !!v && typeof v === "object")
+        .map(toProduct)
     : [];
   return {
     type: types(node).join(","),
@@ -192,10 +254,18 @@ function walk(value: unknown, found: Record<string, unknown>[]): void {
 
 function microdata(html: string): StructuredResult["microdata"] {
   const attr = (prop: string) =>
-    html.match(new RegExp(`itemprop\\s*=\\s*["']${prop}["'][^>]*?content\\s*=\\s*["']([^"']+)["']`, "i"))?.[1] ??
-    html.match(new RegExp(`content\\s*=\\s*["']([^"']+)["'][^>]*?itemprop\\s*=\\s*["']${prop}["']`, "i"))?.[1] ??
+    html.match(
+      new RegExp(`itemprop\\s*=\\s*["']${prop}["'][^>]*?content\\s*=\\s*["']([^"']+)["']`, "i"),
+    )?.[1] ??
+    html.match(
+      new RegExp(`content\\s*=\\s*["']([^"']+)["'][^>]*?itemprop\\s*=\\s*["']${prop}["']`, "i"),
+    )?.[1] ??
     null;
-  return { price: parsePrice(attr("price")), currency: attr("priceCurrency"), availability: attr("availability") };
+  return {
+    price: parsePrice(attr("price")),
+    currency: attr("priceCurrency"),
+    availability: attr("availability"),
+  };
 }
 
 export function extractStructured(html: string): StructuredResult {
@@ -218,27 +288,46 @@ export function extractStructured(html: string): StructuredResult {
   const meta: Record<string, string> = {};
   for (const m of html.matchAll(META_RE)) {
     const k = m[1].toLowerCase();
-    if (META_KEYS.has(k) && !(k in meta)) meta[k] = decodeEntities(m[2]);
+    if (META_KEYS.has(k) && !(k in meta)) meta[k] = decodeHtmlText(m[2]);
   }
   for (const m of html.matchAll(META_RE_REV)) {
     const k = m[2].toLowerCase();
-    if (META_KEYS.has(k) && !(k in meta)) meta[k] = decodeEntities(m[1]);
+    if (META_KEYS.has(k) && !(k in meta)) meta[k] = decodeHtmlText(m[1]);
   }
-  return { jsonLdBlocks: blocks, jsonLdParseErrors: errors, products: nodes.map(toProduct), meta, microdata: microdata(html) };
+  return {
+    jsonLdBlocks: blocks,
+    jsonLdParseErrors: errors,
+    products: nodes.map(toProduct),
+    meta,
+    microdata: microdata(html),
+  };
 }
 
 /** The price the customer is shown, from meta tags (falls back to microdata). */
-export function displayedPrice(s: StructuredResult): { price: number | null; currency: string | null } {
-  const price = parsePrice(s.meta["product:sale_price:amount"] ?? s.meta["og:price:amount"] ?? s.meta["product:price:amount"] ?? "") ?? s.microdata.price;
-  const currency = s.meta["og:price:currency"] ?? s.meta["product:price:currency"] ?? s.microdata.currency ?? null;
+export function displayedPrice(s: StructuredResult): {
+  price: number | null;
+  currency: string | null;
+} {
+  const price =
+    parsePrice(
+      s.meta["product:sale_price:amount"] ??
+        s.meta["og:price:amount"] ??
+        s.meta["product:price:amount"] ??
+        "",
+    ) ?? s.microdata.price;
+  const currency =
+    s.meta["og:price:currency"] ?? s.meta["product:price:currency"] ?? s.microdata.currency ?? null;
   return { price, currency };
 }
 
-export function schemaAvailability(v: string | null): "in_stock" | "out_of_stock" | "preorder" | "backorder" | "unknown" {
+export function schemaAvailability(
+  v: string | null,
+): "in_stock" | "out_of_stock" | "preorder" | "backorder" | "unknown" {
   if (!v) return "unknown";
   const t = v.toLowerCase();
   if (/instock|in stock|in_stock|limitedavailability|onlineonly/.test(t)) return "in_stock";
-  if (/outofstock|out of stock|out_of_stock|soldout|sold out|discontinued/.test(t)) return "out_of_stock";
+  if (/outofstock|out of stock|out_of_stock|soldout|sold out|discontinued/.test(t))
+    return "out_of_stock";
   if (/preorder|presale/.test(t)) return "preorder";
   if (/backorder/.test(t)) return "backorder";
   return "unknown";
