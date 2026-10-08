@@ -280,9 +280,11 @@ export type Observation = {
   listingId: string;
   sourceId: string;
   adapter: AdapterId;
+  /** Always > 0 on shown readings; 0 only on a rejected reading that had no price. */
   price: number;
   listPrice: number | null;
-  currency: "CAD";
+  /** "CAD" on every shown reading; rejected readings keep the source's currency. */
+  currency: string;
   availability: Availability;
   seller: string | null;
   condition: string | null;
@@ -295,7 +297,11 @@ export type Observation = {
   sessionId: string | null;
 };
 
-export type ObservationInput = Omit<Observation, "id">;
+/**
+ * A rejected reading is still evidence: it keeps the source's own currency
+ * (e.g. USD) and may have no price at all. Shown readings are CAD with a price.
+ */
+export type ObservationInput = Omit<Observation, "id" | "price" | "currency"> & { price: number | null; currency: string };
 
 /* ── Queries and research sessions ────────────────────────────────── */
 
@@ -333,6 +339,12 @@ export type AnswerOffer = {
   retailer: string;
   url: string;
   title: string;
+  brand: string | null;
+  sizeClass: string | null;
+  identifiers: Identifier[];
+  imageUrl: string | null;
+  /** Validation caveats a low-confidence price is shown with. */
+  reasons: string[];
   price: number;
   listPrice: number | null;
   currency: "CAD";

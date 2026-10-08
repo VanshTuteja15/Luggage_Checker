@@ -8,7 +8,9 @@
 /* ------------------------------------------------------------------ */
 
 import { engineConfig } from "@/lib/engine/config";
+import { luggagePack } from "@/lib/engine/packs/luggage";
 import { createRuntime } from "@/lib/engine/recorder";
+import { ResearchManager } from "@/lib/engine/research/manager";
 import { SOURCE_SEED } from "@/lib/engine/registry";
 import { MemoryEngineStore } from "@/lib/engine/store/memory";
 import { PgEngineStore } from "@/lib/engine/store/pg";
@@ -44,7 +46,25 @@ async function main(): Promise<void> {
   await queue.start();
   await registerJobs(queue, rt);
 
-  const server = createWorkerServer({ secret, queue, version: VERSION, storeKind: store.kind });
+  // Research sessions start the moment Vercel's signed request arrives (no
+  // queue polling in the way of the 3-second first price).
+  const research = new ResearchManager(rt, luggagePack, {
+    maxConcurrent: Number(process.env.WORKER_MAX_SESSIONS ?? 4) || 4,
+    onError: (sessionId, err) => log("error", "research session crashed", { sessionId, err }),
+  });
+  const server = createWorkerServer({
+    secret,
+    queue,
+    version: VERSION,
+    storeKind: store.kind,
+    runResearch: (sessionId) => {
+      log("info", "research session accepted", { sessionId });
+      void research.start(sessionId).then((answer) =>
+        log("info", "research session finished", { sessionId, firstPriceMs: answer?.firstPriceMs ?? null, totalMs: answer?.totalMs ?? null, deadlineHit: answer?.deadlineHit ?? null }),
+      );
+    },
+    activeSessions: () => research.active(),
+  });
   const port = Number(process.env.PORT ?? 8787);
   server.listen(port, () => log("info", "worker listening", { port, store: store.kind, queue: queue.kind, version: VERSION }));
 
@@ -57,6 +77,7 @@ async function main(): Promise<void> {
     stopping = true;
     log("info", "shutting down", { signal });
     server.close();
+    await research.drain(15_000);
     await queue.stop().catch((err: unknown) => log("error", "queue stop failed", { err }));
     await rt.recorder.stop();
     await store.close().catch(() => undefined);

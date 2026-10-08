@@ -348,7 +348,8 @@ export class MemoryEngineStore implements EngineStore {
   /* ── observations ───────────────────────────────────────────────── */
 
   async insertObservation(o: ObservationInput): Promise<Observation> {
-    const rec: Observation = { ...structuredClone(o), id: String(++this.obsSeq) };
+    // Same mapping as Postgres: a rejected reading without a price reads back as 0.
+    const rec: Observation = { ...structuredClone(o), price: o.price ?? 0, id: String(++this.obsSeq) };
     this.observations.push(rec);
     if (rec.validation.outcome !== "rejected") this.collapse(rec);
     return structuredClone(rec);

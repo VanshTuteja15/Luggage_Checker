@@ -150,9 +150,9 @@ function toObservation(r: Row): Observation {
     listingId: r.listing_id,
     sourceId: r.source_id,
     adapter: r.adapter as AdapterId,
-    price: Number(r.price),
+    price: Number(r.price ?? 0),
     listPrice: num(r.list_price),
-    currency: "CAD",
+    currency: r.currency ?? "unknown",
     availability: r.availability as Availability,
     seller: r.seller,
     condition: r.condition,
@@ -561,7 +561,7 @@ export class PgEngineStore implements EngineStore {
     const rows = await this.q("SELECT * FROM price_ranges WHERE listing_id = $1 ORDER BY last_seen_at DESC, id DESC LIMIT $2", [listingId, limit]);
     return rows.map((r) => ({
       listingId: r.listing_id,
-      price: Number(r.price),
+      price: Number(r.price ?? 0),
       availability: r.availability,
       firstSeenAt: isoReq(r.first_seen_at),
       lastSeenAt: isoReq(r.last_seen_at),

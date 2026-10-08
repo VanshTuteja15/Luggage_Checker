@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownUp,
@@ -31,6 +31,20 @@ import {
 import { PRIORITY_RETAILERS, retailerColor } from "@/lib/retailers";
 import type { AlsoCheck, Offer, SearchProduct } from "@/lib/search/types";
 import { useStore } from "@/lib/store";
+import { ResearchResults, type ResearchSort } from "@/components/research/ResearchResults";
+import { toSearchProduct } from "@/components/research/track";
+import type { AnswerProduct } from "@/lib/engine/types";
+import { useResearch, useResearchInfo } from "@/lib/research-client";
+
+const MODE_KEY = "luggagetracker.searchMode";
+
+const TIME = new Intl.DateTimeFormat("en-CA", { hour: "numeric", minute: "2-digit", timeZone: "America/Edmonton" });
+
+/** Web-research prices are read by a search provider, not by us: say so. */
+function webResearchLabel(fetchedAt: string): string {
+  const t = Date.parse(fetchedAt);
+  return Number.isFinite(t) ? `Web research · read ${TIME.format(new Date(t))}` : "Web research";
+}
 
 /** "cached 12 min ago" / "cached 3h ago" — short enough for a chip. */
 function formatAge(minutes: number): string {
@@ -81,6 +95,36 @@ export default function SearchPage() {
   const provider = useSearchProvider(authed);
   const { data: tracked } = useTrackedProducts(30, authed);
 
+  // Verified prices (the new engine) vs web research (Tavily). The default
+  // follows the engine.default_search flag; a choice made here is remembered.
+  const research = useResearch();
+  const researchInfo = useResearchInfo(authed);
+  const [modePref, setModePref] = useState<"verified" | "web" | null>(null);
+  const [researchSort, setResearchSort] = useState<ResearchSort>("price-asc");
+  const trackVerified = useTrackProduct();
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(MODE_KEY);
+      if (v === "verified" || v === "web") setModePref(v);
+    } catch {
+      /* storage unavailable: use the default */
+    }
+  }, []);
+  const engineAvailable = researchInfo.data?.available === true;
+  const engineMode = engineAvailable && (modePref ? modePref === "verified" : researchInfo.data?.defaultEngine === true);
+  const chooseMode = (m: "verified" | "web") => {
+    setModePref(m);
+    try {
+      window.localStorage.setItem(MODE_KEY, m);
+    } catch {
+      /* not remembered, still applied */
+    }
+  };
+  const trackAnswerProduct = (p: AnswerProduct) => {
+    const sp = toSearchProduct(p);
+    if (sp) trackVerified.mutate(sp);
+  };
+
   const trackedKeys = useMemo(() => {
     const set = new Set<string>();
     for (const p of tracked ?? []) {
@@ -97,15 +141,17 @@ export default function SearchPage() {
       setQuery(term);
       setLastTerm(term);
       addSearch(term);
-      void search.run({ query: term, refresh: forceRefresh });
+      if (engineMode) void research.search(term);
+      else void search.run({ query: term, refresh: forceRefresh });
     },
-    [query, addSearch, search],
+    [query, addSearch, search, research, engineMode],
   );
 
   const response = search.data;
-  const notConfigured = provider.data && provider.data.configured === false;
+  const notConfigured = !engineMode && provider.data && provider.data.configured === false;
   const lowBudget = (provider.data?.budgets ?? []).find((b) => b.remaining <= 25 && !b.exhausted);
-  const hasSearched = search.status !== "idle";
+  const researchRunning = research.state.status === "running" || research.state.status === "starting";
+  const hasSearched = engineMode ? research.state.status !== "idle" : search.status !== "idle";
 
   const products = useMemo(
     () => (response ? sortProducts(response.products, sort) : []),
@@ -115,7 +161,11 @@ export default function SearchPage() {
   return (
     <AppLayout
       title="Search Products"
-      subtitle="Live lowest prices from Amazon, Walmart, Samsonite and 15+ Canadian retailers"
+      subtitle={
+        engineMode
+          ? "Prices verified live at Canadian stores, cheapest first — every price shows where and when it was read"
+          : "Live lowest prices from Amazon, Walmart, Samsonite and 15+ Canadian retailers"
+      }
       actions={<div />}
     >
       {/* ── Search bar ──────────────────────────────────────── */}
@@ -128,12 +178,37 @@ export default function SearchPage() {
           onRemoveHistory={removeSearch}
           onClearHistory={clearSearches}
           suggestions={SUGGESTIONS}
-          pending={search.isPending}
+          pending={engineMode ? researchRunning : search.isPending}
           placeholder="Search like Google — e.g. Samsonite Outline Pro carry-on"
         />
 
+        {engineAvailable && (
+          <div className="mt-3 flex justify-center">
+            <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-xs" role="group" aria-label="Price source">
+              <button
+                type="button"
+                aria-pressed={engineMode}
+                onClick={() => chooseMode("verified")}
+                className={`rounded-md px-3 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${engineMode ? "bg-muted font-medium text-foreground" : "text-muted-foreground"}`}
+              >
+                Verified prices
+              </button>
+              <button
+                type="button"
+                aria-pressed={!engineMode}
+                onClick={() => chooseMode("web")}
+                className={`rounded-md px-3 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${!engineMode ? "bg-muted font-medium text-foreground" : "text-muted-foreground"}`}
+              >
+                Web research
+              </button>
+            </div>
+          </div>
+        )}
+
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          {provider.data?.providerLabel
+          {engineMode
+            ? "Read directly from each store's own data or official channel · CAD · stores we can't check are listed, never guessed"
+            : provider.data?.providerLabel
             ? `Live prices via ${provider.data.providerLabel} · CAD`
             : "Live prices from Amazon, Walmart, Samsonite and other Canadian retailers"}
           {lowBudget && (
@@ -194,8 +269,22 @@ export default function SearchPage() {
         </div>
       )}
 
+      {/* ── Verified prices (research session) ──────────────── */}
+      {engineMode && hasSearched && (
+        <ResearchResults
+          view={research.state}
+          sort={researchSort}
+          onSort={setResearchSort}
+          onReverify={research.reverify}
+          onCancel={() => void research.cancel()}
+          onTrack={trackAnswerProduct}
+          trackedKeys={trackedKeys}
+          trackPending={trackVerified.isPending}
+        />
+      )}
+
       {/* ── Searching (nothing to show yet) ─────────────────── */}
-      {search.status === "searching" && (
+      {!engineMode && search.status === "searching" && (
         <div className="mx-auto max-w-4xl space-y-3">
           <div className="flex items-center justify-center gap-3 py-6 text-sm text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -218,7 +307,7 @@ export default function SearchPage() {
       )}
 
       {/* ── Error ───────────────────────────────────────────── */}
-      {search.status === "error" && (
+      {!engineMode && search.status === "error" && (
         <EmptyState
           title="Search failed"
           description={search.error ?? "Something went wrong."}
@@ -231,7 +320,7 @@ export default function SearchPage() {
       )}
 
       {/* ── Results (first results while reading, then final) ─ */}
-      {response && (search.status === "reading" || search.status === "done") && (
+      {!engineMode && response && (search.status === "reading" || search.status === "done") && (
         <div className="mx-auto max-w-4xl">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-start gap-2 text-sm">
@@ -489,6 +578,7 @@ function ProductResult({
           <div className="text-right">
             <p className="text-lg font-bold leading-tight">{usd(product.lowestPrice)}</p>
             <p className="text-[11px] text-muted-foreground">at {best.retailer}</p>
+            <p className="text-[11px] text-muted-foreground">{webResearchLabel(best.fetchedAt)}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -563,6 +653,7 @@ function OfferRow({ offer, position, isBest }: { offer: Offer; position: number;
       {!offer.inStock && (
         <span className="shrink-0 rounded bg-danger-soft px-1.5 py-0.5 text-xs text-danger">Out of stock</span>
       )}
+      <span className="shrink-0 text-[11px] text-muted-foreground">{webResearchLabel(offer.fetchedAt)}</span>
       <span
         className={`shrink-0 tabular-nums ${isBest ? "font-semibold text-success" : ""}`}
         title={offer.evidence ? `Read from the page: ${offer.evidence}` : undefined}
@@ -630,6 +721,7 @@ function AllStoresList({ products, sort }: { products: SearchProduct[]; sort: So
                 LOWEST
               </span>
             )}
+            <span className="shrink-0 text-[11px] text-muted-foreground">{webResearchLabel(o.fetchedAt)}</span>
             <span
               className={`w-24 shrink-0 text-right tabular-nums ${i === 0 && t === 0 ? "font-bold text-success" : "font-semibold"}`}
               title={o.evidence ? `Read from the page: ${o.evidence}` : undefined}

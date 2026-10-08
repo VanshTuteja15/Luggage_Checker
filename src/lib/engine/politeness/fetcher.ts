@@ -65,6 +65,7 @@ export type PoliteResponse = {
 };
 
 const MAX_REDIRECTS = 3;
+const LATE_GRACE_MS = 4_000;
 const KEEP_HEADERS = ["content-type", "age", "last-modified", "etag", "cache-control", "cf-cache-status", "cf-mitigated", "retry-after", "location", "content-language", "x-cache"];
 
 /** In-process health when no store is wired (tests, scripts). */
@@ -190,7 +191,9 @@ export class PoliteFetcher {
   private async send(req: PoliteRequest): Promise<PoliteResponse> {
     const started = this.now();
     const controller = new AbortController();
-    const timeoutMs = req.deadlineAt ? Math.max(500, Math.min(this.timeoutMs, req.deadlineAt - this.now())) : this.timeoutMs;
+    // A request may finish a little after the session deadline: the answer
+    // is already sent by then, but the reading is still stored as evidence.
+    const timeoutMs = req.deadlineAt ? Math.max(500, Math.min(this.timeoutMs, req.deadlineAt - this.now() + LATE_GRACE_MS)) : this.timeoutMs;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const onAbort = () => controller.abort();
     req.signal?.addEventListener("abort", onAbort, { once: true });
