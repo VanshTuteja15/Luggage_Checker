@@ -4,7 +4,7 @@ Things the engine cannot (and must not) do for itself: accounts, keys, publishin
 
 Secrets go **only** in `.env.local` (local) or the host's environment settings (Vercel / worker host). Never paste them in chat, commits or issues.
 
-_This file grows with every phase; the final, ordered go-live checklist is at the end._
+_The ordered go-live checklist is at the end._
 
 ## 1. Publish the UCP agent profile → unlocks 6–10 Shopify stores
 
@@ -44,7 +44,7 @@ Travelpro, Briggs & Riley, Heys, Monos and Away publish a UCP agent channel and 
 ## 6. Dealer feeds (Samsonite, TUMI, others)
 
 Samsonite.ca and TUMI.ca block automated requests (PerimeterX CAPTCHA). Their prices can only come from a dealer price list.
-- Ask the Samsonite Canada rep for the dealer price list / EDI catalog (also covers TUMI and American Tourister). Upload it through `/admin` → Feeds once received (CSV columns documented there).
+- Ask the Samsonite Canada rep for the dealer price list / EDI catalog (also covers TUMI and American Tourister). Upload it through `/admin` → Data entry → Feed import once received, with the date the price list is valid from (columns are listed on that page). Prices then show as "Feed as of <date>".
 
 ## 7. Run the new database migrations in Supabase
 
@@ -56,7 +56,7 @@ The engine's tables don't exist in the live project until you run these. Each fi
 4. Run `npm run db:seed`, then paste and run the generated `supabase/seed/sources.sql` (24 stores + default flags).
 5. Make yourself an admin (for `/admin`): find your user id under Authentication → Users, then run
    `insert into app_admins (user_id, note) values ('<your-user-id>', 'owner');`
-6. Later migrations (005+) are run the same way, in number order.
+6. Paste and run `supabase/migrations/005_scheduler_alerts.sql` (alerts sent once per day, engine run log). Later migrations are run the same way, in number order.
 
 **Check:** `select count(*) from sources;` returns 24.
 
@@ -83,7 +83,33 @@ The engine was checked end to end without a browser session (real research runs 
    - Canada Luggage Depot rows labelled "Verified live · <time>" with a source link;
    - "Couldn't verify" rows for Samsonite.ca, TUMI.ca, Sporting Life and Simons (blocked), and "Link only" rows for Amazon, Walmart, Costco, Best Buy, Canadian Tire, London Drugs and eBay (until item 3).
 3. Press **Re-verify now** once; the times update.
-4. Open **Admin** (left menu). Check that **Sources** lists 24 stores with health, **Failures** shows the blocked stores' challenge responses, and **Flags** shows `engine.default_search` off.
+4. Open **Admin** (left menu). Check that **Sources** lists 24 stores with health, **Failures** shows the blocked stores' challenge responses, and **Flags** shows `engine.default_search` on (search opens on Verified prices) and `discovery.tavily` off.
 5. On a phone (or a narrow browser window) repeat step 2: rows stack, nothing scrolls sideways.
 
 **Local tip:** with the local dev database use `127.0.0.1`, not `localhost`, in `DATABASE_URL` (`npm run db:dev -- up` prints the right one). On Windows each new connection to "localhost" tries IPv6 first and cost ~1 s in our measurements. For a local sign-in, the signed-in user's id must exist in the local `auth.users` table (insert it once), because research sessions reference it.
+
+## 11. Review the privacy summary and terms pages (⚖, 20 min)
+
+The app now has public `/privacy` and `/terms` pages (linked from the sign-in page). They describe what the code actually does (data kept, processors, 180-day log retention, no trackers, prices before GST/HST), but they are plain-language summaries, not legal advice.
+- Have them reviewed, and add the contact address Luggage Depot wants people to use for data requests (the pages currently say "contact Luggage Depot Inc.").
+
+---
+
+## Go-live checklist (in order)
+
+Each line links to its section above. Items marked ⚖ need a person with authority to decide.
+
+1. ☐ **Rotate the leaked keys** (§9). Do this first; everything below uses the new values.
+2. ☐ **Database:** run migrations 004 and 005, the registry seed, and add yourself to `app_admins` (§7).
+3. ☐ **Vercel environment:** `DATABASE_URL` (session pooler), `CRON_SECRET`, `CRAWLER_CONTACT` (§2), existing Supabase/Tavily/Resend/Gemini keys. See `.env.example`.
+4. ☐ **Deploy** the `feat/price-engine` branch to a preview, then merge to `main` when the checks below pass.
+5. ☐ **Build the index:** `npm run engine:discover` with the production `DATABASE_URL` (or `/admin` → Data entry → Discovery).
+6. ☐ **Publish the UCP agent profile:** set `UCP_AGENT_PROFILE_URL=https://<app>/.well-known/ucp-agent`, redeploy (§1).
+7. ☐ ⚖ **UCP legal read** for the stores with an anti-scrape clause, or turn `policy.ucp_on_restricted_stores` off (§5).
+8. ☐ **Look at the screens once, signed in** (§10): verified search, Re-verify, `/admin`, phone width.
+9. ☐ **Worker** (recommended): choose office PC or Oracle VM, set `WORKER_URL` + `WORKER_SHARED_SECRET`, check `/health` (§8). Re-run `npm run probe:sources` from that host first.
+10. ☐ **Free extra coverage when ready:** eBay keys (§3), three terms reads (§4), dealer feeds (§6).
+11. ☐ ⚖ **Privacy/terms review** and a contact address (§11).
+12. ☐ **Keep Tavily on the free plan with pay-as-you-go off** (it stays as the optional Web research mode).
+
+After launch: the daily routine in [`RUNBOOK.md`](./RUNBOOK.md) §6 (two minutes in `/admin`).

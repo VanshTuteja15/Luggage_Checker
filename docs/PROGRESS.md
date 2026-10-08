@@ -14,16 +14,12 @@ Plan and rules: [`MASTER_PROMPT.md`](../MASTER_PROMPT.md). Things only a human c
 | _(P5 details)_ | | `discovery/index.ts`: product sitemaps of stores whose storefront we may read (new URLs first, then stalest, per-run budget; Shopify `<lastmod>` is identical for every product (finding), so not trusted), UCP catalog discovery for agent-channel stores, optional Tavily discovery (flag, URLs only). `identity/resolve.ts`: GTIN → model (+colour code, same size) → brand+line+size → review queue; version numbers must agree; sizes never merge; conflicts flagged. `identity/review.ts` + admin API (`/api/admin/review`, `/review/[id]`, `/products/merge`, `/listings/[id]/split`, admin via `app_admins`). Worker jobs `discover.source`, `discover.refresh`. Tests: **identity 7/7** (same UPC at 3 stores → 1 product; Carry-On/Medium/Large never merge), **discovery 5/5** (recorded CLD sitemaps). 139 root tests pass. |
 | **P6 Scheduler + tracked verification + alerts + report** | ✅ done | `jobs/verify-tracked.ts`: tracked bags (stalest first, product + fetch budgets) → their listings on permitted stores (known links, UPC, brand+line+size) → re-read via the engine → identity guard (UPC, else brand+size+line with versions) → lowest verified price per store written through `bridge/tracked.ts` (same tables and pattern as `refresh.ts`; protected files untouched) → tracked page, history and the **existing Resend daily report** run on engine observations. Target-price alerts (`sendPriceAlert`) once per user/product/day (`price_alerts_sent`, migration **005**, + `engine_runs`). Scheduling: Vercel Cron's existing `/api/cron/fetch-prices` (CRON_SECRET) now runs the engine first (signed worker jobs `verify.tracked`/`discover.refresh`/`sources.health`, or inline with a 120 s limit) and keeps Tavily only for products the engine couldn't verify (none once `engine.default_search` is on). No extra cron entry (Vercel Hobby limits). Tests: **5/5** (verify + write + alert once/day, wrong-size guard, budget cap, identity guard, cron 401 without secret). `test:db` **48/48** incl. 005. |
 | **P7 Admin/observability** | ✅ done | `/admin` (admins only, via `app_admins`; menu link) with tabs **Sources** (24 stores: listings, 24 h attempts and block rate, 7-day success rate, circuit state, and every route marked usable or with the reason it isn't), **Failures** (recent blocked/failed fetches plus validation rejections), **Review queue** (approve / reject / split / merge), **Sessions** (recent sessions; first-price and total p50/p95; deadline hits), **Flags** (known flags only, who/when recorded), **Data entry** (dealer feed CSV/JSON import with an as-of date, manual price with a checked date, discovery trigger). APIs `/api/admin/overview`, `/api/admin/flags`, `/api/admin/actions` (zod). Tests: **admin 4/4** (source health, block rates and recent failures visible; unknown flags refused; feed rows validated and dated; manual entry refuses links to other sites). |
-| P8 Shadow mode + test set | ⏳ | |
-| P9 Hardening + docs | ⏳ | |
+| **P8 Shadow mode + test set** | ✅ done, **cut over** | [`SHADOW_REPORT.md`](./SHADOW_REPORT.md). 35-product test set (`scripts/shadow/testset.json`: 20 CLD, 11 Delsey, 4 sold only by stores we can't read) with expected identity and price sources; `npm run shadow:run` runs real engine sessions and the old `search()` side by side and re-reads every checkable price from the store page's own structured data. Engine on the 31 readable products: **31/31 found, 115/115 prices equal the store page, 0 wrong-identity offers, 0 mixed cards, 0 unlabelled stale prices, first price p50 302 ms (31/31 ≤ 3 s), complete p50 1.2 s (31/31 ≤ 12 s)**. Old path: 23/31 found, 8/14 checkable prices correct, 7 wrong-identity offers, first price p50 3.3 s, complete p50 14.1 s (120 free Tavily credits, metered by the app's cap). The 4 unreadable-only products: engine shows no price and honest blocked / link-only / not-set-up rows; the old path shows 4 prices we can't verify. `engine.default_search` now defaults on; Web research stays one click away. |
+| **P9 Hardening + docs** | ✅ done | [`README.md`](../README.md), [`SETUP.md`](../SETUP.md) (engine section, env table, deploy/scheduling corrected), [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`RUNBOOK.md`](./RUNBOOK.md) (deploy Vercel + worker, rotate keys, add a store, handle a block, routine checks, diagnosis), [`HUMAN_ACTIONS.md`](./HUMAN_ACTIONS.md) with the ordered go-live checklist, `.env.example` (every variable the code reads is documented there, in `worker/README.md` or `PROBE_SETUP.md`). Hardening: production refuses the in-memory store ("not configured" instead of a broken session), daily retention (180 days) wired to the cron, the cron falls back to web research when the engine didn't run, privacy and terms pages, GST/HST note on prices, manual-only CI workflow running every gate. |
 
-## Next steps (working notes)
+## What is left
 
-1. **P8 shadow mode.** Test set of 30+ products in `scripts/shadow/testset.json` (expected identity and price sources); runner compares the engine against the old Tavily path; write `docs/SHADOW_REPORT.md` covering coverage, accuracy and latency; cut over only if the engine matches or beats Tavily.
-2. **P9 docs:**
-   - README, SETUP, `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, HUMAN_ACTIONS go-live checklist, `.env.example`
-   - PROBE_REPORT note on Shopify `lastmod`
-   - privacy and terms pages, a GST/HST note in price display, a manual-only CI test workflow
+Only human actions: the ordered [go-live checklist](./HUMAN_ACTIONS.md#go-live-checklist-in-order) (rotate keys, run migrations 004/005 + seed in Supabase, set `DATABASE_URL`, deploy, build the index, publish the UCP profile, legal reads, the signed-in look at the screens, worker hosting).
 
 ## Quality gates (latest run)
 
@@ -31,10 +27,10 @@ Plan and rules: [`MASTER_PROMPT.md`](../MASTER_PROMPT.md). Things only a human c
 |---|---|
 | `npx tsc --noEmit` (root + worker) | ✅ clean |
 | `npm run lint` | ✅ 0 errors. 4 pre-existing `react-hooks/exhaustive-deps` warnings remain in `src/app/tracked/page.tsx`, which rule 5 forbids editing. |
-| `npx next build` | ✅ succeeds (all routes incl. `/admin`, `/api/research/*`, `/api/admin/*`) |
-| `npm run verify:search` | ✅ 339/339 |
-| `npm test` (Vitest, engine suites) | ✅ 156/156 |
-| `npm run test:db` (migrations 000–005 on Postgres 17) | ✅ 48/48 |
+| `npx next build` | ✅ succeeds (all routes incl. `/admin`, `/privacy`, `/terms`, `/api/research/*`, `/api/admin/*`) |
+| `npm run verify:search` | ✅ 341/341 |
+| `npm test` (Vitest, engine suites) | ✅ 159/159 (+1 Postgres-only test that runs in `test:db`) |
+| `npm run test:db` (migrations 000–005 on Postgres 17) | ✅ 48/48, store contract on Postgres 19/19 |
 | `npm run worker:build` + `npm run test:worker` + `test:worker:e2e` | ✅ bundle OK; 7/7 incl. e2e on real Postgres + pg-boss |
 | `npm run probe:sources -- --selftest` | ✅ 36/36 |
 
@@ -61,3 +57,12 @@ Plan and rules: [`MASTER_PROMPT.md`](../MASTER_PROMPT.md). Things only a human c
 | "Expandable", "International", "Domestic" are identity words (optional in queries and tracked names) | TUMI's International and International Expandable Carry-On (C$1,680 vs C$1,810) were merged into one product. They are now separate; a query need not say the word. |
 | Near-match products keep their own identity key | Each further colour of a near-match opened another review item; now it joins the near-match product, and approving the review merges them all. |
 | `npm run engine:research` / `engine:reresolve` (local only) | A real research session from the terminal with its timeline, and a catalog rebuild after identity-rule changes. Both refuse non-local databases. |
+| Default search cut over to the engine (`engine.default_search` on) | P8: the engine matched or beat the old path on every target (SHADOW_REPORT). Web research stays a click away; the flag rolls it back. |
+| `shadow.enabled` flag removed | It was never wired to anything; a switch in `/admin` that does nothing would be a fake control. The side-by-side comparison is `npm run shadow:run`. |
+| Stated inches are part of identity | Samsonite Nexis Large 28" and 31" (and Proxis 28"/30") are different products in the same size class. A query or tracked name that states inches skips other sizes. |
+| Web research: "Sky Max 3.0" is not "max $3" | Found by the shadow run: the old parser read model names as price ceilings and returned nothing. Price phrases now need a "$" or a plausible amount, never a version number (2 new `verify:search` checks). |
+| Production refuses the in-memory engine store | Without `DATABASE_URL` a session would live on one serverless instance only; the API now says "not set up" instead (GET `available: false`, POST 503). |
+| Retention wired to the daily cron | `engine_retention()` existed but nothing called it. Now 180 days of fetch attempts and session events, every day (MASTER_PROMPT §5 retention policy). |
+| Cron keeps web research when the engine didn't run | With the default cut over, Tavily was skipped even if the engine was unavailable; tracked products would have gone unrefreshed. |
+| Privacy and terms pages, GST/HST note | MASTER_PROMPT §5. Written from what the code does (no analytics found in the app, 180-day retention, processors); flagged for legal review in HUMAN_ACTIONS §11. |
+| `scripts/run-ts.mjs` bundles inside `node_modules/.cache` | Externals (supabase-js) must resolve from the project; the system temp folder broke `shadow:run`. |

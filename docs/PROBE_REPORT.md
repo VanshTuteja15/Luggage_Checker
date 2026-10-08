@@ -101,3 +101,10 @@ Travelpro Canada, Briggs & Riley Canada, Heys Canada, Monos, Away (en-ca) and Lu
 ## Caveat
 
 This measures a residential Canadian connection. The worker will run either on the office PC (same network, so these results apply) or on a cloud host, whose data-centre IP may be treated more strictly. **Re-run `npm run probe:sources` from the worker host once it is chosen** (listed in HUMAN_ACTIONS).
+
+## Later findings (P5–P8, real runs on the same network)
+
+- **Shopify `<lastmod>` is not a change signal.** In Canada Luggage Depot's and Delsey's product sitemaps every product carries the same `<lastmod>` (the time the sitemap was generated), so discovery doesn't use it to decide what to re-read: new URLs first, then the pages read longest ago, within a per-run budget.
+- **Sitemaps list every product once per language.** About half of each store's product URLs were `/fr/` copies of the same page (3,096 of 6,263 at CLD, 414 of 828 at Delsey). Discovery keeps one language per page.
+- **Delsey.ca titles never contain "Delsey"** ("CHATELET AIR 2.0 | 26-Inch Check-In Suitcase, Brown"); brand-direct stores now supply their own brand to search and identity.
+- **Speed in practice.** Canada Luggage Depot answers product JSON in about 0.2 s once robots.txt is cached; Delsey.ca needs two requests per page at its 1 s crawl delay, about 1.2 s per product page. Neither store blocked or rate-limited us: all 446 requests recorded in the local run log (P5–P8) succeeded.

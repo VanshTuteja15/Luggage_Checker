@@ -30,9 +30,27 @@ Live luggage price monitoring across Canadian retailers.
 
 ---
 
-## 2. Web research: Tavily (free)
+## 1b. Price engine (verified prices)
 
-All product research goes through **Tavily**. A new search sends two
+The default search reads each store's price from the store (or its official channel) during the search. It needs its own tables and a direct database connection.
+
+1. **SQL Editor** → run **`supabase/migrations/004_price_engine.sql`**, then **`005_scheduler_alerts.sql`** (idempotent; the last statement of 004 lists 14 tables, each with `rls_enabled = true`).
+2. **Store registry:** `npm run db:seed` writes `supabase/seed/sources.sql` (24 stores + default flags). Run it in the SQL Editor, or `npm run db:seed -- --apply` with `DATABASE_URL` set.
+3. **Admin:** Authentication → Users → copy your user id, then
+   `insert into app_admins (user_id, note) values ('<your-user-id>', 'owner');`
+4. **Connection string:** Settings → Database → Connection string → **Session pooler** → `DATABASE_URL` (server-only; never `NEXT_PUBLIC_`).
+5. **Product index:** `npm run engine:discover` reads the product sitemaps of the stores we may read (honest User-Agent, robots.txt, crawl delays; about 50 requests per store per run). Re-run weekly, or use `/admin` → Data entry → Discovery.
+6. **Optional, each unlocks more stores** (steps in [`docs/HUMAN_ACTIONS.md`](./docs/HUMAN_ACTIONS.md)): `UCP_AGENT_PROFILE_URL` (Shopify stores via UCP), `EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET` (eBay.ca API), a worker (`WORKER_URL`, `WORKER_SHARED_SECRET`; see [`worker/README.md`](./worker/README.md)), `CRAWLER_CONTACT` (a monitored address for store operators).
+
+Check: `/admin` lists 24 stores; a *Verified prices* search for "Samsonite Omni 3.0 Large" shows Canada Luggage Depot rows labelled "Verified live".
+
+**Local development without Supabase:** `npm run db:dev -- up` starts a Postgres container with the schema and seed and prints a `DATABASE_URL` (use `127.0.0.1`, not `localhost`, on Windows). `npm run engine:research -- "<query>"` runs one real session against it from the terminal.
+
+---
+
+## 2. Web research: Tavily (free, optional)
+
+**Web research**, the second search mode next to *Verified prices*, goes through **Tavily**. A new search sends two
 searches at once — every Canadian store, and the big chains only — then reads
 the store pages whose excerpt had no price. First results show in a few
 seconds; the rest fill in as pages are read.
@@ -117,7 +135,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Database + auth |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | Browser + user-scoped API access |
 | `SUPABASE_SERVICE_ROLE_KEY` | cron only | Bypasses RLS — never sent to the browser |
-| `TAVILY_API_KEY` | yes | Web research — 1,000 free credits/month |
+| `TAVILY_API_KEY` | web research | Web research — 1,000 free credits/month |
 | `TAVILY_MONTHLY_CREDIT_CAP` | no | Hard monthly credit cap, default 950 |
 | `TAVILY_SEARCH_DEPTH` | no | `basic` (1 credit, default) or `advanced` (2) |
 | `TAVILY_INCLUDE_RAW_CONTENT` | no | Page text for price + specs in one call, default true |
@@ -130,6 +148,15 @@ cp .env.example .env.local
 | `CRON_SECRET` | cron only | Protects the cron endpoints |
 | `NEXT_PUBLIC_APP_URL` | no | Link target in report emails |
 | `SEARCH_CACHE_TTL_MINUTES` | no | Cache lifetime, default 360 (6h) |
+| `DATABASE_URL` | engine | Supabase session-pooler connection string; server and worker only |
+| `DATABASE_SSL_CA` / `DATABASE_SSL` | no | Supabase CA certificate; `no-verify` only as a last resort |
+| `WORKER_URL` / `WORKER_SHARED_SECRET` | no | Worker address and the shared HMAC secret (same value on both sides) |
+| `CRAWLER_CONTACT` | recommended | Contact in the engine's User-Agent (default: the project's issue tracker) |
+| `UCP_AGENT_PROFILE_URL` | no | `https://<app>/.well-known/ucp-agent`, unlocks Shopify stores via UCP |
+| `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` | no | eBay Browse API (free) |
+| `AMAZON_CREATORS_*` / `AMAZON_ASSOCIATE_TAG` | no | Amazon Creators API, also behind a flag (inactive until the account qualifies) |
+| `ENGINE_*` | no | Deadline, rate limits and budgets; defaults in `.env.example` |
+| `ENGINE_FLAGS` | no | Operator flag overrides; normally flags are flipped in `/admin` |
 
 Generate a cron secret:
 
@@ -155,11 +182,16 @@ vercel
 
 Add every variable above in **Settings → Environment Variables**.
 
-Vercel Cron runs the price check every 6 hours and the report at 15:00 UTC.
-Vercel sends `Authorization: Bearer $CRON_SECRET` automatically when that
-variable is set. Vercel Cron needs the Pro plan; on the free tier use the
-GitHub Actions workflows in `.github/workflows/` instead, with repo secrets
-`APP_URL` and `CRON_SECRET`.
+Vercel Cron (`vercel.json`) runs the daily price check at 13:00 UTC (the
+engine first: retention, tracked-product verification, alerts) and the report
+at 15:00 UTC. Two daily jobs fit the Hobby plan's cron limits. Vercel sends
+`Authorization: Bearer $CRON_SECRET` automatically when that variable is set.
+The GitHub workflows in `.github/workflows/` are **manual triggers only**
+(repo secrets `APP_URL`, `CRON_SECRET`); don't add schedules there, it would
+double every store's daily requests. "CI (manual)" runs all quality gates.
+
+Operating the engine after deploy (worker, key rotation, adding a store,
+handling a block): [`docs/RUNBOOK.md`](./docs/RUNBOOK.md).
 
 > **Note on the report time:** `0 15 * * *` is 9 AM during MDT and 8 AM during
 > MST. Adjust seasonally if the exact hour matters to the client.
@@ -167,6 +199,10 @@ GitHub Actions workflows in `.github/workflows/` instead, with repo secrets
 ---
 
 ## Architecture
+
+The price engine (`src/lib/engine`, `worker/`) is described in
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md). The tree below is the original
+app and its web-research pipeline.
 
 ```
 src/
@@ -194,7 +230,7 @@ src/
     └── supabase/server.ts  ← requireUser() / service-role client
 ```
 
-### Search pipeline
+### Web research pipeline
 
 ```
 "hardside carry-on under $300"
@@ -212,5 +248,8 @@ src/
 Every API route calls `requireUser()`, which validates the caller's Supabase
 access token and builds a client scoped to that user, so **row-level security
 decides what they can read and write**. No route takes a `userId` from the
-request body. The service-role key is used in exactly one place — the cron
-jobs, which have no user context.
+request body. Two server-side credentials bypass RLS and never reach the
+browser: the service-role key (cron jobs, which have no user context) and the
+price engine's `DATABASE_URL` (engine tables, also used by the worker). Admin
+routes additionally require an `app_admins` row. Engine details:
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
