@@ -18,7 +18,8 @@
     "test:db": "node scripts/run-ts.mjs scripts/db/test-migrations.ts",
     "test:worker": "npm --prefix worker test",
     "test:worker:e2e": "node scripts/run-ts.mjs scripts/db/with-test-db.ts -- npm --prefix worker test",
-    "worker:build": "npm --prefix worker run build"
+    "worker:build": "npm --prefix worker run build",
+    "fixtures:record": "node scripts/run-ts.mjs scripts/fixtures/record.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

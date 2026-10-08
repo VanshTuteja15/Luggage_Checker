@@ -1,0 +1,65 @@
+[
+  {
+    "file": "shopify/canadaluggagedepot__samsonite-omni-3-0-large-spinner-expandable-luggage.product.json",
+    "url": "https://www.canadaluggagedepot.ca/products/samsonite-omni-3-0-large-spinner-expandable-luggage.json",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:09.306Z"
+  },
+  {
+    "file": "shopify/canadaluggagedepot__samsonite-omni-3-0-large-spinner-expandable-luggage.product.js.json",
+    "url": "https://www.canadaluggagedepot.ca/products/samsonite-omni-3-0-large-spinner-expandable-luggage.js",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:10.313Z"
+  },
+  {
+    "file": "html/canadaluggagedepot__samsonite-omni-3-0-large-spinner-expandable-luggage.html",
+    "url": "https://www.canadaluggagedepot.ca/products/samsonite-omni-3-0-large-spinner-expandable-luggage",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:11.475Z"
+  },
+  {
+    "file": "ucp/canadaluggagedepot__well-known.json",
+    "url": "https://www.canadaluggagedepot.ca/.well-known/ucp",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:12.325Z"
+  },
+  {
+    "file": "shopify/delsey-ca__40119980500us-wagram-23-inch-expandable-carry-on-suitcase-bl.product.json",
+    "url": "https://delsey.ca/products/40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black.json",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:13.866Z"
+  },
+  {
+    "file": "shopify/delsey-ca__40119980500us-wagram-23-inch-expandable-carry-on-suitcase-bl.product.js.json",
+    "url": "https://delsey.ca/products/40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black.js",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:14.798Z"
+  },
+  {
+    "file": "html/delsey-ca__40119980500us-wagram-23-inch-expandable-carry-on-suitcase-bl.html",
+    "url": "https://delsey.ca/products/40119980500us-wagram-23-inch-expandable-carry-on-suitcase-black",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:16.311Z"
+  },
+  {
+    "file": "ucp/delsey-ca__well-known.json",
+    "url": "https://delsey.ca/.well-known/ucp",
+    "status": 200,
+    "outcome": "ok",
+    "recordedAt": "2026-10-08T04:27:16.836Z"
+  },
+  {
+    "file": "shopify/canadaluggagedepot__missing.product.json",
+    "url": "https://www.canadaluggagedepot.ca/products/luggagetracker-fixture-no-such-product.json",
+    "status": 404,
+    "outcome": "not_found",
+    "recordedAt": "2026-10-08T04:27:16.987Z"
+  }
+]
