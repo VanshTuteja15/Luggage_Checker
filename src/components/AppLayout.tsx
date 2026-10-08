@@ -10,6 +10,7 @@ import {
   Menu,
   Search,
   Settings as SettingsIcon,
+  ShieldCheck,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -26,8 +27,9 @@ const NAV = [
   { href: "/tracked", label: "Tracked Products", icon: BookmarkCheck },
   { href: "/history", label: "Price History", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
+  // Admin-only content: the page and its API refuse anyone not in app_admins.
+  { href: "/admin", label: "Admin", icon: ShieldCheck },
 ] as const;
-
 
 /** Initials from an email local-part, e.g. "vansh.tuteja@x.com" -> "VT". */
 function initials(email: string): string {
@@ -166,9 +168,7 @@ export function AppLayout({
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>
-            {subtitle ? (
-              <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
-            ) : null}
+            {subtitle ? <p className="truncate text-sm text-muted-foreground">{subtitle}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ThemeToggle />
