@@ -22,8 +22,8 @@ export default function PrivacyPage() {
         <li>Your account: email address and sign-in data (Supabase Auth).</li>
         <li>What you save: tracked products, target prices, price alerts and settings.</li>
         <li>
-          Your price searches: the search text, the prices found, which stores were checked and
-          how long it took, stored with your account so you can reopen them.
+          Your price searches: the search text, the prices found, which stores were checked and how
+          long it took, stored with your account so you can reopen them.
         </li>
       </ul>
       <p className="mt-2">
@@ -35,11 +35,13 @@ export default function PrivacyPage() {
       <ul className="mt-2 list-disc space-y-1 pl-5">
         <li>No advertising, no analytics or tracking scripts, no selling or sharing of data.</li>
         <li>
-          Stores never receive anything about you. Our price checker reads public product pages
-          and official store feeds itself, identifies itself honestly, and follows each
-          store&rsquo;s robots.txt.
+          Stores never receive anything about you. Our price checker reads public product pages and
+          official store feeds itself, identifies itself honestly, and follows each store&rsquo;s
+          robots.txt.
         </li>
-        <li>Fonts are served from this site, so your browser doesn&rsquo;t contact Google Fonts.</li>
+        <li>
+          Fonts are served from this site, so your browser doesn&rsquo;t contact Google Fonts.
+        </li>
       </ul>
 
       <h2 className="mt-8 text-base font-semibold">Services that process data for us</h2>
@@ -56,9 +58,8 @@ export default function PrivacyPage() {
 
       <h2 className="mt-8 text-base font-semibold">How long</h2>
       <p className="mt-2">
-        Price-check logs and search progress events are deleted after 180 days. Prices observed
-        at stores are kept as price history. Your account data stays until you delete it or ask
-        us to.
+        Price-check logs and search progress events are deleted after 180 days. Prices observed at
+        stores are kept as price history. Your account data stays until you delete it or ask us to.
       </p>
 
       <h2 className="mt-8 text-base font-semibold">Your choices</h2>
@@ -68,7 +69,11 @@ export default function PrivacyPage() {
       </p>
 
       <p className="mt-10 text-xs text-muted-foreground">
-        See also the <Link href="/terms" className="underline underline-offset-4">terms of use</Link>.
+        See also the{" "}
+        <Link href="/terms" className="underline underline-offset-4">
+          terms of use
+        </Link>
+        .
       </p>
     </main>
   );

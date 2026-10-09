@@ -78,8 +78,7 @@ function FieldFeedback({
 
 function PasswordStrengthBar({ password }: { password: string }) {
   const { strength } = validatePassword(password);
-  const color =
-    strength >= 3 ? "bg-success" : strength === 2 ? "bg-warning" : "bg-destructive";
+  const color = strength >= 3 ? "bg-success" : strength === 2 ? "bg-warning" : "bg-destructive";
 
   return (
     <div className="mt-2" aria-hidden>
@@ -349,7 +348,12 @@ function AuthCard() {
           key={panel + tab}
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
         >
-          <h1 className={cn("text-lg font-semibold tracking-tight", panel === "form" ? "mt-6" : "mt-0")}>
+          <h1
+            className={cn(
+              "text-lg font-semibold tracking-tight",
+              panel === "form" ? "mt-6" : "mt-0",
+            )}
+          >
             {heading}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
@@ -483,11 +487,7 @@ function AuthCard() {
                 </button>
               )}
 
-              <Button
-                type="submit"
-                disabled={!canSubmit}
-                className="h-12 w-full rounded-lg"
-              >
+              <Button type="submit" disabled={!canSubmit} className="h-12 w-full rounded-lg">
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {submitLabel}
               </Button>
@@ -508,9 +508,7 @@ export default function LoginPage() {
           <ThemeToggle />
         </div>
         <Suspense
-          fallback={
-            <div className="h-[28rem] w-full max-w-md animate-pulse rounded-xl bg-card" />
-          }
+          fallback={<div className="h-[28rem] w-full max-w-md animate-pulse rounded-xl bg-card" />}
         >
           <AuthCard />
         </Suspense>

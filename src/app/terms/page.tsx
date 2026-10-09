@@ -26,16 +26,16 @@ export default function TermsPage() {
         <li>
           &ldquo;Verified live&rdquo; means we read it from the store during your search.
           &ldquo;Feed as of&rdquo;, &ldquo;Manually checked&rdquo; and &ldquo;Last seen&rdquo;
-          prices are older and say so. Web research prices come from a search service and show
-          when they were read.
+          prices are older and say so. Web research prices come from a search service and show when
+          they were read.
         </li>
         <li>
           Stores change prices and stock at any time. Confirm the price on the store&rsquo;s own
           page before you buy or quote it; we can&rsquo;t guarantee it is still current.
         </li>
         <li>
-          Some stores don&rsquo;t allow automated price checks. For those we show a link to
-          search the store yourself, never a guessed price.
+          Some stores don&rsquo;t allow automated price checks. For those we show a link to search
+          the store yourself, never a guessed price.
         </li>
       </ul>
 
@@ -43,17 +43,21 @@ export default function TermsPage() {
       <ul className="mt-2 list-disc space-y-1 pl-5">
         <li>The app is for Luggage Depot Inc. and the people it invites.</li>
         <li>
-          Searches are rate-limited per person. Please don&rsquo;t script or automate the app;
-          every search makes real, polite requests to the stores.
+          Searches are rate-limited per person. Please don&rsquo;t script or automate the app; every
+          search makes real, polite requests to the stores.
         </li>
         <li>
-          Store names and trademarks belong to their owners. We are not affiliated with the
-          stores we compare.
+          Store names and trademarks belong to their owners. We are not affiliated with the stores
+          we compare.
         </li>
       </ul>
 
       <p className="mt-10 text-xs text-muted-foreground">
-        See also the <Link href="/privacy" className="underline underline-offset-4">privacy summary</Link>.
+        See also the{" "}
+        <Link href="/privacy" className="underline underline-offset-4">
+          privacy summary
+        </Link>
+        .
       </p>
     </main>
   );
