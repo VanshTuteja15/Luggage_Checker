@@ -156,7 +156,8 @@ describe("research session (stubbed sources)", () => {
     expect(product.offers[0].price).toBe(269.99); // cheapest first
     const feed = product.offers.find((o) => o.sourceId === "samsonite-ca")!;
     expect(feed.freshness).toEqual({ kind: "feed", asOf: "2026-10-01T00:00:00.000Z" });
-    expect(freshnessLabel(feed.freshness)).toMatch(/^Feed as of Oct 1, 2026$/);
+    // MASTER_PROMPT_V2 rule 5 wording; a feed date is a calendar day, never shifted by time zone.
+    expect(freshnessLabel(feed.freshness)).toBe("Dealer list · as of Oct 1");
 
     // Zero unlabelled prices.
     for (const p of answer!.products)

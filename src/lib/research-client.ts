@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, apiStreamGet, ApiRequestError } from "@/lib/api-client";
-import type { AnswerOffer, ResearchAnswer, SessionEvent, StoreStatusRow } from "@/lib/engine/types";
+import type { AnswerOffer, AnswerProduct, ResearchAnswer, SessionEvent, StoreStatusRow } from "@/lib/engine/types";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 export type ResearchStatus = "idle" | "starting" | "running" | "done" | "cancelled" | "error";
@@ -80,7 +80,8 @@ function reduce(state: ResearchView, action: Action): ResearchView {
         case "session_cancelled":
           return { ...next, status: "cancelled" };
         case "session_failed":
-          return { ...next, status: "error", error: String(p.error ?? "The price check failed.") };
+          // The technical reason stays in the session record (Store status → Technical details).
+          return { ...next, status: "error", error: "The live price check stopped early." };
         default:
           return next;
       }
@@ -156,7 +157,14 @@ export function useResearch() {
         await follow(res.sessionId, res.realtime, abort, cleanup);
       } catch (err) {
         if (abort.signal.aborted) return;
-        dispatch({ type: "error", error: err instanceof Error ? err.message : "Couldn't start the price check." });
+        // Server messages are written for people; anything else (network) gets a plain sentence.
+        dispatch({
+          type: "error",
+          error:
+            err instanceof ApiRequestError
+              ? err.message
+              : "We couldn't reach the price check. Check your connection and try again.",
+        });
       }
     },
     [follow, stop],
@@ -177,6 +185,20 @@ export function useResearch() {
   }, []);
 
   return { state, search, reverify, cancel, reset: () => dispatch({ type: "reset" }) };
+}
+
+/** Saved prices for a search, each with its own date (used when a live check can't run). */
+export function useLastKnown(query: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["last-known", query],
+    enabled: enabled && query.trim().length > 0,
+    staleTime: 60_000,
+    retry: 1,
+    queryFn: () =>
+      apiFetch<{ products: AnswerProduct[]; from: "engine" | "tracked" | "none" }>(
+        `/api/research/last-known?q=${encodeURIComponent(query.trim())}`,
+      ),
+  });
 }
 
 export type ResearchInfo = { available: boolean; defaultEngine: boolean; worker: boolean; store: string; realtime: boolean; deadlineMs: number };

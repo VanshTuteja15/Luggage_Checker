@@ -9,6 +9,7 @@ import {
   getEngine,
   realtimeAvailable,
 } from "@/lib/engine/server";
+import { chosenStoreIdsFor } from "@/lib/stores";
 import { requireUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +25,19 @@ export const maxDuration = 60;
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await requireUser(req);
+    const { supabase, userId } = await requireUser(req);
     const parsed = parseResearchInput(await req.json().catch(() => null));
     if (!parsed.ok) return badRequest(parsed.error);
 
     const cfg = engineConfig();
     const { rt } = getEngine();
-    if (!flagOn(await rt.flags(), "engine.enabled")) {
+    // Settings → Stores limits which stores a search checks (R5.3).
+    const [flags, chosen] = await Promise.all([
+      rt.flags(),
+      parsed.value.storeIds ? Promise.resolve(undefined) : chosenStoreIdsFor(supabase, userId),
+    ]);
+    if (chosen) parsed.value.storeIds = chosen;
+    if (!flagOn(flags, "engine.enabled")) {
       return NextResponse.json(
         { error: "Verified price checks are switched off right now.", code: "engine_disabled" },
         { status: 503 },
@@ -39,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!engineStoreReady()) {
       return NextResponse.json(
         {
-          error: "Verified price checks aren't set up on this server yet (no engine database).",
+          error: "Live price checks aren't set up on this server yet. Showing saved prices instead.",
           code: "engine_not_configured",
         },
         { status: 503 },

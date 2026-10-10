@@ -9,6 +9,7 @@
 /*  (Canada Luggage Depot, Delsey.ca…) counted as chosen.              */
 /* ------------------------------------------------------------------ */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { SOURCE_SEED } from "@/lib/engine/registry/seed";
 import type { SourceCategory } from "@/lib/engine/types";
 import { RETAILER_NAMES } from "@/lib/retailers";
@@ -67,6 +68,29 @@ export function legacyRetailerNames(saved: readonly string[] | null | undefined)
 /** The old-name filter for web research: [] (no filter) when every store is chosen. */
 export function legacyRetailerFilter(saved: readonly string[] | null | undefined): string[] {
   return allStoresChosen(saved) ? [] : legacyRetailerNames(saved);
+}
+
+/**
+ * The signed-in user's chosen store ids, for limiting a search or an email.
+ * Undefined means "every store" (also when settings can't be read: a
+ * settings hiccup must not hide prices).
+ */
+export async function chosenStoreIdsFor(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string[] | undefined> {
+  try {
+    const { data, error } = await supabase
+      .from("user_settings")
+      .select("retailers")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) return undefined;
+    const saved = Array.isArray(data?.retailers) ? (data.retailers as string[]) : null;
+    return allStoresChosen(saved) ? undefined : enabledStoreIds(saved);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Validate a list sent by the browser: registry labels only. */

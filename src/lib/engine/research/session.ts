@@ -633,6 +633,9 @@ export async function runResearchSession(
         const obs = await store.latestObservation(l.id, { shownOnly: true });
         if (
           !obs ||
+          // Only prices we read ourselves come back as "last seen"; an estimate stays an estimate.
+          obs.adapter === "web_estimate" ||
+          obs.adapter === "tracked_record" ||
           !LIVE_ADAPTERS.has(obs.adapter) ||
           now() - Date.parse(obs.fetchedAt) > STALE_WINDOW_MS
         )

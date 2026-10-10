@@ -21,6 +21,13 @@ export type AdapterId =
   | "feed_import"
   | "manual_entry";
 
+/**
+ * How a stored or shown price was obtained: an adapter, a validated web
+ * search result (`web_estimate`, R3), or a tracking-table record shown as a
+ * last-known price (`tracked_record`).
+ */
+export type PriceMethod = AdapterId | "web_estimate" | "tracked_record";
+
 export const ADAPTER_IDS: readonly AdapterId[] = [
   "shopify_ucp",
   "shopify_product_json",
@@ -276,11 +283,17 @@ export type ValidationResult = {
   reasons: string[];
 };
 
-export type FreshnessKind = "live" | "feed" | "manual" | "stale";
+export type FreshnessKind = "live" | "estimate" | "feed" | "manual" | "stale";
 
 /** Every price on screen carries one of these. There is no unlabelled price. */
 export type Freshness =
   | { kind: "live"; fetchedAt: string }
+  /**
+   * A price read from a web search result for the store's own product page,
+   * never from the page itself (MASTER_PROMPT_V2 R3). Shown only after the
+   * estimate validator accepted it, always labelled "confirm on site".
+   */
+  | { kind: "estimate"; foundAt: string }
   | { kind: "feed"; asOf: string }
   | { kind: "manual"; checkedAt: string }
   | { kind: "stale"; lastSeenAt: string };
@@ -289,7 +302,7 @@ export type Observation = {
   id: string;
   listingId: string;
   sourceId: string;
-  adapter: AdapterId;
+  adapter: PriceMethod;
   /** Always > 0 on shown readings; 0 only on a rejected reading that had no price. */
   price: number;
   listPrice: number | null;
@@ -368,7 +381,7 @@ export type AnswerOffer = {
   freshness: Freshness;
   confidence: number;
   lowConfidence: boolean;
-  method: AdapterId;
+  method: PriceMethod;
   observationId: string | null;
   listingId: string | null;
   /** Catalog product the listing resolved to, when known. */

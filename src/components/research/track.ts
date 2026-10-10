@@ -9,24 +9,22 @@
 
 import { SIZE_LABELS, type SizeClass } from "@/lib/engine/packs/luggage";
 import { luggagePack } from "@/lib/engine/packs/luggage";
-import type { AnswerOffer, AnswerProduct, Freshness } from "@/lib/engine/types";
+import { freshnessTime } from "@/lib/engine/research/answer";
+import type { AnswerOffer, AnswerProduct } from "@/lib/engine/types";
 import type { Offer, SearchProduct } from "@/lib/search/types";
 
-function seenAt(f: Freshness): string {
-  switch (f.kind) {
-    case "live":
-      return f.fetchedAt;
-    case "feed":
-      return f.asOf;
-    case "manual":
-      return f.checkedAt;
-    case "stale":
-      return f.lastSeenAt;
-  }
-}
-
+/**
+ * Prices that may be written into tracking history: read by us (live) or
+ * dated by a person or a dealer list. A web estimate is never saved as a
+ * store's price (R3.1), and neither is a "last seen" one.
+ */
 export function trackableOffers(p: AnswerProduct): AnswerOffer[] {
-  return p.offers.filter((o) => o.freshness.kind !== "stale" && /^https:\/\//.test(o.url));
+  return p.offers.filter(
+    (o) =>
+      o.freshness.kind !== "stale" &&
+      o.freshness.kind !== "estimate" &&
+      /^https:\/\//.test(o.url),
+  );
 }
 
 export function toSearchProduct(p: AnswerProduct): SearchProduct | null {
@@ -38,7 +36,7 @@ export function toSearchProduct(p: AnswerProduct): SearchProduct | null {
     url: o.url,
     inStock: o.availability !== "out_of_stock",
     title: o.title,
-    fetchedAt: seenAt(o.freshness),
+    fetchedAt: freshnessTime(o.freshness),
     evidence: o.evidence ?? undefined,
     colour: o.colour ?? undefined,
   }));

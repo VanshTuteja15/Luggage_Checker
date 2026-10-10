@@ -8,6 +8,7 @@
 /*  Size classes never merge.                                           */
 /* ------------------------------------------------------------------ */
 
+import { DEFAULT_TIME_ZONE, formatDay, formatTime, formatYmd, isSameLocalDay } from "@/lib/time/local";
 import type { AnswerOffer, AnswerProduct, CategoryPack, Freshness, Identifier } from "../types";
 
 class UnionFind {
@@ -44,14 +45,33 @@ function keysFor(o: AnswerOffer, pack: CategoryPack): string[] {
   return keys;
 }
 
-const FRESH_ORDER: Record<Freshness["kind"], number> = { live: 0, feed: 1, manual: 1, stale: 2 };
+/** At the same price: verified first, then staff/dealer prices, then estimates. */
+const FRESH_ORDER: Record<Freshness["kind"], number> = {
+  live: 0,
+  feed: 1,
+  manual: 1,
+  estimate: 2,
+  stale: 3,
+};
 
-/** Cheapest first among current prices; "last seen" prices always after them. */
+/** A price found during this check (not a "last seen" one). Estimates count. */
+export function isCurrent(o: Pick<AnswerOffer, "freshness">): boolean {
+  return o.freshness.kind !== "stale";
+}
+
+/**
+ * Cheapest first among current prices; "last seen" prices always after them.
+ * At the same price an out-of-stock offer sorts after the others (R2.6).
+ */
 export function compareOffers(a: AnswerOffer, b: AnswerOffer): number {
-  const fa = FRESH_ORDER[a.freshness.kind] === 2 ? 1 : 0;
-  const fb = FRESH_ORDER[b.freshness.kind] === 2 ? 1 : 0;
+  const fa = isCurrent(a) ? 0 : 1;
+  const fb = isCurrent(b) ? 0 : 1;
   if (fa !== fb) return fa - fb;
-  return a.price - b.price;
+  if (a.price !== b.price) return a.price - b.price;
+  const oa = a.availability === "out_of_stock" ? 1 : 0;
+  const ob = b.availability === "out_of_stock" ? 1 : 0;
+  if (oa !== ob) return oa - ob;
+  return FRESH_ORDER[a.freshness.kind] - FRESH_ORDER[b.freshness.kind];
 }
 
 function productName(offers: AnswerOffer[], pack: CategoryPack): string {
@@ -106,7 +126,7 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
     for (const o of sorted)
       for (const i of o.identifiers)
         if (i.kind !== "store_sku") identifiers.set(`${i.kind}:${i.value}`, i);
-    const current = sorted.filter((o) => o.freshness.kind !== "stale");
+    const current = sorted.filter(isCurrent);
     const first = sorted[0];
     const gtin = [...identifiers.values()].find((i) => i.kind === "gtin")?.value;
     const brand = first.brand ?? pack.brandOf(first.title);
@@ -141,42 +161,63 @@ export function rankProducts(
 
 /* ── Freshness labels ─────────────────────────────────────────────── */
 
-const TIME = new Intl.DateTimeFormat("en-CA", {
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "America/Edmonton",
-});
-const DATE = new Intl.DateTimeFormat("en-CA", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "America/Edmonton",
-});
-// Feed and manual dates are calendar days stored as midnight UTC; showing them
-// in Calgary time would move them to the day before.
-const DAY = new Intl.DateTimeFormat("en-CA", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
+/** Feed and manual dates are calendar days (midnight UTC): read the day, not the instant. */
+function calendarDay(iso: string): string {
+  const ymd = /^\d{4}-\d{2}-\d{2}/.exec(iso)?.[0];
+  return ymd ? formatYmd(ymd) : formatDay(iso);
+}
 
-/**
- * The label every price is shown with. There is no unlabelled price:
- *   live   → "Verified live · 2:14 p.m."
- *   feed   → "Feed as of Oct 1, 2026"
- *   manual → "Manually checked Oct 6, 2026"
- *   stale  → "Last seen Oct 5, 2026, 9:02 a.m. · not current"
- */
-export function freshnessLabel(f: Freshness): string {
+/** When the price was read or found, as an instant. */
+export function freshnessTime(f: Freshness): string {
   switch (f.kind) {
     case "live":
-      return `Verified live · ${TIME.format(new Date(f.fetchedAt))}`;
+      return f.fetchedAt;
+    case "estimate":
+      return f.foundAt;
     case "feed":
-      return `Feed as of ${DAY.format(new Date(f.asOf))}`;
+      return f.asOf;
     case "manual":
-      return `Manually checked ${DAY.format(new Date(f.checkedAt))}`;
+      return f.checkedAt;
     case "stale":
-      return `Last seen ${DATE.format(new Date(f.lastSeenAt))}, ${TIME.format(new Date(f.lastSeenAt))} · not current`;
+      return f.lastSeenAt;
   }
+}
+
+/**
+ * The label every price is shown with (MASTER_PROMPT_V2 rule 5). There is no
+ * unlabelled price, and nothing read before today looks like today's:
+ *   live     → "Verified live · 9:02 a.m."  (read on an earlier day: "Last seen · Oct 8")
+ *   estimate → "Web estimate · found 9:01 a.m. · confirm on site"
+ *   manual   → "Staff-checked · Oct 9"
+ *   feed     → "Dealer list · as of Oct 1"
+ *   stale    → "Last seen · Oct 8"
+ */
+export function freshnessLabel(
+  f: Freshness,
+  now: Date = new Date(),
+  tz: string = DEFAULT_TIME_ZONE,
+): string {
+  switch (f.kind) {
+    case "live":
+      return isSameLocalDay(f.fetchedAt, now, tz)
+        ? `Verified live · ${formatTime(f.fetchedAt, tz)}`
+        : `Last seen · ${formatDay(f.fetchedAt, tz)}`;
+    case "estimate":
+      return isSameLocalDay(f.foundAt, now, tz)
+        ? `Web estimate · found ${formatTime(f.foundAt, tz)} · confirm on site`
+        : `Last seen · ${formatDay(f.foundAt, tz)} (web estimate)`;
+    case "feed":
+      return `Dealer list · as of ${calendarDay(f.asOf)}`;
+    case "manual":
+      return `Staff-checked · ${calendarDay(f.checkedAt)}`;
+    case "stale":
+      return `Last seen · ${formatDay(f.lastSeenAt, tz)}`;
+  }
+}
+
+/** Short form for tight spaces: "Web estimate · confirm on site". */
+export function freshnessShortLabel(f: Freshness, now: Date = new Date(), tz?: string): string {
+  if (f.kind === "estimate" && isSameLocalDay(f.foundAt, now, tz))
+    return "Web estimate · confirm on site";
+  return freshnessLabel(f, now, tz);
 }
