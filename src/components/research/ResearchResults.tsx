@@ -111,30 +111,32 @@ function StoreProgress({
   rows: StoreStatusRow[];
   status: ResearchView["status"];
 }) {
-  const working = rows.filter((r) => r.state === "running" || r.state === "pending");
+  // Shoppers see only what was checked and verified. Why a store couldn't be
+  // read (blocked, terms, not connected) is internal: see /admin → Sources.
+  const running = status === "running" || status === "starting";
   const verified = rows.filter((r) => r.state === "verified");
-  const checked = rows.filter((r) => r.state !== "link_only" && r.state !== "not_configured");
+  const shown = rows.filter(
+    (r) => r.state === "verified" || (running && (r.state === "running" || r.state === "pending")),
+  );
+  if (!running && verified.length === 0) return null;
   return (
     <div className="mb-4 rounded-xl border border-border bg-card p-3">
       <p role="status" aria-live="polite" className="mb-2 text-xs text-muted-foreground">
-        {status === "running" || status === "starting"
-          ? `Checking ${working.length} store${working.length === 1 ? "" : "s"} live… ${verified.length} verified so far`
-          : `${verified.length} of ${checked.length} checkable stores verified`}
+        {running
+          ? `Checking stores live… ${verified.length} verified so far`
+          : `Prices verified live at ${verified.length} store${verified.length === 1 ? "" : "s"}`}
       </p>
       <ul className="flex flex-wrap gap-1.5" aria-label="Store progress">
-        {rows
-          .filter((r) => r.state !== "link_only" && r.state !== "not_configured")
-          .map((r) => (
-            <li
-              key={r.sourceId}
-              title={r.message}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 text-[11px]"
-            >
-              <StateIcon state={r.state} />
-              <span>{r.retailer}</span>
-              <span className="sr-only">: {STATE_TEXT[r.state]}</span>
-            </li>
-          ))}
+        {shown.map((r) => (
+          <li
+            key={r.sourceId}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 text-[11px]"
+          >
+            <StateIcon state={r.state} />
+            <span>{r.retailer}</span>
+            <span className="sr-only">: {STATE_TEXT[r.state]}</span>
+          </li>
+        ))}
       </ul>
     </div>
   );
@@ -335,42 +337,40 @@ function AllStores({ products, sort }: { products: AnswerProduct[]; sort: Resear
   );
 }
 
-/* ── couldn't verify ──────────────────────────────────────────────── */
+/* ── other stores (links only, no reasons) ─────────────────────── */
 
-function CouldntVerify({ rows }: { rows: StoreStatusRow[] }) {
-  if (rows.length === 0) return null;
+function OtherStores({ rows }: { rows: StoreStatusRow[] }) {
+  const links = rows.filter((r) => !!r.url);
+  if (links.length === 0) return null;
   return (
     <section
-      className="mt-5 rounded-xl border border-dashed border-border px-4 py-3"
-      aria-labelledby="couldnt-verify"
+      className="mt-5 rounded-xl border border-border bg-card px-4 py-3"
+      aria-labelledby="other-stores"
     >
-      <h2 id="couldnt-verify" className="mb-2 text-xs font-medium text-muted-foreground">
-        Couldn&rsquo;t verify at these stores — no price shown for them
+      <h2 id="other-stores" className="mb-2 text-xs font-medium text-muted-foreground">
+        Also compare at these stores
       </h2>
-      <ul className="space-y-1.5">
-        {rows.map((r) => (
-          <li
-            key={r.sourceId}
-            className="flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:gap-2"
-          >
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <StateIcon state={r.state} />
-              Couldn&rsquo;t verify at {r.retailer}
-            </span>
-            <span className="text-muted-foreground">— {r.message}</span>
-            {r.url && (
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  "inline-flex items-center gap-1 text-primary hover:underline sm:ml-auto",
-                  FOCUS,
-                )}
-              >
-                Check on their site <ExternalLink className="h-3 w-3" aria-hidden />
-              </a>
-            )}
+      <ul className="flex flex-wrap gap-1.5">
+        {links.map((r) => (
+          <li key={r.sourceId}>
+            <a
+              href={r.url!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs hover:bg-muted",
+                FOCUS,
+              )}
+              aria-label={`Search ${r.retailer} for this product (opens their site)`}
+            >
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: retailerColor(r.retailer) }}
+                aria-hidden
+              />
+              {r.retailer}
+              <ExternalLink className="h-3 w-3 text-muted-foreground" aria-hidden />
+            </a>
           </li>
         ))}
       </ul>
@@ -518,14 +518,15 @@ export function ResearchResults({
       )}
       {answer?.deadlineHit && (
         <p className="mb-3 text-xs text-muted-foreground">
-          Answered at the {Math.round((answer.totalMs ?? 0) / 1000)}-second limit; stores still
-          checking are listed below.
+          Showing the prices found within {Math.round((answer.totalMs ?? 0) / 1000)} seconds. Press
+          Re-verify now to check again.
         </p>
       )}
 
       {products.length === 0 && !running ? (
         <p className="rounded-xl border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
-          No verified price for &ldquo;{view.query}&rdquo; yet. {answer?.notes[0] ?? ""}
+          No verified price for &ldquo;{view.query}&rdquo; yet. Try a shorter or different product
+          name, or compare at the stores below.
         </p>
       ) : tab === "products" ? (
         <div className="space-y-3">
@@ -544,7 +545,7 @@ export function ResearchResults({
         <AllStores products={products} sort={sort} />
       )}
 
-      <CouldntVerify rows={unverified} />
+      <OtherStores rows={unverified} />
 
       {products.length > 0 && (
         <p className="mt-4 text-xs text-muted-foreground">

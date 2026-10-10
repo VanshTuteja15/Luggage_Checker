@@ -188,7 +188,9 @@ export function linkOnlyUrl(source: SourceRecord, query: string): string | null 
 export function unverifiableReason(source: SourceRecord, ctx: RouteContext): string {
   if (source.liveClass === "blocked")
     return `${source.retailerLabel} blocks automated requests from our network`;
-  if (source.permission === "forbidden")
+  // A store can forbid reading its pages yet offer an official API (eBay):
+  // then the API route, not the terms, decides what the row says.
+  if (source.permission === "forbidden" && source.liveClass !== "official_api")
     return `${source.retailerLabel}'s terms don't allow automated price checks`;
   if (source.liveClass === "none") return `${source.retailerLabel} doesn't publish prices online`;
   const checks = checkRoutes(source, ctx).filter(
@@ -196,5 +198,9 @@ export function unverifiableReason(source: SourceRecord, ctx: RouteContext): str
   );
   const first = checks[0];
   if (!first) return "no live route on record";
+  // Shoppers see these rows: keep setup details (env names, flag keys) for /admin.
+  if (first.reason === "not_configured" || first.reason === "flag_off") return "not connected yet";
+  if (first.reason === "not_permitted")
+    return `${source.retailerLabel}'s terms don't allow automated price checks`;
   return first.message;
 }

@@ -172,7 +172,9 @@ describe("research session (stubbed sources)", () => {
     });
     expect(row("walmart-ca").state).toBe("link_only");
     expect(row("travelpro-ca").state).toBe("not_configured");
-    expect(row("travelpro-ca").message).toMatch(/agent profile/);
+    // Shopper-facing rows carry no setup details (env names, flag keys); /admin has them.
+    expect(row("travelpro-ca").message).toBe("not connected yet");
+    for (const r of answer!.stores) expect(r.message).not.toMatch(/[A-Z]+_[A-Z_]+|\w+\.\w+_\w+/);
     expect(answer!.stores.some((r) => r.sourceId === "thebay")).toBe(false);
 
     expect(answer!.firstPriceMs).not.toBeNull();

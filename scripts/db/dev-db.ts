@@ -41,7 +41,13 @@ async function up(): Promise<void> {
   const running = execFileSync("docker", ["ps", "-q", "-f", `name=^${CONTAINER}$`], {
     encoding: "utf8",
   }).trim();
-  if (!running) {
+  const exists = execFileSync("docker", ["ps", "-aq", "-f", `name=^${CONTAINER}$`], {
+    encoding: "utf8",
+  }).trim();
+  if (!running && exists) {
+    // Left stopped by an earlier session (e.g. Docker Desktop restarted): reuse it.
+    execFileSync("docker", ["start", CONTAINER], { stdio: ["ignore", "ignore", "inherit"] });
+  } else if (!running) {
     execFileSync(
       "docker",
       [
@@ -55,7 +61,7 @@ async function up(): Promise<void> {
         `${PORT}:5432`,
         "postgres:17-alpine",
       ],
-      { stdio: "ignore" },
+      { stdio: ["ignore", "ignore", "inherit"] },
     );
   }
   const c = await connect();
