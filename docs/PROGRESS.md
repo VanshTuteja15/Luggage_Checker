@@ -23,15 +23,17 @@ Only human actions: the ordered [go-live checklist](./HUMAN_ACTIONS.md#go-live-c
 
 ## Quality gates (latest run)
 
+Re-run on 2026-10-10 at `53fc826` (Node 24.15, Windows, local Docker Postgres). All pass; no fixes were needed.
+
 | Gate | Result |
 |---|---|
-| `npx tsc --noEmit` (root + worker) | ✅ clean |
-| `npm run lint` | ✅ 0 errors. 4 pre-existing `react-hooks/exhaustive-deps` warnings remain in `src/app/tracked/page.tsx`, which rule 5 forbids editing. |
+| `npx tsc --noEmit` (root + worker) | ✅ clean (both exit 0) |
+| `npm run lint` | ✅ 0 errors. 4 pre-existing `react-hooks/exhaustive-deps` warnings remain in `src/app/tracked/page.tsx`, which rule 5 forbids editing. (`next lint` prints a deprecation notice for Next 16.) |
 | `npx next build` | ✅ succeeds (all routes incl. `/admin`, `/privacy`, `/terms`, `/api/research/*`, `/api/admin/*`) |
 | `npm run verify:search` | ✅ 341/341 |
-| `npm test` (Vitest, engine suites) | ✅ 159/159 (+1 Postgres-only test that runs in `test:db`) |
-| `npm run test:db` (migrations 000–005 on Postgres 17) | ✅ 48/48, store contract on Postgres 19/19 |
-| `npm run worker:build` + `npm run test:worker` + `test:worker:e2e` | ✅ bundle OK; 7/7 incl. e2e on real Postgres + pg-boss |
+| `npm test` (Vitest, engine suites) | ✅ 159/159 in 11 files (+1 Postgres-only test skipped here, it runs in `test:db`) |
+| `npm run test:db` (migrations 000–005 on Postgres 17) | ✅ 48/48, store contract on Postgres 19/19 (needs Docker Desktop running) |
+| `npm run worker:build` + `npm run test:worker` + `test:worker:e2e` | ✅ bundle OK; `test:worker` 6/6 (e2e skipped without a DB); `test:worker:e2e` 7/7 incl. e2e on real Postgres + pg-boss |
 | `npm run probe:sources -- --selftest` | ✅ 36/36 |
 
 ## P0 notes
