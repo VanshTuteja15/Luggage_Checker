@@ -7,6 +7,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { runScheduledEngine, type EngineCronResult } from "@/lib/engine/cron";
 import { flagOn } from "@/lib/engine/flags";
 import { getEngine } from "@/lib/engine/server";
+import { legacyRetailerFilter } from "@/lib/stores";
 
 function envInt(name: string, fallback: number): number {
   const n = Number.parseInt(process.env[name] ?? "", 10);
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest) {
     const retailersByUser = new Map<string, string[]>(
       (allSettings ?? []).map((s) => [
         s.user_id as string,
-        Array.isArray(s.retailers) ? (s.retailers as string[]) : [],
+        Array.isArray(s.retailers) ? legacyRetailerFilter(s.retailers as string[]) : [],
       ]),
     );
 

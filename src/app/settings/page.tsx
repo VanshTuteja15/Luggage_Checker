@@ -37,8 +37,9 @@ import {
   useUntrackProducts,
   useUpdateSettings,
 } from "@/lib/queries";
-import { RETAILER_INFO, RETAILER_NAMES, type RetailerCategory } from "@/lib/retailers";
+import { retailerColor } from "@/lib/retailers";
 import { useStore } from "@/lib/store";
+import { STORE_GROUPS, STORES } from "@/lib/stores";
 import type { UserSettings } from "@/lib/types";
 
 const TIMEZONES = [
@@ -49,12 +50,6 @@ const TIMEZONES = [
   "America/Halifax",
   "America/St_Johns",
 ];
-
-const CATEGORY_LABEL: Record<RetailerCategory, string> = {
-  major: "Major Canadian retailers",
-  specialty: "Brand direct & specialty",
-  other: "Marketplaces",
-};
 
 function Section({
   title,
@@ -125,15 +120,16 @@ export default function SettingsPage() {
     );
   }
 
-  const retailersByCategory = (["major", "specialty", "other"] as const).map((cat) => ({
-    cat,
-    names: RETAILER_NAMES.filter((n) => RETAILER_INFO[n]?.category === cat),
-  }));
+  const storesByGroup = STORE_GROUPS.map((g) => ({
+    ...g,
+    stores: STORES.filter((s) => s.group === g.id),
+  })).filter((g) => g.stores.length > 0);
+  const allLabels = STORES.map((s) => s.label);
 
   return (
     <AppLayout
       title="Settings"
-      subtitle="Report delivery, retailer coverage and data sources"
+      subtitle="Stores, web estimates and your account"
       actions={
         <Button onClick={save} disabled={!dirty || updateSettings.isPending} className="gap-2">
           {updateSettings.isPending ? (
@@ -232,147 +228,85 @@ export default function SettingsPage() {
         </fieldset>
       </Section>
 
-      {/* ── Retailers ───────────────────────────────────────── */}
+      {/* ── Stores ──────────────────────────────────────────── */}
       <Section
-        title="Retailers"
-        description="Search results and price checks are limited to the retailers you enable here"
+        title="Stores"
+        description="Searches and the morning email show only the stores ticked here"
       >
         <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
           <Info className="h-3.5 w-3.5 shrink-0" />
-          {draft.retailers.length} of {RETAILER_NAMES.length} enabled. Disabling a retailer hides
-          its offers from search and stops recording its prices.
+          {draft.retailers.length} of {STORES.length} stores chosen. Store status explains which
+          stores give verified prices, web estimates or links only.
         </div>
 
-        {retailersByCategory.map(({ cat, names }) => (
-          <div key={cat}>
-            <p className="mb-2 text-sm font-medium">{CATEGORY_LABEL[cat]}</p>
+        {storesByGroup.map((group) => (
+          <fieldset key={group.id}>
+            <legend className="mb-2 text-sm font-medium">{group.label}</legend>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {names.map((name) => (
-                <label key={name} className="flex items-center gap-3 text-sm">
+              {group.stores.map((s) => (
+                <label key={s.id} className="flex items-center gap-3 text-sm">
                   <Checkbox
-                    checked={draft.retailers.includes(name)}
+                    checked={draft.retailers.includes(s.label)}
                     onCheckedChange={(v) =>
                       patch({
                         retailers:
                           v === true
-                            ? [...draft.retailers, name]
-                            : draft.retailers.filter((x) => x !== name),
+                            ? [...draft.retailers, s.label]
+                            : draft.retailers.filter((x) => x !== s.label),
                       })
                     }
                   />
                   <span className="inline-flex items-center gap-2">
                     <span
                       className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: RETAILER_INFO[name].color }}
+                      style={{ backgroundColor: retailerColor(s.label) }}
+                      aria-hidden
                     />
-                    {name}
+                    {s.label}
                   </span>
                 </label>
               ))}
             </div>
-          </div>
+          </fieldset>
         ))}
 
         <div className="flex gap-2 pt-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => patch({ retailers: [...RETAILER_NAMES] })}
-          >
-            Enable all
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              patch({
-                retailers: RETAILER_NAMES.filter((n) => RETAILER_INFO[n].category === "major"),
-              })
-            }
-          >
-            Majors only
+          <Button variant="outline" size="sm" onClick={() => patch({ retailers: allLabels })}>
+            Choose all
           </Button>
         </div>
       </Section>
 
-      {/* ── Data sources ────────────────────────────────────── */}
+      {/* ── Web estimates ───────────────────────────────────── */}
       <Section
-        title="Data Sources"
-        description="Where live prices come from. Configured server-side for security."
+        title="Web estimates"
+        description="Prices found in web search results for stores we can't check directly"
       >
         <div className="flex items-start gap-3 rounded-lg border border-border p-4">
           {provider.data?.configured ? (
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
           ) : (
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
           )}
           <div className="text-sm">
             <p className="font-medium">
-              {provider.data?.configured
-                ? `Active source: ${provider.data.providerLabel}`
-                : "No research provider configured"}
+              {provider.data?.configured ? "Web estimates are on" : "Web estimates are off"}
             </p>
             <p className="mt-1 text-muted-foreground">
-              {provider.data?.configured ? (
-                "Tavily web research across Canadian retailers. Every price is read from the retailer's own page, with the words it came from kept as evidence, and links straight to that page."
-              ) : (
-                <>
-                  Set <code className="rounded bg-muted px-1">TAVILY_API_KEY</code> in{" "}
-                  <code className="rounded bg-muted px-1">.env.local</code>, then restart. The free
-                  plan is 1,000 credits a month with no card, and the app stops before the limit.
-                  API keys are never stored in the browser.
-                </>
-              )}
+              {provider.data?.configured
+                ? "They use a free monthly allowance and stop before it runs out. Every estimate is labelled so you can confirm it on the store's site."
+                : "The app still shows verified prices, staff-checked prices and dealer lists. The person who set up LuggageTracker can switch estimates on."}
             </p>
           </div>
         </div>
 
-        {/* ── Free-allowance usage ─────────────────────────── */}
-        {(provider.data?.budgets ?? []).length > 0 && (
-          <div className="space-y-3">
-            <p className="text-sm font-medium">Search allowance</p>
-            {(provider.data?.budgets ?? []).map((b) => {
-              const pct = b.limit > 0 ? Math.min(100, (b.used / b.limit) * 100) : 0;
-              const tone =
-                b.exhausted || pct >= 90
-                  ? "bg-danger"
-                  : pct >= 70
-                    ? "bg-warning"
-                    : "bg-primary";
-              return (
-                <div key={b.provider} className="rounded-lg border border-border p-3">
-                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-sm font-medium">{b.label}</span>
-                    <span
-                      className={`text-sm tabular-nums ${b.exhausted ? "text-danger" : "text-muted-foreground"}`}
-                    >
-                      {b.used} / {b.limit} used
-                      {!b.exhausted && ` · ${b.remaining} left`}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">{b.note}</p>
-                </div>
-              );
-            })}
-            <p className="text-xs text-muted-foreground">
-              Repeating a search you&apos;ve already run is free — results are cached, so only new
-              queries and price refreshes count against this.
-            </p>
-          </div>
-        )}
-
-        <div className="flex items-start gap-3 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            Scheduled price checks run on the schedule in{" "}
-            <code className="rounded bg-background px-1">vercel.json</code> (or the GitHub Actions
-            workflows), and stop early if the allowance above is nearly spent. Use{" "}
-            <strong>Refresh prices</strong> on the dashboard to check immediately.
-          </span>
-        </div>
+        {(provider.data?.budgets ?? []).map((b) => (
+          <p key={b.provider} className="text-sm">
+            Web estimates left this month:{" "}
+            <strong className="tabular-nums">{b.exhausted ? 0 : b.remaining}</strong>
+            <span className="text-muted-foreground"> of {b.limit}</span>
+          </p>
+        ))}
       </Section>
 
       {/* ── Danger zone ─────────────────────────────────────── */}
@@ -386,7 +320,7 @@ export default function SettingsPage() {
               <p className="text-sm font-medium">Stop tracking everything</p>
               <p className="text-sm text-muted-foreground">
                 Removes all {tracked?.length ?? 0} products from your tracked list. Recorded price
-                history is kept, so re-tracking a product restores its chart.
+                history is kept, so re-tracking a product brings its history back.
               </p>
             </div>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api/respond";
 import { getTrackedProducts } from "@/lib/db/products";
 import { refreshProducts } from "@/lib/db/refresh";
+import { legacyRetailerFilter } from "@/lib/stores";
 import { requireUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     const allowedRetailers = Array.isArray(settings?.retailers)
-      ? (settings.retailers as string[])
+      ? legacyRetailerFilter(settings.retailers as string[])
       : [];
 
     const single = typeof body.productId === "string" ? body.productId : null;

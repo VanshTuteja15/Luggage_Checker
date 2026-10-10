@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequest, errorResponse } from "@/lib/api/respond";
-import { RETAILER_NAMES } from "@/lib/retailers";
+import { cleanStoreLabels, enabledStoreLabels } from "@/lib/stores";
 import { requireUser } from "@/lib/supabase/server";
 import type { UserSettings } from "@/lib/types";
 
@@ -30,7 +30,8 @@ function toSettings(row: SettingsRow | null, fallbackEmail: string | null): User
       oos: row?.include_oos ?? true,
       summary: row?.include_summary ?? true,
     },
-    retailers: row?.retailers ?? [...RETAILER_NAMES],
+    // Registry stores; lists saved under the old retailer names are translated.
+    retailers: enabledStoreLabels(row?.retailers),
   };
 }
 
@@ -86,14 +87,12 @@ export async function PUT(req: NextRequest) {
       if (typeof inc.summary === "boolean") patch.include_summary = inc.summary;
     }
 
-    if (Array.isArray(body.retailers)) {
-      const valid = body.retailers.filter(
-        (r): r is string => typeof r === "string" && RETAILER_NAMES.includes(r),
-      );
-      if (valid.length === 0) {
-        return badRequest("Keep at least one retailer enabled, or searches will return nothing.");
+    const stores = cleanStoreLabels(body.retailers);
+    if (stores) {
+      if (stores.length === 0) {
+        return badRequest("Keep at least one store chosen, or searches will return nothing.");
       }
-      patch.retailers = valid;
+      patch.retailers = stores;
     }
 
     const { data, error } = await supabase

@@ -8,6 +8,7 @@ import {
   search,
 } from "@/lib/search";
 import { brandStoreFor } from "@/lib/retailers";
+import { legacyRetailerFilter } from "@/lib/stores";
 import { requireUser } from "@/lib/supabase/server";
 import type { SearchResponse } from "@/lib/search/types";
 
@@ -65,7 +66,8 @@ export async function POST(req: NextRequest) {
         .select("retailers")
         .eq("user_id", userId)
         .maybeSingle();
-      if (Array.isArray(data?.retailers)) allowedRetailers = data.retailers as string[];
+      if (Array.isArray(data?.retailers))
+        allowedRetailers = legacyRetailerFilter(data.retailers as string[]);
     }
     // The client always wants Amazon, Walmart and Samsonite — and the
     // searched brand's own store — whatever the Settings filter says.

@@ -168,11 +168,7 @@ export default function SearchPage() {
   return (
     <AppLayout
       title="Search Products"
-      subtitle={
-        engineMode
-          ? "Prices verified live at Canadian stores, cheapest first — every price shows where and when it was read"
-          : "Live lowest prices from Amazon, Walmart, Samsonite and 15+ Canadian retailers"
-      }
+      subtitle="Lowest prices first. Every price shows where and when it was found."
       actions={<div />}
     >
       {/* ── Search bar ──────────────────────────────────────── */}
