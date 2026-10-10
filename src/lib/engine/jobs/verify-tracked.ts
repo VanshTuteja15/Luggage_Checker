@@ -19,6 +19,7 @@ import type { BridgeOffer, TrackedBridge, TrackedItem } from "../bridge/tracked"
 import { observeOffer } from "../observe";
 import type { EngineRuntime } from "../recorder";
 import { liveRoutes, sourceForUrl, type RouteContext } from "../registry";
+import { stockOf } from "../research/rows";
 import type { CategoryPack, ListingRecord, RawOffer, SourceRecord } from "../types";
 
 export type AlertSender = (a: {
@@ -211,7 +212,8 @@ export async function verifyTracked(
         }
         if (res.status !== "ok") continue;
 
-        let best: { o: RawOffer; colourMatch: boolean } | null = null;
+        // Per store: the tracked colour first, then something in stock, then the lowest price.
+        let best: { o: RawOffer; colourMatch: boolean; inStock: boolean } | null = null;
         for (const o of res.offers) {
           const { validation } = await observeOffer(rt.store, pack, source, o, {
             sessionId: null,
@@ -225,18 +227,23 @@ export async function verifyTracked(
             continue;
           const colourMatch =
             !!item.color && !!o.colour && o.colour.toLowerCase() === item.color.toLowerCase();
+          const inStock = stockOf(o.availability) !== "out_of_stock";
           if (
             !best ||
             (colourMatch && !best.colourMatch) ||
-            (colourMatch === best.colourMatch && o.price < (best.o.price as number))
+            (colourMatch === best.colourMatch && inStock && !best.inStock) ||
+            (colourMatch === best.colourMatch &&
+              inStock === best.inStock &&
+              o.price < (best.o.price as number))
           )
-            best = { o, colourMatch };
+            best = { o, colourMatch, inStock };
         }
         if (best) {
           written.push({
             retailer: source.retailerLabel,
             price: best.o.price as number,
-            inStock: best.o.availability !== "out_of_stock",
+            inStock: best.inStock,
+            availability: stockOf(best.o.availability),
             url: best.o.url,
             title: best.o.title,
           });

@@ -34,6 +34,8 @@ export type BridgeOffer = {
   retailer: string;
   price: number;
   inStock: boolean;
+  /** The three-state stock the store gave (R6); stored when migration 006 is in. */
+  availability?: "in_stock" | "out_of_stock" | "unknown";
   url: string;
   title: string;
 };
@@ -56,7 +58,21 @@ export interface TrackedBridge {
 }
 
 export class PgTrackedBridge implements TrackedBridge {
+  /** Whether retailer_offers.availability exists (migration 006); checked once. */
+  private availabilityColumn: Promise<boolean> | null = null;
+
   constructor(private readonly pool: Pool) {}
+
+  private hasAvailabilityColumn(): Promise<boolean> {
+    this.availabilityColumn ??= this.pool
+      .query(
+        `SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'retailer_offers' AND column_name = 'availability'`,
+      )
+      .then((r) => (r.rowCount ?? 0) > 0)
+      .catch(() => false);
+    return this.availabilityColumn;
+  }
 
   async listTracked(limit: number): Promise<TrackedItem[]> {
     const { rows } = await this.pool.query(
@@ -94,17 +110,38 @@ export class PgTrackedBridge implements TrackedBridge {
   }
 
   async writeOffers(productId: string, offers: BridgeOffer[], at: string): Promise<void> {
+    const withAvailability = await this.hasAvailabilityColumn();
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       for (const o of offers) {
-        await client.query(
-          `INSERT INTO retailer_offers (product_id, retailer, price, currency, in_stock, url, title, last_checked_at)
-           VALUES ($1, $2, $3, 'CAD', $4, $5, $6, $7)
-           ON CONFLICT (product_id, retailer) DO UPDATE SET price = EXCLUDED.price, in_stock = EXCLUDED.in_stock, url = EXCLUDED.url,
-             title = EXCLUDED.title, last_checked_at = EXCLUDED.last_checked_at`,
-          [productId, o.retailer, o.price, o.inStock, o.url, o.title.slice(0, 300), at],
-        );
+        if (withAvailability) {
+          await client.query(
+            `INSERT INTO retailer_offers (product_id, retailer, price, currency, in_stock, availability, url, title, last_checked_at)
+             VALUES ($1, $2, $3, 'CAD', $4, $5, $6, $7, $8)
+             ON CONFLICT (product_id, retailer) DO UPDATE SET price = EXCLUDED.price, in_stock = EXCLUDED.in_stock,
+               availability = EXCLUDED.availability, url = EXCLUDED.url, title = EXCLUDED.title,
+               last_checked_at = EXCLUDED.last_checked_at`,
+            [
+              productId,
+              o.retailer,
+              o.price,
+              o.inStock,
+              o.availability ?? null,
+              o.url,
+              o.title.slice(0, 300),
+              at,
+            ],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO retailer_offers (product_id, retailer, price, currency, in_stock, url, title, last_checked_at)
+             VALUES ($1, $2, $3, 'CAD', $4, $5, $6, $7)
+             ON CONFLICT (product_id, retailer) DO UPDATE SET price = EXCLUDED.price, in_stock = EXCLUDED.in_stock, url = EXCLUDED.url,
+               title = EXCLUDED.title, last_checked_at = EXCLUDED.last_checked_at`,
+            [productId, o.retailer, o.price, o.inStock, o.url, o.title.slice(0, 300), at],
+          );
+        }
         await client.query(
           `INSERT INTO price_history (product_id, retailer, price, currency, date) VALUES ($1, $2, $3, 'CAD', $4::date)
            ON CONFLICT (product_id, retailer, date) DO UPDATE SET price = EXCLUDED.price`,

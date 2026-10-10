@@ -147,6 +147,7 @@ async function main(): Promise<void> {
         "003_search_cache_and_quota.sql",
         "004_price_engine.sql",
         "005_scheduler_alerts.sql",
+        "006_client_ready.sql",
       ]) {
         try {
           await c.query(sql(`supabase/migrations/${f}`));
@@ -407,6 +408,34 @@ async function main(): Promise<void> {
       );
     });
 
+    console.log(`\n${B}Client-ready (006)${X}`);
+    {
+      const { rows: pr } = await c.query(
+        "INSERT INTO products (slug, name, brand) VALUES ('t006-bag', 'Test bag', 'Test') RETURNING id",
+      );
+      const productId = pr[0].id as string;
+      await c.query(
+        "INSERT INTO retailer_offers (product_id, retailer, price, availability) VALUES ($1, 'Store A', 100, 'out_of_stock')",
+        [productId],
+      );
+      check(
+        "retailer_offers.availability accepts in_stock / out_of_stock / unknown / NULL",
+        (await expectError(
+          c,
+          "INSERT INTO retailer_offers (product_id, retailer, price, availability) VALUES ($1, 'Store B', 100, NULL)",
+          [productId],
+        )) === null,
+      );
+      check(
+        "retailer_offers.availability refuses anything else",
+        (await expectError(
+          c,
+          "INSERT INTO retailer_offers (product_id, retailer, price, availability) VALUES ($1, 'Store C', 100, 'maybe')",
+          [productId],
+        )) !== null,
+      );
+    }
+
     console.log(`\n${B}Retention${X}`);
     check(
       "retention refuses to keep under 30 days",
@@ -426,6 +455,7 @@ async function main(): Promise<void> {
       "003_search_cache_and_quota.sql",
       "004_price_engine.sql",
       "005_scheduler_alerts.sql",
+      "006_client_ready.sql",
     ]) {
       try {
         await l.query(sql(`supabase/migrations/${f}`));

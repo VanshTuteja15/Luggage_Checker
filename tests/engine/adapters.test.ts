@@ -744,6 +744,19 @@ describe("manual_entry", () => {
       "manual",
     ]);
   });
+  it("keeps the stock a salesperson saw, unknown when they didn't say (R6)", () => {
+    const entry = (availability?: "in_stock" | "out_of_stock" | "unknown") =>
+      manualOffer(
+        source("costco-ca"),
+        luggagePack,
+        { title: "Samsonite Set", price: 199, checkedAt: "2026-10-06", enteredBy: "admin", availability },
+        now,
+      );
+    const stockOfEntry = (r: ReturnType<typeof entry>) => (r.ok ? r.offer.availability : null);
+    expect(stockOfEntry(entry("in_stock"))).toBe("in_stock");
+    expect(stockOfEntry(entry("out_of_stock"))).toBe("out_of_stock");
+    expect(stockOfEntry(entry())).toBe("unknown");
+  });
   it("refuses future dates, bad prices and links to other sites", () => {
     expect(
       manualOffer(
