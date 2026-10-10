@@ -50,7 +50,9 @@ describe("public sign-up (R5.1, A5.1)", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "public-test-key");
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const res = await signupPost(signupRequest({ email: "new@example.com", password: "s3cret!pass" }));
+    const res = await signupPost(
+      signupRequest({ email: "new@example.com", password: "s3cret!pass" }),
+    );
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: SIGNUP_CLOSED_MESSAGE });
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -129,9 +131,23 @@ describe("store list from the registry (R5.3)", () => {
 
   it("translates a list saved under the old names, keeping stores the old list never had", () => {
     const legacyDefault = [
-      "Amazon.ca", "Costco.ca", "Walmart.ca", "Hudson's Bay", "Canadian Tire", "Bentley",
-      "Best Buy Canada", "London Drugs", "Samsonite.ca", "TUMI.ca", "Away", "Travelpro",
-      "Monos", "Briggs & Riley", "RIMOWA", "CALPAK", "eBay.ca",
+      "Amazon.ca",
+      "Costco.ca",
+      "Walmart.ca",
+      "Hudson's Bay",
+      "Canadian Tire",
+      "Bentley",
+      "Best Buy Canada",
+      "London Drugs",
+      "Samsonite.ca",
+      "TUMI.ca",
+      "Away",
+      "Travelpro",
+      "Monos",
+      "Briggs & Riley",
+      "RIMOWA",
+      "CALPAK",
+      "eBay.ca",
     ];
     expect(enabledStoreLabels(legacyDefault)).toHaveLength(STORES.length);
     const noEbay = legacyDefault.filter((n) => n !== "eBay.ca");

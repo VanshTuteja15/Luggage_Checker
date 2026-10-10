@@ -121,7 +121,10 @@ function BrandingPanel() {
         </p>
         <ul className="mt-8 hidden space-y-5 lg:block">
           {[
-            { icon: Store, text: "Lowest price first, with the store and the time each price was found" },
+            {
+              icon: Store,
+              text: "Lowest price first, with the store and the time each price was found",
+            },
             { icon: Bell, text: "A morning email with the prices of the bags you choose" },
             { icon: TrendingDown, text: "Price changes and 30-day lows in plain tables" },
           ].map(({ icon: Icon, text }) => (

@@ -232,7 +232,8 @@ export async function fetchTavilyUsage(force = false): Promise<RemoteUsage | nul
 
   const now = Date.now();
   if (!force) {
-    if (remoteUsage && now - remoteUsage.fetchedAt < USAGE_BACKGROUND_REFRESH_MS) return remoteUsage;
+    if (remoteUsage && now - remoteUsage.fetchedAt < USAGE_BACKGROUND_REFRESH_MS)
+      return remoteUsage;
     if (now - lastUsageFailureAt < USAGE_RETRY_AFTER_FAILURE_MS) return remoteUsage;
   }
   if (usageInFlight) return usageInFlight;
@@ -275,7 +276,10 @@ export async function fetchTavilyUsage(force = false): Promise<RemoteUsage | nul
       if (!body || (planUsed === null && keyUsed === null)) {
         // An answer without a usage figure confirms nothing.
         lastUsageFailureAt = Date.now();
-        lastUsageError = { status: res.status, message: "usage figure missing from Tavily's reply" };
+        lastUsageError = {
+          status: res.status,
+          message: "usage figure missing from Tavily's reply",
+        };
         return remoteUsage;
       }
 
@@ -304,7 +308,12 @@ export async function fetchTavilyUsage(force = false): Promise<RemoteUsage | nul
       lastUsageFailureAt = Date.now();
       lastUsageError = {
         status: null,
-        message: err instanceof Error && err.name === "AbortError" ? "timed out" : err instanceof Error ? err.message : "failed",
+        message:
+          err instanceof Error && err.name === "AbortError"
+            ? "timed out"
+            : err instanceof Error
+              ? err.message
+              : "failed",
       };
       return remoteUsage;
     } finally {
@@ -383,7 +392,9 @@ async function reserveCredits(credits: number): Promise<() => void> {
 
   // Keep Tavily's figure fresh. Only wait for it when the snapshot is too
   // old to trust; otherwise refresh quietly in the background.
-  const trustWindow = remoteUsage?.paygoEnabled ? USAGE_TRUST_WINDOW_PAYGO_MS : USAGE_TRUST_WINDOW_MS;
+  const trustWindow = remoteUsage?.paygoEnabled
+    ? USAGE_TRUST_WINDOW_PAYGO_MS
+    : USAGE_TRUST_WINDOW_MS;
   const age = remoteUsage ? Date.now() - remoteUsage.fetchedAt : Infinity;
   // (Not forced: after a failure, /usage is retried at most once a minute —
   // it's limited to 10 calls per 10 minutes.)
@@ -396,7 +407,11 @@ async function reserveCredits(credits: number): Promise<() => void> {
     // Unverified balance → no request. Name the actual cause.
     const status = lastUsageError?.status;
     if (status === 401) {
-      throw new ProviderError("tavily", "auth", "Tavily rejected the API key. Check TAVILY_API_KEY in .env.local and restart.");
+      throw new ProviderError(
+        "tavily",
+        "auth",
+        "Tavily rejected the API key. Check TAVILY_API_KEY in .env.local and restart.",
+      );
     }
     throw new ProviderError(
       "tavily",
@@ -453,7 +468,15 @@ function requestKey(req: TavilySearchRequest): string {
   const normalised = {
     ...req,
     // Word order and punctuation don't change what the web has to say.
-    query: [...new Set(req.query.toLowerCase().replace(/[^a-z0-9$.\s-]/g, " ").split(/\s+/).filter(Boolean))]
+    query: [
+      ...new Set(
+        req.query
+          .toLowerCase()
+          .replace(/[^a-z0-9$.\s-]/g, " ")
+          .split(/\s+/)
+          .filter(Boolean),
+      ),
+    ]
       .sort()
       .join(" "),
     includeDomains: req.includeDomains ? [...req.includeDomains].sort() : undefined,
@@ -559,7 +582,11 @@ type RawTavilyResponse = {
   request_id?: string;
 };
 
-function parseResponse(raw: RawTavilyResponse, fallbackQuery: string, credits: number): TavilySearchResponse {
+function parseResponse(
+  raw: RawTavilyResponse,
+  fallbackQuery: string,
+  credits: number,
+): TavilySearchResponse {
   const responseTime = Number(raw.response_time);
   return {
     query: raw.query ?? fallbackQuery,
@@ -657,7 +684,11 @@ async function runSearch(
     if (deadline && !deadline.hasAtLeast(MIN_ATTEMPT_MS)) {
       throw (
         lastError ??
-        new ProviderError("tavily", "budget", "Not enough time left for a research call; no request was sent.")
+        new ProviderError(
+          "tavily",
+          "budget",
+          "Not enough time left for a research call; no request was sent.",
+        )
       );
     }
 
@@ -672,7 +703,11 @@ async function runSearch(
       release();
       throw (
         lastError ??
-        new ProviderError("tavily", "budget", "Not enough time left for a research call; no request was sent.")
+        new ProviderError(
+          "tavily",
+          "budget",
+          "Not enough time left for a research call; no request was sent.",
+        )
       );
     }
 
@@ -708,7 +743,12 @@ async function runSearch(
         status = res.status;
         if (res.ok) {
           raw = (await res.json().catch(() => null)) as RawTavilyResponse | null;
-          if (!raw) failure = new ProviderError("tavily", "unknown", "Tavily returned an unreadable response");
+          if (!raw)
+            failure = new ProviderError(
+              "tavily",
+              "unknown",
+              "Tavily returned an unreadable response",
+            );
         } else {
           detail = await res.text().catch(() => "");
           retryAfter = retryAfterMs(res);
@@ -761,7 +801,9 @@ async function runSearch(
           // stop for the rest of the month and say so loudly.
           exhaustedUntil = status === 433 ? endOfMonthUtc() : Date.now() + 30 * 60_000;
           if (status === 433) {
-            console.error("[tavily] 433 pay-as-you-go limit reached — pay-as-you-go is ENABLED on this account. Turn it off in the Tavily dashboard. Research paused until next month.");
+            console.error(
+              "[tavily] 433 pay-as-you-go limit reached — pay-as-you-go is ENABLED on this account. Turn it off in the Tavily dashboard. Research paused until next month.",
+            );
           }
           await opts.meter?.refundAttempt(expected);
           throw failure;
@@ -785,7 +827,9 @@ async function runSearch(
         if (kind === "bad_request" && attempt === 0 && hasOptionalFocus(req)) {
           // Probably an optional option Tavily no longer accepts. Refused
           // requests aren't billed; try once with just the essentials.
-          console.warn(`[tavily] request rejected (${status}); retrying without optional options. ${detail.slice(0, 200)}`);
+          console.warn(
+            `[tavily] request rejected (${status}); retrying without optional options. ${detail.slice(0, 200)}`,
+          );
           await opts.meter?.refundAttempt(expected);
           lastError = failure;
           minimal = true;
@@ -824,8 +868,13 @@ async function runSearch(
 function extractErrorMessage(body: string): string {
   try {
     const parsed = JSON.parse(body) as { detail?: { error?: string } | { msg?: string }[] };
-    if (Array.isArray(parsed.detail)) return parsed.detail.map((d) => d.msg).filter(Boolean).join("; ");
-    if (parsed.detail && "error" in parsed.detail && parsed.detail.error) return parsed.detail.error;
+    if (Array.isArray(parsed.detail))
+      return parsed.detail
+        .map((d) => d.msg)
+        .filter(Boolean)
+        .join("; ");
+    if (parsed.detail && "error" in parsed.detail && parsed.detail.error)
+      return parsed.detail.error;
   } catch {
     // not JSON
   }
@@ -871,7 +920,10 @@ export type TavilyExtractResponse = {
 };
 
 /** Upper bound on what an extract of `pages` pages can cost. */
-export function expectedExtractCredits(pages: number, depth: "basic" | "advanced" = "basic"): number {
+export function expectedExtractCredits(
+  pages: number,
+  depth: "basic" | "advanced" = "basic",
+): number {
   if (pages <= 0) return 0;
   return Math.ceil(pages / 5) * (depth === "advanced" ? 2 : 1);
 }
@@ -1016,7 +1068,10 @@ export async function tavilyExtract(
     const budgetMs = deadline ? deadline.budget(16_000, 500) : 16_000;
     const tavilySeconds = Math.max(
       1,
-      Math.min(req.timeoutSeconds ?? (depth === "advanced" ? 12 : 8), Math.floor((budgetMs - 1_500) / 1000)),
+      Math.min(
+        req.timeoutSeconds ?? (depth === "advanced" ? 12 : 8),
+        Math.floor((budgetMs - 1_500) / 1000),
+      ),
     );
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), tavilySeconds * 1000 + 1_500);
@@ -1058,7 +1113,8 @@ export async function tavilyExtract(
         // The request never got an answer — nothing was read or billed.
         await opts.meter?.refundAttempt(expected);
       }
-      for (const url of urls) out.failed.push({ url, error: timedOut ? "timed out" : "network error" });
+      for (const url of urls)
+        out.failed.push({ url, error: timedOut ? "timed out" : "network error" });
       return out;
     } finally {
       clearTimeout(timer);
@@ -1070,14 +1126,18 @@ export async function tavilyExtract(
       }
       // Refused requests aren't billed.
       await opts.meter?.refundAttempt(expected);
-      const message = status ? `Tavily error ${status}: ${extractErrorMessage(detail)}` : "unreadable response";
+      const message = status
+        ? `Tavily error ${status}: ${extractErrorMessage(detail)}`
+        : "unreadable response";
       for (const url of urls) out.failed.push({ url, error: message });
       return out;
     }
 
     const ok = (raw.results ?? []).filter(
       (r): r is { url: string; raw_content: string } =>
-        typeof r.url === "string" && typeof r.raw_content === "string" && r.raw_content.trim().length > 0,
+        typeof r.url === "string" &&
+        typeof r.raw_content === "string" &&
+        r.raw_content.trim().length > 0,
     );
     for (const r of ok) {
       out.results.push({ url: r.url, rawContent: r.raw_content });

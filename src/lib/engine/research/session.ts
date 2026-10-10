@@ -381,16 +381,17 @@ export async function runResearchSession(
     writer.emit("plan", null, { stores: [...rows.values()] });
 
     // Stores with no live route get a web estimate try (R3), if switched on.
-    const estimateStores = deps.estimates && flagOn(flags, "estimates.web")
-      ? active.filter((s) => {
-          const r = rows.get(s.id);
-          return (
-            !!r &&
-            (r.state === "link_only" || r.state === "blocked" || r.state === "not_configured") &&
-            s.allowedDomains.length > 0
-          );
-        })
-      : [];
+    const estimateStores =
+      deps.estimates && flagOn(flags, "estimates.web")
+        ? active.filter((s) => {
+            const r = rows.get(s.id);
+            return (
+              !!r &&
+              (r.state === "link_only" || r.state === "blocked" || r.state === "not_configured") &&
+              s.allowedDomains.length > 0
+            );
+          })
+        : [];
 
     /* ── per-store tasks ──────────────────────────────────────────── */
 
@@ -734,7 +735,8 @@ export async function runResearchSession(
           },
         });
         const bySource = new Map<string, AnswerOffer[]>();
-        for (const o of res.offers) bySource.set(o.sourceId, [...(bySource.get(o.sourceId) ?? []), o]);
+        for (const o of res.offers)
+          bySource.set(o.sourceId, [...(bySource.get(o.sourceId) ?? []), o]);
         for (const [sourceId, offers] of bySource) addOffers(sourceId, offers);
         if (!finished)
           writer.emit("estimates_done", null, {
@@ -744,7 +746,8 @@ export async function runResearchSession(
             skipped: res.skipped,
           });
       } catch {
-        if (!finished) writer.emit("estimates_done", null, { accepted: 0, rejected: 0, skipped: "error" });
+        if (!finished)
+          writer.emit("estimates_done", null, { accepted: 0, rejected: 0, skipped: "error" });
       }
     })();
 

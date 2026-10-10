@@ -182,6 +182,10 @@ export function formatYmdWeekday(ymd: string): string {
 }
 
 /** True when the instant falls on the same local calendar day as `now`. */
-export function isSameLocalDay(at: Date | string, now: Date, tz: string = DEFAULT_TIME_ZONE): boolean {
+export function isSameLocalDay(
+  at: Date | string,
+  now: Date,
+  tz: string = DEFAULT_TIME_ZONE,
+): boolean {
   return localDate(new Date(at), tz) === localDate(now, tz);
 }

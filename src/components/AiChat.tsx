@@ -112,9 +112,10 @@ export function AiChat() {
 
       try {
         // Send full conversation history (without welcome) for context
-        const history = [...messages.filter((m) => m.id !== "welcome"), userMsg].map(
-          (m) => ({ role: m.role, content: m.content }),
-        );
+        const history = [...messages.filter((m) => m.id !== "welcome"), userMsg].map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
 
         // apiFetch attaches the Supabase access token — the chat endpoint
         // builds its context from THIS user's tracked products.
@@ -186,10 +187,7 @@ export function AiChat() {
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={cn(
-                  "flex",
-                  msg.role === "user" ? "justify-end" : "justify-start",
-                )}
+                className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}
               >
                 <div
                   className={cn(

@@ -21,9 +21,7 @@ import type { Offer, SearchProduct } from "@/lib/search/types";
 export function trackableOffers(p: AnswerProduct): AnswerOffer[] {
   return p.offers.filter(
     (o) =>
-      o.freshness.kind !== "stale" &&
-      o.freshness.kind !== "estimate" &&
-      /^https:\/\//.test(o.url),
+      o.freshness.kind !== "stale" && o.freshness.kind !== "estimate" && /^https:\/\//.test(o.url),
   );
 }
 

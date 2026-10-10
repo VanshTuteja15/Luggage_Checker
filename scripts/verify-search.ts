@@ -1856,7 +1856,11 @@ async function main() {
         JSON.stringify(second?.urls) === JSON.stringify([READ_B]),
       JSON.stringify(second),
     );
-    check("both store pages are read", urls.includes(READ_A) && urls.includes(READ_B), urls.join(", "));
+    check(
+      "both store pages are read",
+      urls.includes(READ_A) && urls.includes(READ_B),
+      urls.join(", "),
+    );
     check(
       "reading uses basic depth (1 credit per 5 pages)",
       calls.extractBodies[0]?.extract_depth === "basic",
@@ -2285,12 +2289,18 @@ async function main() {
     check("'from $199' is not a price", "reason" in read("From $199.99"));
     check("a range is not a price", "reason" in read("$199.99 – $299.99"));
     check("a monthly payment is not a price", "reason" in read("$25/mo"));
-    check("'save $50' is skipped, the selling price kept", (() => {
-      const r = read("Save $50.00, now $199.99");
-      return "price" in r && r.price === 199.99;
-    })());
+    check(
+      "'save $50' is skipped, the selling price kept",
+      (() => {
+        const r = read("Save $50.00, now $199.99");
+        return "price" in r && r.price === 199.99;
+      })(),
+    );
     check("two different prices → none", "reason" in read("$199.99 or $259.99"));
-    check("'Sky Max 3.0' is never a price", "reason" in readEstimatePrice("Sky Max 3.0", "Sky Max 3.0"));
+    check(
+      "'Sky Max 3.0' is never a price",
+      "reason" in readEstimatePrice("Sky Max 3.0", "Sky Max 3.0"),
+    );
     const sources = new Map(SOURCE_SEED.map((s) => [s.id, s]));
     for (const name of ["e1-paralux-large.json", "e2-aluminum-carry-on.json"]) {
       const f = JSON.parse(readFileSync(resolve("scripts/fixtures/estimates", name), "utf8")) as {
@@ -2316,7 +2326,9 @@ async function main() {
       );
       check(
         `${name}: every result gets its expected verdict`,
-        f.expect.every((e) => out.find((o) => o.candidate.url === e.url)?.verdict.outcome === e.outcome),
+        f.expect.every(
+          (e) => out.find((o) => o.candidate.url === e.url)?.verdict.outcome === e.outcome,
+        ),
         out.map((o) => `${o.verdict.outcome}: ${o.verdict.reasons.join("; ")}`).join(" | "),
       );
     }

@@ -41,9 +41,9 @@ export function useTrackedProduct(productId: string, days = 30, enabled = true) 
     enabled: enabled && !!productId,
     staleTime: 30_000,
     queryFn: () =>
-      apiFetch<{ product: TrackedProduct }>(
-        `/api/products/${productId}?days=${days}`,
-      ).then((r) => r.product),
+      apiFetch<{ product: TrackedProduct }>(`/api/products/${productId}?days=${days}`).then(
+        (r) => r.product,
+      ),
   });
 }
 

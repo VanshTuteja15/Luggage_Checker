@@ -8,7 +8,13 @@
 /*  Size classes never merge.                                           */
 /* ------------------------------------------------------------------ */
 
-import { DEFAULT_TIME_ZONE, formatDay, formatTime, formatYmd, isSameLocalDay } from "@/lib/time/local";
+import {
+  DEFAULT_TIME_ZONE,
+  formatDay,
+  formatTime,
+  formatYmd,
+  isSameLocalDay,
+} from "@/lib/time/local";
 import type { AnswerOffer, AnswerProduct, CategoryPack, Freshness, Identifier } from "../types";
 
 class UnionFind {

@@ -98,9 +98,12 @@ const empty = (skipped: EstimateSkip | null): EstimateResult => ({
 /** Named products share a key across wordings; free text is keyed by its words. */
 export function cacheKeyFor(query: string, e: ExpectedProduct): { key: string; ttlMs: number } {
   if (e.brand && e.line.length && e.sizeClass) {
-    const id = [e.brand.toLowerCase(), [...e.line].sort().join(" "), e.sizeClass, e.inches ?? ""].join(
-      "|",
-    );
+    const id = [
+      e.brand.toLowerCase(),
+      [...e.line].sort().join(" "),
+      e.sizeClass,
+      e.inches ?? "",
+    ].join("|");
     return {
       key: `p:${createHash("sha256").update(id).digest("hex").slice(0, 32)}`,
       ttlMs: PRODUCT_CACHE_MS,

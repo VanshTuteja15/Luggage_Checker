@@ -32,7 +32,10 @@ export async function POST(req: NextRequest) {
     );
   }
   if (!supabaseConfigured()) {
-    return NextResponse.json({ error: "Sign-in isn't set up on this server yet." }, { status: 503 });
+    return NextResponse.json(
+      { error: "Sign-in isn't set up on this server yet." },
+      { status: 503 },
+    );
   }
 
   const supabase = createClient(
@@ -60,7 +63,10 @@ export async function POST(req: NextRequest) {
     );
   }
   if (data.user?.identities?.length === 0) {
-    return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
+    return NextResponse.json(
+      { error: "An account with this email already exists." },
+      { status: 409 },
+    );
   }
   return NextResponse.json({
     session: data.session

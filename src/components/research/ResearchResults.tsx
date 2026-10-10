@@ -157,7 +157,10 @@ function StoreRowLine({ row }: { row: StoreRow }) {
             href={row.offer.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn("inline-flex items-center gap-1 text-xs text-primary hover:underline", FOCUS)}
+            className={cn(
+              "inline-flex items-center gap-1 text-xs text-primary hover:underline",
+              FOCUS,
+            )}
             aria-label={`Open ${row.retailer}'s page for this price (opens their site)`}
           >
             Open <ExternalLink className="h-3 w-3" aria-hidden />
@@ -182,7 +185,10 @@ function StoreRowLine({ row }: { row: StoreRow }) {
                     href={pg.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={cn("min-w-0 max-w-full truncate text-primary hover:underline", FOCUS)}
+                    className={cn(
+                      "min-w-0 max-w-full truncate text-primary hover:underline",
+                      FOCUS,
+                    )}
                   >
                     {pg.title}
                   </a>
@@ -234,7 +240,10 @@ function HeadlineBlock({ view }: { view: ProductView }) {
           href={h.row.offer.url}
           target="_blank"
           rel="noopener noreferrer"
-          className={cn("inline-flex items-center gap-1 text-xs text-primary hover:underline", FOCUS)}
+          className={cn(
+            "inline-flex items-center gap-1 text-xs text-primary hover:underline",
+            FOCUS,
+          )}
         >
           Open {h.row.retailer} <ExternalLink className="h-3 w-3" aria-hidden />
         </a>
@@ -268,12 +277,20 @@ function ProductCard({
   const gtin = product.identifiers.find((i) => i.kind === "gtin")?.value;
 
   return (
-    <article className="rounded-xl border border-border bg-card" aria-labelledby={`p-${product.key}`}>
+    <article
+      className="rounded-xl border border-border bg-card"
+      aria-labelledby={`p-${product.key}`}
+    >
       <div className="flex flex-col gap-3 p-4 sm:flex-row">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.imageUrl} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+            <img
+              src={product.imageUrl}
+              alt=""
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+            />
           ) : (
             <ShoppingBag className="h-6 w-6 text-muted-foreground" aria-hidden />
           )}
@@ -294,7 +311,11 @@ function ProductCard({
               className="h-8 gap-1.5 text-xs"
               disabled={tracked || trackPending || !trackable}
               onClick={() => onTrack(product)}
-              title={trackable ? undefined : "Only prices found today at a store's own page can be tracked"}
+              title={
+                trackable
+                  ? undefined
+                  : "Only prices found today at a store's own page can be tracked"
+              }
             >
               {trackPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -330,7 +351,10 @@ function OtherStores({ rows }: { rows: StoreStatusRow[] }) {
   const links = rows.filter((r) => !!r.url);
   if (links.length === 0) return null;
   return (
-    <section className="mt-5 rounded-xl border border-border bg-card px-4 py-3" aria-labelledby="other-stores">
+    <section
+      className="mt-5 rounded-xl border border-border bg-card px-4 py-3"
+      aria-labelledby="other-stores"
+    >
       <h2 id="other-stores" className="mb-2 text-xs font-medium text-muted-foreground">
         Also compare at
       </h2>
@@ -438,7 +462,11 @@ export function ResearchResults({
     const base =
       view.answer?.products ??
       rankProducts(groupOffers(view.offers, luggagePack), (p) =>
-        matchScore(parsed, haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }), p.sizeClass),
+        matchScore(
+          parsed,
+          haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }),
+          p.sizeClass,
+        ),
       );
     const list = productViews(base, { wantsAccessory: parsed.sizeClass === "accessory" });
     if (sort === "price-asc") return list;
@@ -472,7 +500,12 @@ export function ResearchResults({
             </Button>
           ) : (
             view.sessionId && (
-              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onReverify}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={onReverify}
+              >
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Check prices again
               </Button>
             )
@@ -493,19 +526,22 @@ export function ResearchResults({
       </div>
 
       {view.status === "cancelled" && (
-        <p className="mb-3 text-sm text-muted-foreground">Stopped. Prices found so far are shown.</p>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Stopped. Prices found so far are shown.
+        </p>
       )}
       {answer?.deadlineHit && (
         <p className="mb-3 text-xs text-muted-foreground">
-          Some stores took too long to answer. Press &ldquo;Check prices again&rdquo; to try them again.
+          Some stores took too long to answer. Press &ldquo;Check prices again&rdquo; to try them
+          again.
         </p>
       )}
 
       <div aria-live="polite">
         {views.length === 0 && !running ? (
           <p className="rounded-xl border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
-            No price found for &ldquo;{view.query}&rdquo;. Try a shorter or different product name, or
-            compare at the stores below.
+            No price found for &ldquo;{view.query}&rdquo;. Try a shorter or different product name,
+            or compare at the stores below.
           </p>
         ) : (
           <div className="space-y-3">
@@ -527,8 +563,8 @@ export function ResearchResults({
 
       {views.length > 0 && (
         <p className="mt-4 text-xs text-muted-foreground">
-          Prices are each store&rsquo;s listed price in Canadian dollars, before GST/HST and shipping,
-          as read at the time shown.
+          Prices are each store&rsquo;s listed price in Canadian dollars, before GST/HST and
+          shipping, as read at the time shown.
         </p>
       )}
     </div>

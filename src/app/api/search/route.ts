@@ -73,7 +73,9 @@ export async function POST(req: NextRequest) {
     // searched brand's own store — whatever the Settings filter says.
     if (allowedRetailers.length > 0) {
       const always = ["Amazon.ca", "Walmart.ca", "Samsonite.ca", brandStoreFor(query)];
-      allowedRetailers = [...new Set([...allowedRetailers, ...always.filter((r): r is string => !!r)])];
+      allowedRetailers = [
+        ...new Set([...allowedRetailers, ...always.filter((r): r is string => !!r)]),
+      ];
     }
 
     const searchOpts = {
@@ -116,7 +118,12 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           const res = errorResponse(err, "POST /api/search (stream)");
           const payload = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-          send({ type: "error", status: res.status, error: payload.error ?? "Search failed", code: payload.code });
+          send({
+            type: "error",
+            status: res.status,
+            error: payload.error ?? "Search failed",
+            code: payload.code,
+          });
         } finally {
           try {
             controller.close();

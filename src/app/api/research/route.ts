@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
     if (!engineStoreReady()) {
       return NextResponse.json(
         {
-          error: "Live price checks aren't set up on this server yet. Showing saved prices instead.",
+          error:
+            "Live price checks aren't set up on this server yet. Showing saved prices instead.",
           code: "engine_not_configured",
         },
         { status: 503 },

@@ -40,9 +40,11 @@ export async function GET(req: NextRequest) {
       if (engineStoreReady()) {
         const { rt } = getEngine();
         products = await withTimeout(
-          rt.sources().then((sources) =>
-            lastKnownFromEngine(rt.store, luggagePack, sources, q.data, { storeIds }),
-          ),
+          rt
+            .sources()
+            .then((sources) =>
+              lastKnownFromEngine(rt.store, luggagePack, sources, q.data, { storeIds }),
+            ),
           6_000,
         );
         if (products.length) from = "engine";

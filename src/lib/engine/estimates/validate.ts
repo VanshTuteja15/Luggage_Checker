@@ -182,7 +182,8 @@ export function identityReasons(
   const brand = pack.brandOf(title) ?? source.identityQuality.houseBrand ?? null;
   if (expected.brand) {
     if (!brand) reasons.push("brand not named");
-    else if (brand.toLowerCase() !== expected.brand.toLowerCase()) reasons.push("a different brand");
+    else if (brand.toLowerCase() !== expected.brand.toLowerCase())
+      reasons.push("a different brand");
   }
 
   // Product line: every word of ours must be there (optional words aside).
@@ -219,7 +220,8 @@ export function identityReasons(
 
   // Stated inches: 28" and 31" are different bags.
   const inches = pack.inchesOf(title);
-  if (expected.inches && inches && inches !== expected.inches) reasons.push("a different stated size");
+  if (expected.inches && inches && inches !== expected.inches)
+    reasons.push("a different stated size");
 
   // A barcode in the result must be ours.
   const ours = expected.gtin ? normaliseGtin(expected.gtin) : null;
@@ -248,7 +250,8 @@ export function readEstimatePrice(title: string, snippet: string): PriceRead {
     if (c.usd) continue;
     const before = text.slice(Math.max(0, c.index - 40), c.index);
     const after = text.slice(c.end, c.end + 30);
-    if (NEGATIVE_BEFORE.test(before) || WEAK_BEFORE.test(before) || NEGATIVE_AFTER.test(after)) continue;
+    if (NEGATIVE_BEFORE.test(before) || WEAK_BEFORE.test(before) || NEGATIVE_AFTER.test(after))
+      continue;
     kept.push(c);
   }
   const values = [...new Set(kept.map((c) => Math.round(c.value * 100) / 100))];

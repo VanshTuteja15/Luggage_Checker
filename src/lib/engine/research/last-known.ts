@@ -40,7 +40,11 @@ function offerFor(
   return {
     sourceId: source.id,
     retailer: source.retailerLabel,
-    url: /^https:/.test(l.url) ? l.url : source.marketHost ? `https://${source.marketHost}/` : l.url,
+    url: /^https:/.test(l.url)
+      ? l.url
+      : source.marketHost
+        ? `https://${source.marketHost}/`
+        : l.url,
     title: l.title,
     brand: l.brand,
     sizeClass: l.sizeClass ?? pack.sizeClassOf(l.title),

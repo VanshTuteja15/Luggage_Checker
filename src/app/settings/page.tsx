@@ -187,10 +187,7 @@ export default function SettingsPage() {
               Delivered each morning in your timezone.
             </p>
           </div>
-          <Switch
-            checked={draft.dailyReport}
-            onCheckedChange={(v) => patch({ dailyReport: v })}
-          />
+          <Switch checked={draft.dailyReport} onCheckedChange={(v) => patch({ dailyReport: v })} />
         </div>
 
         <div className="space-y-2">
@@ -218,9 +215,7 @@ export default function SettingsPage() {
             <label key={key} className="flex items-center gap-3 text-sm">
               <Checkbox
                 checked={draft.include[key]}
-                onCheckedChange={(v) =>
-                  patch({ include: { ...draft.include, [key]: v === true } })
-                }
+                onCheckedChange={(v) => patch({ include: { ...draft.include, [key]: v === true } })}
               />
               {label}
             </label>

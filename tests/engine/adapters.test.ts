@@ -749,7 +749,13 @@ describe("manual_entry", () => {
       manualOffer(
         source("costco-ca"),
         luggagePack,
-        { title: "Samsonite Set", price: 199, checkedAt: "2026-10-06", enteredBy: "admin", availability },
+        {
+          title: "Samsonite Set",
+          price: 199,
+          checkedAt: "2026-10-06",
+          enteredBy: "admin",
+          availability,
+        },
         now,
       );
     const stockOfEntry = (r: ReturnType<typeof entry>) => (r.ok ? r.offer.availability : null);

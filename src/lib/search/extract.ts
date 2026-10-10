@@ -71,7 +71,9 @@ export function cleanPageTitle(title: string): { name: string; site: string | nu
   else if (
     parts[1] &&
     name.split(/\s+/).length <= 3 &&
-    /\b(?:carry[- ]?on|check(?:ed)?[- ]in|large|medium|small|\d{2}\s*(?:''|"|in\b|inch))/i.test(parts[1]) &&
+    /\b(?:carry[- ]?on|check(?:ed)?[- ]in|large|medium|small|\d{2}\s*(?:''|"|in\b|inch))/i.test(
+      parts[1],
+    ) &&
     !/amazon|walmart|canada|\.ca\b|\.com\b/i.test(parts[1])
   ) {
     name = `${name} ${parts[1]}`;
@@ -148,7 +150,8 @@ type Candidate = {
 };
 
 /** Leading-symbol amounts: $229.99, CA$ 229.99, CAD $1,129.00, US$99. */
-const LEADING = /(CA\$|C\$|CAD\s?\$?|US\$|USD\s?\$?|\$)\s?((?:\d{1,3}(?:,\d{3})+|\d{1,6})(?:\.\d{1,2})?)(?![\d])/g;
+const LEADING =
+  /(CA\$|C\$|CAD\s?\$?|US\$|USD\s?\$?|\$)\s?((?:\d{1,3}(?:,\d{3})+|\d{1,6})(?:\.\d{1,2})?)(?![\d])/g;
 /** Trailing-code amounts: 229.99 CAD, 1,129.00 USD. */
 const TRAILING = /((?:\d{1,3}(?:,\d{3})+|\d{1,6})\.\d{2})\s?(CAD|USD)\b/g;
 /** French-Canadian amounts: 129,99 $ and 1 299,99 $. */
@@ -223,10 +226,38 @@ const RELATED_SECTION =
 
 /** Filler words that don't help find the product on its own page. */
 const ANCHOR_STOPWORDS = new Set([
-  "luggage", "suitcase", "spinner", "carry", "carry-on", "checked", "check", "hardside",
-  "softside", "expandable", "wheeled", "travel", "with", "from", "size", "inch", "large",
-  "medium", "small", "piece", "black", "blue", "grey", "gray", "navy", "silver", "price",
-  "canada", "shop", "online", "free", "shipping",
+  "luggage",
+  "suitcase",
+  "spinner",
+  "carry",
+  "carry-on",
+  "checked",
+  "check",
+  "hardside",
+  "softside",
+  "expandable",
+  "wheeled",
+  "travel",
+  "with",
+  "from",
+  "size",
+  "inch",
+  "large",
+  "medium",
+  "small",
+  "piece",
+  "black",
+  "blue",
+  "grey",
+  "gray",
+  "navy",
+  "silver",
+  "price",
+  "canada",
+  "shop",
+  "online",
+  "free",
+  "shipping",
 ]);
 
 function anchorTokens(title: string): string[] {
@@ -264,7 +295,11 @@ export function findAnchor(text: string, title: string): number {
   positions.sort((a, b) => a.index - b.index);
 
   for (let i = 0; i < positions.length; i++) {
-    for (let j = i + 1; j < positions.length && positions[j].index - positions[i].index <= 120; j++) {
+    for (
+      let j = i + 1;
+      j < positions.length && positions[j].index - positions[i].index <= 120;
+      j++
+    ) {
       if (positions[j].token !== positions[i].token) return positions[i].index;
     }
   }
@@ -315,7 +350,11 @@ function fullTitleSpots(text: string, title: string): number[] {
   if (head.length < 12) return [];
   const lower = text.toLowerCase();
   const spots: number[] = [];
-  for (let i = lower.indexOf(head); i >= 0 && spots.length < 20; i = lower.indexOf(head, i + head.length)) {
+  for (
+    let i = lower.indexOf(head);
+    i >= 0 && spots.length < 20;
+    i = lower.indexOf(head, i + head.length)
+  ) {
     spots.push(i);
   }
   return spots;
@@ -433,9 +472,7 @@ export function pickListingPrice(
   if (!POSITIVE_BEFORE.test(text.slice(Math.max(0, best.index - 40), best.index))) {
     const rival = scored.find(
       (c) =>
-        c !== best &&
-        c.score >= best.score &&
-        Math.abs(c.value - best.value) / best.value > 0.03,
+        c !== best && c.score >= best.score && Math.abs(c.value - best.value) / best.value > 0.03,
     );
     if (rival) return null;
   }
@@ -524,7 +561,9 @@ export function extractDetails(rawText: string, title: string): LuggageDetails |
   );
   if (material) d.material = material[1].toUpperCase() === "ABS" ? "ABS" : titleCase(material[1]);
 
-  if (/\b(?:8|eight)[- ]?(?:double[- ])?(?:spinner[- ])?wheels?\b|\bdouble[- ]spinner\b/i.test(text)) {
+  if (
+    /\b(?:8|eight)[- ]?(?:double[- ])?(?:spinner[- ])?wheels?\b|\bdouble[- ]spinner\b/i.test(text)
+  ) {
     d.wheels = "8 wheels (double spinner)";
   } else if (/\b(?:4|four)[- ]?(?:spinner[- ])?wheels?\b|\bspinner\b/i.test(text)) {
     d.wheels = "Spinner (4 wheels)";
@@ -538,7 +577,9 @@ export function extractDetails(rawText: string, title: string): LuggageDetails |
   const colours = findColourOptions(text);
   if (colours.length > 0) d.colours = colours;
 
-  const warranty = text.match(/\b(\d{1,2})[- ]year\b[^.\n]{0,25}warrant(?:y|ie)|\b(limited lifetime|lifetime)\s+warrant(?:y|ie)/i);
+  const warranty = text.match(
+    /\b(\d{1,2})[- ]year\b[^.\n]{0,25}warrant(?:y|ie)|\b(limited lifetime|lifetime)\s+warrant(?:y|ie)/i,
+  );
   if (warranty) d.warranty = warranty[1] ? `${warranty[1]}-year` : titleCase(warranty[2]);
 
   return Object.keys(d).length > 0 ? d : undefined;
@@ -590,7 +631,9 @@ export function analyzePage(page: PageInput, fetchedAt = new Date().toISOString(
   const retailerKey = matchRetailer("", url);
   const retailer =
     retailerKey ??
-    (site && site.length <= 30 && !/amazon|walmart|samsonite/i.test(site) ? site : prettyHost(host));
+    (site && site.length <= 30 && !/amazon|walmart|samsonite/i.test(site)
+      ? site
+      : prettyHost(host));
 
   const base = { url, host, retailer };
 
@@ -679,10 +722,44 @@ export function isAccessoryTitle(title: string): boolean {
 
 /** Words that don't say WHICH product was asked for. */
 const QUERY_STOPWORDS = new Set([
-  "luggage", "suitcase", "suitcases", "bag", "bags", "price", "prices", "cheap", "cheapest",
-  "best", "buy", "the", "a", "an", "for", "with", "and", "or", "under", "over", "below", "above",
-  "canada", "canadian", "sale", "deal", "deals", "in", "on", "of", "inch", "inches", "new", "online",
-  "shop", "store", "lowest", "compare",
+  "luggage",
+  "suitcase",
+  "suitcases",
+  "bag",
+  "bags",
+  "price",
+  "prices",
+  "cheap",
+  "cheapest",
+  "best",
+  "buy",
+  "the",
+  "a",
+  "an",
+  "for",
+  "with",
+  "and",
+  "or",
+  "under",
+  "over",
+  "below",
+  "above",
+  "canada",
+  "canadian",
+  "sale",
+  "deal",
+  "deals",
+  "in",
+  "on",
+  "of",
+  "inch",
+  "inches",
+  "new",
+  "online",
+  "shop",
+  "store",
+  "lowest",
+  "compare",
 ]);
 
 /** The words in a search that identify the product (brand, model, size). */
@@ -756,7 +833,9 @@ export function extractListingTiles(text: string, terms: string): ListingTile[] 
 
     const before = body.slice(Math.max(0, c.index - 200), c.index);
     // Peel the connector ("Sale price", ". ", "·") off the end.
-    const connector = before.match(/[\s.,·•|:–—-]*(?:(?:sale|our|your|special|now|current)\s+)?(?:price|prix)?[\s.,·•|:–—-]*$/i);
+    const connector = before.match(
+      /[\s.,·•|:–—-]*(?:(?:sale|our|your|special|now|current)\s+)?(?:price|prix)?[\s.,·•|:–—-]*$/i,
+    );
     const connectorText = connector ? connector[0] : "";
     if (connectorText.length > 25 || !TILE_CONNECTOR.test(connectorText)) continue;
     const head = before.slice(0, before.length - connectorText.length);
@@ -781,7 +860,11 @@ export function extractListingTiles(text: string, terms: string): ListingTile[] 
     tiles.push({
       name,
       price: Math.round(c.value * 100) / 100,
-      evidence: evidenceAround(body, Math.max(0, c.index - Math.min(name.length + connectorText.length, 70)), c.end),
+      evidence: evidenceAround(
+        body,
+        Math.max(0, c.index - Math.min(name.length + connectorText.length, 70)),
+        c.end,
+      ),
     });
   }
   return tiles;

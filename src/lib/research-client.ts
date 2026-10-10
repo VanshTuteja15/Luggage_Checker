@@ -13,7 +13,13 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, apiStreamGet, ApiRequestError } from "@/lib/api-client";
-import type { AnswerOffer, AnswerProduct, ResearchAnswer, SessionEvent, StoreStatusRow } from "@/lib/engine/types";
+import type {
+  AnswerOffer,
+  AnswerProduct,
+  ResearchAnswer,
+  SessionEvent,
+  StoreStatusRow,
+} from "@/lib/engine/types";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 export type ResearchStatus = "idle" | "starting" | "running" | "done" | "cancelled" | "error";
@@ -40,7 +46,18 @@ type Action =
   | { type: "error"; error: string }
   | { type: "reset" };
 
-const initial: ResearchView = { status: "idle", sessionId: null, query: "", rows: {}, offers: [], answer: null, error: null, lastSeq: 0, startedAt: null, estimating: false };
+const initial: ResearchView = {
+  status: "idle",
+  sessionId: null,
+  query: "",
+  rows: {},
+  offers: [],
+  answer: null,
+  error: null,
+  lastSeq: 0,
+  startedAt: null,
+  estimating: false,
+};
 
 function reduce(state: ResearchView, action: Action): ResearchView {
   switch (action.type) {
@@ -65,7 +82,13 @@ function reduce(state: ResearchView, action: Action): ResearchView {
         }
         case "store_started":
           return e.sourceId && next.rows[e.sourceId]
-            ? { ...next, rows: { ...next.rows, [e.sourceId]: { ...next.rows[e.sourceId], state: "running", message: "checking" } } }
+            ? {
+                ...next,
+                rows: {
+                  ...next.rows,
+                  [e.sourceId]: { ...next.rows[e.sourceId], state: "running", message: "checking" },
+                },
+              }
             : next;
         case "store_offers":
           return { ...next, offers: [...next.offers, ...((p.offers as AnswerOffer[]) ?? [])] };
@@ -95,7 +118,14 @@ function reduce(state: ResearchView, action: Action): ResearchView {
   }
 }
 
-type RealtimeRow = { session_id: string; seq: number; type: SessionEvent["type"]; source_id: string | null; payload: Record<string, unknown>; created_at: string };
+type RealtimeRow = {
+  session_id: string;
+  seq: number;
+  type: SessionEvent["type"];
+  source_id: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
 
 export function useResearch() {
   const [state, dispatch] = useReducer(reduce, initial);
@@ -112,42 +142,70 @@ export function useResearch() {
 
   useEffect(() => stop, [stop]);
 
-  const follow = useCallback(async (sessionId: string, realtime: boolean, abort: AbortController, cleanup: (() => void)[]) => {
-    const apply = (event: SessionEvent) => dispatch({ type: "event", event });
+  const follow = useCallback(
+    async (
+      sessionId: string,
+      realtime: boolean,
+      abort: AbortController,
+      cleanup: (() => void)[],
+    ) => {
+      const apply = (event: SessionEvent) => dispatch({ type: "event", event });
 
-    if (realtime) {
-      const sb = getSupabaseBrowser();
-      if (sb) {
-        const channel = sb
-          .channel(`research:${sessionId}`)
-          .on("postgres_changes", { event: "INSERT", schema: "public", table: "session_events", filter: `session_id=eq.${sessionId}` }, (msg) => {
-            const r = msg.new as RealtimeRow;
-            apply({ sessionId: r.session_id, seq: r.seq, type: r.type, sourceId: r.source_id, payload: r.payload ?? {}, createdAt: r.created_at });
-          })
-          .subscribe();
-        cleanup.push(() => void sb.removeChannel(channel));
-      }
-    }
-
-    // NDJSON: the fallback, and the catch-up for anything Realtime missed.
-    for (let attempt = 0; attempt < 6 && !abort.signal.aborted; attempt++) {
-      try {
-        await apiStreamGet(`/api/research/${sessionId}/stream?after=${stateRef.current.lastSeq}`, (line) => {
-          const l = line as { type?: string; event?: SessionEvent };
-          if (l.type === "event" && l.event) apply(l.event);
-        }, abort.signal);
-      } catch (err) {
-        if (abort.signal.aborted) return;
-        if (err instanceof ApiRequestError && err.status < 500) {
-          dispatch({ type: "error", error: err.message });
-          return;
+      if (realtime) {
+        const sb = getSupabaseBrowser();
+        if (sb) {
+          const channel = sb
+            .channel(`research:${sessionId}`)
+            .on(
+              "postgres_changes",
+              {
+                event: "INSERT",
+                schema: "public",
+                table: "session_events",
+                filter: `session_id=eq.${sessionId}`,
+              },
+              (msg) => {
+                const r = msg.new as RealtimeRow;
+                apply({
+                  sessionId: r.session_id,
+                  seq: r.seq,
+                  type: r.type,
+                  sourceId: r.source_id,
+                  payload: r.payload ?? {},
+                  createdAt: r.created_at,
+                });
+              },
+            )
+            .subscribe();
+          cleanup.push(() => void sb.removeChannel(channel));
         }
       }
-      const s = stateRef.current.status;
-      if (s === "done" || s === "cancelled" || s === "error") return;
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-    }
-  }, []);
+
+      // NDJSON: the fallback, and the catch-up for anything Realtime missed.
+      for (let attempt = 0; attempt < 6 && !abort.signal.aborted; attempt++) {
+        try {
+          await apiStreamGet(
+            `/api/research/${sessionId}/stream?after=${stateRef.current.lastSeq}`,
+            (line) => {
+              const l = line as { type?: string; event?: SessionEvent };
+              if (l.type === "event" && l.event) apply(l.event);
+            },
+            abort.signal,
+          );
+        } catch (err) {
+          if (abort.signal.aborted) return;
+          if (err instanceof ApiRequestError && err.status < 500) {
+            dispatch({ type: "error", error: err.message });
+            return;
+          }
+        }
+        const s = stateRef.current.status;
+        if (s === "done" || s === "cancelled" || s === "error") return;
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      }
+    },
+    [],
+  );
 
   const start = useCallback(
     async (body: { query: string; reverifyOf?: string }) => {
@@ -157,7 +215,10 @@ export function useResearch() {
       run.current = { abort, cleanup };
       dispatch({ type: "start", query: body.query });
       try {
-        const res = await apiFetch<{ sessionId: string; query: string; realtime: boolean }>("/api/research", { method: "POST", json: body, signal: abort.signal });
+        const res = await apiFetch<{ sessionId: string; query: string; realtime: boolean }>(
+          "/api/research",
+          { method: "POST", json: body, signal: abort.signal },
+        );
         if (abort.signal.aborted) return;
         dispatch({ type: "session", sessionId: res.sessionId, query: res.query });
         await follow(res.sessionId, res.realtime, abort, cleanup);
@@ -207,7 +268,14 @@ export function useLastKnown(query: string, enabled: boolean) {
   });
 }
 
-export type ResearchInfo = { available: boolean; defaultEngine: boolean; worker: boolean; store: string; realtime: boolean; deadlineMs: number };
+export type ResearchInfo = {
+  available: boolean;
+  defaultEngine: boolean;
+  worker: boolean;
+  store: string;
+  realtime: boolean;
+  deadlineMs: number;
+};
 
 export function useResearchInfo(enabled = true) {
   return useQuery({

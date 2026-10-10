@@ -29,7 +29,10 @@ export function RouteError({
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
-      <div role="alert" className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center">
+      <div
+        role="alert"
+        className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center"
+      >
         <AlertTriangle className="mx-auto h-8 w-8 text-warning" aria-hidden />
         <h1 className="mt-3 text-lg font-semibold">Something went wrong showing the {what}</h1>
         <p className="mt-1 text-sm text-muted-foreground">

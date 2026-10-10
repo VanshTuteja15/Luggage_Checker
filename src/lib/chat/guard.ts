@@ -84,7 +84,11 @@ export function amountsIn(text: string): number[] {
  * Keep a reply only if every amount in it is a stored price; make sure each
  * stated price carries a "Source:" line. Otherwise return NO_DATA_REPLY.
  */
-export function guardReply(reply: string, facts: PriceFact[], tz: string = DEFAULT_TIME_ZONE): string {
+export function guardReply(
+  reply: string,
+  facts: PriceFact[],
+  tz: string = DEFAULT_TIME_ZONE,
+): string {
   const text = reply.trim();
   if (!text) return NO_DATA_REPLY;
   const amounts = amountsIn(text);
@@ -101,12 +105,17 @@ export function guardReply(reply: string, facts: PriceFact[], tz: string = DEFAU
     (f) =>
       !text
         .split("\n")
-        .some((line) => /^\s*source:/i.test(line) && line.toLowerCase().includes(f.retailer.toLowerCase())),
+        .some(
+          (line) =>
+            /^\s*source:/i.test(line) && line.toLowerCase().includes(f.retailer.toLowerCase()),
+        ),
   );
   if (missing.length === 0) return text;
-  return [text, "", ...missing.map((f) => `Source: ${f.retailer} · ${checkedLabel(f.checkedAt, tz)}`)].join(
-    "\n",
-  );
+  return [
+    text,
+    "",
+    ...missing.map((f) => `Source: ${f.retailer} · ${checkedLabel(f.checkedAt, tz)}`),
+  ].join("\n");
 }
 
 export type ModelCall = (system: string) => Promise<string>;
