@@ -8,9 +8,9 @@ A stopped session resumes here: the first phase not marked ✅ is next.
 | Phase | Status | Evidence / reason |
 |---|---|---|
 | **Q0 Inspect** | ✅ done | All gates green on `feat/client-ready` (table below). Uncommitted 2026-10-10 changes reviewed, one test updated to the new shopper wording, committed as `40f16b3`. §2 facts checked; differences listed below. |
-| **Q1 Safety** | ☐ next | R5.1 sign-up off, R5.4 chat off, R2.7 honest copy, R5.3 settings retailer list from the registry |
-| **Q2 Search** | ☐ | R2 + R6 |
-| **Q3 Estimates** | ☐ | R3 |
+| **Q1 Safety** | ✅ done | Commits `0deb513`, `f8e437d`, `0c337a2`. **A5.1 passes**: `POST /api/auth/signup` answers 403 with the flag off and never calls Supabase (`tests/app/safety.test.ts`, fetch spy). R5.1 tab hidden behind `NEXT_PUBLIC_ALLOW_SIGNUP` (default off), demo sign-in removed, HUMAN_ACTIONS V2-1. R5.4 `chat.enabled` off by default; with no stored prices the reply is "I don't know; run a search." (test asserts no digit and no model call); invented amounts are replaced; every stated price gets a source line. R2.7 login and search copy updated. R5.3 Settings stores from the registry (23 active; legacy names translated); env-name and `vercel.json` wording removed from Settings. Gates: tsc ✅ lint ✅ (4 known) build ✅ verify:search 341/341 ✅ npm test 173/173 ✅ test:db 48/48 ✅ test:worker 6/6 ✅ probe 36/36 ✅. |
+| **Q2 Search** | ✅ done | Commits `36eaea0`, `c2b13e2`. R2.1 web-research mode, toggle and key removed; one search = engine session, limited to Settings stores. R2.2/R2.6 `src/lib/engine/research/rows.ts` (one row per store, colour chips, "+N more pages", in-stock first, out-of-stock never leads unless nothing is in stock). R2.3 headline with both lines when an estimate is lower. R2.4 "Also compare at" links. R2.5 "Checking N more stores…", `/api/research/last-known` fallback with dated prices + retry, `src/app/search/error.tsx`. R6 tri-state `retailer_offers.availability` (006), bridge writes it; stock badges in search. **A2.1** real run (session `6fee49c2`): "Samsonite Paralux Medium" → 1 product, 3 raw offers → **one row: Canada Luggage Depot $434.95, Verified live, Black · Stone Grey · Midnight Navy, in stock** (first price 1.3 s). **A2.2** real run (`c69c8e45`): "Aluminum Carry-On" → 4 products, all aluminium carry-on suitcases (3 TUMI 19 Degree at CLD, Delsey ALU'R), no junk; TUMI $1,810/$1,815 twin pages = one row "+1 more page"; ALU'R out of stock in all 4 colours → "Out of stock everywhere we checked", sorted last. **A2.3** `tests/app/search-fallback.test.ts`: production without the engine DB → `POST /api/research` 503 plain sentence; `/api/research/last-known` serves tracked prices with their dates. Tests: `search-rows.test.ts` 14, `search-fallback.test.ts` 2, manual-entry stock 1. Gates: tsc ✅ lint ✅ build ✅ verify:search 341 ✅ npm test 190 ✅ test:db 53 ✅ worker 6 ✅ probe 36 ✅. A2.1's "plus any validated estimates" part is completed in Q3. |
+| **Q3 Estimates** | ☐ next | R3 |
 | **Q4 Email core** | ☐ | Migration 006, mailer, time module, digest builder/renderers, `/email` |
 | **Q5 Scheduler** | ☐ | `/api/cron/tick`, prepare/send, idempotency, catch-up, banner, `schedule.sql`, worker fallback |
 | **Q6 No graphs** | ☐ | R4 |
@@ -52,6 +52,14 @@ All §2 statements were checked against the code. They hold, with these addition
 |---|---|
 | `research.test.ts` expectation changed instead of reverting the 2026-10-10 change | The change is the intended fix for E12 (shoppers must not see setup identifiers). Admin still shows the detailed reason (`admin.test.ts` checks it). |
 | `MASTER_PROMPT_V2.md` and `docs/CLIENT_REVIEW.md` committed | They are the binding plan and its sources; a resumed session needs them in the branch. |
+| Demo sign-in removed from the login page | Without Supabase it let anyone "sign in" to an empty shell: a placeholder screen (rule 4). The page now says sign-in isn't set up. |
+| Settings → Stores now limits the one search (server-side `storeIds`) | R5.3 says remove settings that do nothing; with web research gone the old retailer list would have filtered nothing. Old saved lists are translated; stores the old list never had count as chosen. |
+| `src/lib/time/local.ts` created in Q1 (planned for Q4) | The chat guard and the rule-5 labels needed it first; one module for every time-zone question (§4). |
+| New freshness kind `estimate` and method types `web_estimate` / `tracked_record` added in Q2 | The headline logic (R2.3) and "never track an estimate" had to be built and tested with the search; Q3 produces the estimates. |
+| A live price read on an earlier local day is labelled "Last seen · Oct 8" | Rule 5: nothing older than today may look like today's price. |
+| Pre-order and back-order count as "Out of stock" | Three states for people (R6); neither can be bought off the shelf today. |
+| Migration 006 started in Q2 (stock column), extended in later phases | R6 is a Q2 requirement and needs the tri-state column; the file stays one additive, idempotent migration. The bridge checks the column exists, so deploying before 006 is safe. |
+| "All stores" tab and timing line removed from search | One row per store replaces the flat per-variant list; first-price timings are internal (Store status → Technical details). |
 
 ## New dependencies
 
