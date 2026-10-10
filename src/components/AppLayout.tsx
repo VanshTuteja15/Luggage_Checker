@@ -20,6 +20,7 @@ import { useStore, useHydrated } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AiChat } from "@/components/AiChat";
+import { useFeatures } from "@/lib/queries";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -66,6 +67,8 @@ export function AppLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  // The assistant is off unless switched on (R5.4); hidden until we know.
+  const features = useFeatures(ready && authed);
 
   useEffect(() => setOpen(false), [pathname]);
 
@@ -181,7 +184,7 @@ export function AppLayout({
         </header>
         <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-8 lg:px-8">{children}</main>
       </div>
-      <AiChat />
+      {features.data?.chat === true && <AiChat />}
     </div>
   );
 }

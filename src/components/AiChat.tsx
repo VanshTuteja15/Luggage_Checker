@@ -17,15 +17,14 @@ const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
   content:
-    "Hey! I'm your LuggageTracker AI assistant. Ask me anything about luggage prices, deals, or products across Canadian retailers. Try:\n\n• \"What's the cheapest Samsonite right now?\"\n• \"Any price drops today?\"\n• \"Compare TUMI vs Away\"",
+    "Ask about the products you track. I answer only from prices already saved in LuggageTracker, and every price comes with its store and the time it was read. If I don't have it, I'll say so: run a search instead.",
   timestamp: new Date(),
 };
 
 const SUGGESTIONS = [
-  "Best deals right now?",
-  "Any price drops today?",
-  "Cheapest luggage under $200",
-  "What can you do?",
+  "Which tracked bag is cheapest at the moment?",
+  "Which tracked products are out of stock?",
+  "Where is my lowest saved price for each bag?",
 ];
 
 /**

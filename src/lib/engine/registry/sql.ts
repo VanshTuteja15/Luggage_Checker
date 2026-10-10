@@ -34,6 +34,7 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   "engine.enabled": "New price engine available (research API, worker jobs)",
   "engine.default_search": "Search opens on verified prices (the engine) instead of web research",
   "discovery.tavily": "Tavily as a discovery fallback: URLs only, never prices",
+  "chat.enabled": "AI assistant: answers only from stored, dated prices (off by default)",
   "policy.ucp_on_restricted_stores":
     "Use the store-published UCP channel on stores whose terms carry a generic anti-scrape clause (legal sign-off pending)",
   "source.luggagecity.ucp": "Luggage City UCP (audit: legal review first)",

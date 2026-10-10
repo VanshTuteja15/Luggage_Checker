@@ -308,6 +308,16 @@ export function useSearchProvider(enabled = true) {
   });
 }
 
+/** Optional parts of the app that are switched on (e.g. the assistant). */
+export function useFeatures(enabled = true) {
+  return useQuery({
+    queryKey: ["features"] as const,
+    enabled,
+    staleTime: 5 * 60_000,
+    queryFn: () => apiFetch<{ chat: boolean }>("/api/features"),
+  });
+}
+
 /* ------------------------------------------------------------------ */
 
 export function errorMessage(err: unknown, fallback: string): string {

@@ -23,6 +23,11 @@ export const FLAG_DEFAULTS = {
   "engine.default_search": true,
   /** Tavily as a flag-controlled discovery fallback (URLs only, never prices). */
   "discovery.tavily": false,
+  /**
+   * The AI assistant. OFF (R5.4): even when on, it answers only from stored,
+   * dated prices and says "I don't know; run a search" otherwise.
+   */
+  "chat.enabled": false,
 
   /**
    * UCP on Shopify stores whose terms carry the generic anti-scrape clause
