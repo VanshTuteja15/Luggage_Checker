@@ -29,6 +29,8 @@ export type ResearchView = {
   error: string | null;
   lastSeq: number;
   startedAt: number | null;
+  /** Web estimates are still being looked for (R3). */
+  estimating: boolean;
 };
 
 type Action =
@@ -38,7 +40,7 @@ type Action =
   | { type: "error"; error: string }
   | { type: "reset" };
 
-const initial: ResearchView = { status: "idle", sessionId: null, query: "", rows: {}, offers: [], answer: null, error: null, lastSeq: 0, startedAt: null };
+const initial: ResearchView = { status: "idle", sessionId: null, query: "", rows: {}, offers: [], answer: null, error: null, lastSeq: 0, startedAt: null, estimating: false };
 
 function reduce(state: ResearchView, action: Action): ResearchView {
   switch (action.type) {
@@ -71,11 +73,15 @@ function reduce(state: ResearchView, action: Action): ResearchView {
           const row = p.row as StoreStatusRow | undefined;
           return row ? { ...next, rows: { ...next.rows, [row.sourceId]: row } } : next;
         }
+        case "estimates_started":
+          return { ...next, estimating: true };
+        case "estimates_done":
+          return { ...next, estimating: false };
         case "session_done": {
           const answer = p.answer as ResearchAnswer;
           const rows: Record<string, StoreStatusRow> = {};
           for (const r of answer.stores) rows[r.sourceId] = r;
-          return { ...next, status: "done", answer, rows };
+          return { ...next, status: "done", answer, rows, estimating: false };
         }
         case "session_cancelled":
           return { ...next, status: "cancelled" };

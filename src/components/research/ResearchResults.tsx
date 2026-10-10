@@ -79,7 +79,15 @@ export function StockBadge({ stock }: { stock: StockState }) {
 
 /* ── progress ─────────────────────────────────────────────────────── */
 
-function StoreProgress({ rows, running }: { rows: StoreStatusRow[]; running: boolean }) {
+function StoreProgress({
+  rows,
+  running,
+  estimating,
+}: {
+  rows: StoreStatusRow[];
+  running: boolean;
+  estimating: boolean;
+}) {
   const checking = rows.filter((r) => r.state === "running" || r.state === "pending").length;
   const withPrice = rows.filter((r) => r.state === "verified").length;
   return (
@@ -89,7 +97,9 @@ function StoreProgress({ rows, running }: { rows: StoreStatusRow[]; running: boo
           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
           {checking > 0
             ? `Checking ${checking} more store${checking === 1 ? "" : "s"}…`
-            : "Checking stores…"}
+            : estimating
+              ? "Looking for web estimates at other stores…"
+              : "Checking stores…"}
           {withPrice > 0 && ` ${withPrice} with a price so far.`}
         </span>
       ) : withPrice > 0 ? (
@@ -126,6 +136,9 @@ function StoreRowLine({ row }: { row: StoreRow }) {
         </div>
         <div className="flex flex-wrap items-center gap-2 pl-4 sm:justify-end sm:pl-0">
           <FreshnessBadge offer={row.offer} />
+          {row.offer.method === "web_estimate" && row.offer.reasons.includes("single source") && (
+            <span className="text-[11px] text-muted-foreground">single source</span>
+          )}
           <StockBadge stock={row.stock} />
           {row.offer.lowConfidence && (
             <span className="inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-[11px] text-warning">
@@ -451,7 +464,7 @@ export function ResearchResults({
   return (
     <div className="mx-auto max-w-4xl" aria-busy={running}>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <StoreProgress rows={rows} running={running} />
+        <StoreProgress rows={rows} running={running} estimating={view.estimating} />
         <div className="flex flex-wrap items-center gap-2">
           {running ? (
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onCancel}>

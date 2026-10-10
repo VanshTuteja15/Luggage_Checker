@@ -41,8 +41,8 @@ export type BridgeOffer = {
 };
 
 export interface TrackedBridge {
-  /** Tracked products, least recently checked first. */
-  listTracked(limit: number): Promise<TrackedItem[]>;
+  /** Tracked products, least recently checked first (optionally only these product ids). */
+  listTracked(limit: number, onlyIds?: string[]): Promise<TrackedItem[]>;
   writeOffers(productId: string, offers: BridgeOffer[], at: string): Promise<void>;
   /** true if this (user, product, day) alert was not sent before (and is now recorded). */
   recordAlert(
@@ -74,7 +74,7 @@ export class PgTrackedBridge implements TrackedBridge {
     return this.availabilityColumn;
   }
 
-  async listTracked(limit: number): Promise<TrackedItem[]> {
+  async listTracked(limit: number, onlyIds?: string[]): Promise<TrackedItem[]> {
     const { rows } = await this.pool.query(
       `SELECT p.id, p.name, p.brand, p.model, p.color, p.upc, p.last_checked_at,
               COALESCE((SELECT json_agg(json_build_object('retailer', o.retailer, 'url', o.url, 'price', o.price))
@@ -87,9 +87,10 @@ export class PgTrackedBridge implements TrackedBridge {
                         WHERE t.product_id = p.id), '[]'::json) AS watchers
        FROM products p
        WHERE EXISTS (SELECT 1 FROM tracked_products t WHERE t.product_id = p.id)
+         AND ($2::uuid[] IS NULL OR p.id = ANY($2::uuid[]))
        ORDER BY p.last_checked_at NULLS FIRST
        LIMIT $1`,
-      [limit],
+      [limit, onlyIds && onlyIds.length ? onlyIds : null],
     );
     return rows.map((r) => ({
       productId: r.id,
@@ -200,8 +201,9 @@ export class MemoryTrackedBridge implements TrackedBridge {
 
   constructor(private readonly items: TrackedItem[]) {}
 
-  async listTracked(limit: number): Promise<TrackedItem[]> {
+  async listTracked(limit: number, onlyIds?: string[]): Promise<TrackedItem[]> {
     return [...this.items]
+      .filter((x) => !onlyIds?.length || onlyIds.includes(x.productId))
       .sort((a, b) => (a.lastCheckedAt ?? "").localeCompare(b.lastCheckedAt ?? ""))
       .slice(0, limit);
   }

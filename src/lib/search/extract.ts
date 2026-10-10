@@ -203,11 +203,11 @@ export function findPriceCandidates(text: string): Candidate[] {
 }
 
 /** Words right before an amount that mean "this isn't the selling price". */
-const NEGATIVE_BEFORE =
+export const NEGATIVE_BEFORE =
   /(?:\bto|\d\s*[-–—]|save|you save|savings|off|reg\.?|regular(?: price)?|was|compare at|compared at|list price|list|original price|msrp|orders?(?: of| over)?|spend|over|shipping|delivery|gift card|coupon|rebate|reward|points|deposit|as low as|up to|payments? of|installments? of|valued at|value|économisez|prix courant|prix régulier|avant)\s*[:\-–]?\s*$/i;
 
 /** Words right after an amount that mean the same. */
-const NEGATIVE_AFTER =
+export const NEGATIVE_AFTER =
   /^\s*(?:(?:to|[-–—])\s*(?:CA\$|C\$|CAD|\$)\s?\d|\/\s*(?:mo|month|wk|week|yr)\b|per\s+(?:mo|month|week|year)\b|a\s+month\b|monthly\b|x\s*\d|×\s*\d|off\b|savings?\b|discount\b|or more\b|and up\b|\+|\/mois\b|par mois\b|de rabais\b)/i;
 
 /** Words right before an amount that mean "this IS the selling price". */
@@ -215,7 +215,7 @@ const POSITIVE_BEFORE =
   /(?:price|sale|sale price|now|our price|your price|current price|special|today|deal|one-time purchase|prix|prix de vente|maintenant|solde)\s*[:\-–]?\s*$/i;
 
 /** Mildly negative: "from $199" is often a variant range floor. */
-const WEAK_BEFORE = /(?:from|starting at|starts at|à partir de)\s*[:\-–]?\s*$/i;
+export const WEAK_BEFORE = /(?:from|starting at|starts at|à partir de)\s*[:\-–]?\s*$/i;
 
 /** Headings after which a page lists OTHER products. */
 const RELATED_SECTION =

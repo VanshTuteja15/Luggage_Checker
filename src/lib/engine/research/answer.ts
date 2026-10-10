@@ -91,6 +91,54 @@ function productName(offers: AnswerOffer[], pack: CategoryPack): string {
   return titles[0] ?? offers[0]?.title ?? "";
 }
 
+type NameParts = { brand: string; line: Set<string>; size: string | null; inches: number | null };
+
+function nameParts(o: AnswerOffer, pack: CategoryPack): NameParts | null {
+  const brand = (o.brand ?? pack.brandOf(o.title) ?? "").toLowerCase();
+  if (!brand) return null;
+  return {
+    brand,
+    line: new Set(pack.lineOf(o.title, o.brand)),
+    size: o.sizeClass,
+    inches: pack.inchesOf(o.title),
+  };
+}
+
+/**
+ * A web estimate's title often leaves out a word the store's own title has
+ * ("Paralux Hardside Spinner Medium" vs CLD's "Paralux Hardside Expandable
+ * Spinner Medium"). A group made only of estimates joins a verified group
+ * when it is the same brand, size and stated inches and differs only by
+ * optional line words (expandable, international…), and only when exactly
+ * one verified group qualifies. Verified groups are never merged this way:
+ * TUMI's International and International Expandable stay two products.
+ */
+function mergeEstimateGroups(groups: Map<number, AnswerOffer[]>, pack: CategoryPack): void {
+  const isEstimateOnly = (list: AnswerOffer[]) => list.every((o) => o.method === "web_estimate");
+  const parts = new Map<number, NameParts | null>();
+  for (const [k, list] of groups) parts.set(k, nameParts(list[0], pack));
+  for (const [k, list] of [...groups]) {
+    if (!isEstimateOnly(list)) continue;
+    const mine = parts.get(k);
+    if (!mine || !mine.size) continue;
+    const homes = [...groups.keys()].filter((other) => {
+      if (other === k || isEstimateOnly(groups.get(other)!)) return false;
+      const theirs = parts.get(other);
+      if (!theirs || theirs.brand !== mine.brand || theirs.size !== mine.size) return false;
+      if (mine.inches && theirs.inches && mine.inches !== theirs.inches) return false;
+      const extra = [...theirs.line].filter((w) => !mine.line.has(w));
+      const missing = [...mine.line].filter((w) => !theirs.line.has(w));
+      return (
+        missing.every((w) => pack.optionalLineWords.has(w)) &&
+        extra.every((w) => pack.optionalLineWords.has(w))
+      );
+    });
+    if (homes.length !== 1) continue;
+    groups.set(homes[0], [...groups.get(homes[0])!, ...list]);
+    groups.delete(k);
+  }
+}
+
 export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerProduct[] {
   const uf = new UnionFind(offers.length);
   const owner = new Map<string, number>();
@@ -118,6 +166,7 @@ export function groupOffers(offers: AnswerOffer[], pack: CategoryPack): AnswerPr
     const r = uf.find(i);
     groups.set(r, [...(groups.get(r) ?? []), o]);
   });
+  mergeEstimateGroups(groups, pack);
 
   const products: AnswerProduct[] = [];
   for (const list of groups.values()) {

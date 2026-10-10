@@ -13,7 +13,7 @@ import type { AdapterResult } from "../adapters";
 import { SingleFlight } from "../politeness/singleflight";
 import type { EngineRuntime } from "../recorder";
 import type { CategoryPack, ResearchAnswer, SessionEvent } from "../types";
-import { runResearchSession } from "./session";
+import { runResearchSession, type SessionRunDeps } from "./session";
 
 export class ResearchManager {
   private readonly bus = new EventEmitter();
@@ -29,6 +29,8 @@ export class ResearchManager {
     private readonly opts: {
       maxConcurrent: number;
       onError?: (sessionId: string, err: unknown) => void;
+      /** Web estimates for stores we can't read live (R3); absent = none. */
+      estimates?: SessionRunDeps["estimates"];
     } = { maxConcurrent: 4 },
   ) {
     this.bus.setMaxListeners(200);
@@ -55,6 +57,7 @@ export class ResearchManager {
           onEvent: (e) => this.bus.emit(sessionId, e),
           isCancelled: async () =>
             (await this.rt.store.getSession(sessionId))?.status === "cancelled",
+          estimates: this.opts.estimates,
         }),
       )
       .catch((err: unknown) => {

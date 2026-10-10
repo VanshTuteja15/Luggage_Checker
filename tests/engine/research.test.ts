@@ -345,3 +345,77 @@ describe("research API rules", () => {
     expect(r).toMatchObject({ ok: false, status: 404 });
   });
 });
+
+describe("web estimates inside a session (R3, R2.5)", () => {
+  it("asks only stores with no live route, judges against today's verified price, streams labelled estimates", async () => {
+    const { store, rt, user } = await setup({ [`${CLD}.json`]: { body: CLD_JSON } });
+    const asked: { stores: string[]; references: number[] }[] = [];
+    const manager = new ResearchManager(rt, luggagePack, {
+      maxConcurrent: 2,
+      estimates: async (req) => {
+        const references = (await req.references()).map((r) => r.price);
+        asked.push({ stores: req.stores.map((s) => s.id), references });
+        return {
+          offers: [
+            {
+              sourceId: "amazon-ca",
+              retailer: "Amazon.ca",
+              url: "https://www.amazon.ca/dp/B0OMNI3LRG",
+              title: "Samsonite Omni 3.0 Large Spinner Expandable",
+              brand: "Samsonite",
+              sizeClass: "large",
+              identifiers: [],
+              imageUrl: null,
+              reasons: [],
+              price: 259.99,
+              listPrice: null,
+              currency: "CAD",
+              availability: "unknown",
+              colour: null,
+              freshness: { kind: "estimate", foundAt: new Date().toISOString() },
+              confidence: 0.7,
+              lowConfidence: false,
+              method: "web_estimate",
+              observationId: null,
+              listingId: null,
+              productId: null,
+              evidence: "Samsonite Omni 3.0 Large … $259.99",
+            },
+          ],
+          accepted: 1,
+          rejected: 0,
+          credits: 1,
+          fromCache: false,
+          skipped: null,
+        };
+      },
+    });
+    const created = await createSession(
+      store,
+      user,
+      { query: "Samsonite Omni 3.0 Large" },
+      { ...engineConfig(), sessionDeadlineMs: 8_000 },
+      "inline",
+    );
+    if (!created.ok) throw new Error(created.error);
+    const events: SessionEvent[] = [];
+    manager.subscribe(created.session.id, (e) => events.push(e));
+    const answer = await manager.start(created.session.id);
+
+    expect(asked).toHaveLength(1);
+    expect(asked[0].stores).toContain("amazon-ca"); // link only
+    expect(asked[0].stores).toContain("tumi-ca"); // blocked
+    expect(asked[0].stores).not.toContain("canadaluggagedepot"); // read live
+    expect(asked[0].references).toContain(279.99); // CLD's verified price from this session
+
+    const types = events.map((e) => e.type);
+    expect(types).toContain("estimates_started");
+    expect(types).toContain("estimates_done");
+    const product = answer!.products.find((p) => p.offers.some((o) => o.sourceId === "amazon-ca"))!;
+    expect(product.offers.map((o) => o.sourceId)).toEqual(
+      expect.arrayContaining(["canadaluggagedepot", "amazon-ca"]),
+    );
+    const est = product.offers.find((o) => o.sourceId === "amazon-ca")!;
+    expect(freshnessLabel(est.freshness)).toMatch(/^Web estimate · found .+ · confirm on site$/);
+  });
+});

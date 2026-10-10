@@ -13,6 +13,7 @@
 /* ------------------------------------------------------------------ */
 
 import { engineConfig } from "./config";
+import { createEstimateFinder } from "./estimates/deps";
 import { luggagePack } from "./packs/luggage";
 import { createRuntime, type EngineRuntime } from "./recorder";
 import { SOURCE_SEED } from "./registry";
@@ -40,6 +41,7 @@ export function getEngine(): Engine {
   const manager = new ResearchManager(rt, luggagePack, {
     maxConcurrent: 4,
     onError: (id, err) => console.error(`engine: session ${id} crashed`, err),
+    estimates: createEstimateFinder(rt, luggagePack),
   });
   g.__luggageEngine = { rt, manager };
   return g.__luggageEngine;

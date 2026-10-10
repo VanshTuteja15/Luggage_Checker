@@ -138,6 +138,8 @@ export async function verifyTracked(
     signal?: AbortSignal;
     now?: () => number;
     trigger?: "cron" | "admin" | "worker" | "manual";
+    /** Only these tracked products (the "Refresh prices" button, the email prepare). */
+    productIds?: string[];
   } = {},
 ): Promise<{ stats: VerifyTrackedStats; verifiedProductIds: string[] }> {
   const now = opts.now ?? Date.now;
@@ -158,7 +160,10 @@ export async function verifyTracked(
   const sources = new Map((await rt.sources()).map((s) => [s.id, s] as [string, SourceRecord]));
 
   try {
-    const items = await bridge.listTracked(opts.maxProducts ?? rt.config.cron.maxProductsPerRun);
+    const items = await bridge.listTracked(
+      opts.maxProducts ?? rt.config.cron.maxProductsPerRun,
+      opts.productIds,
+    );
     stats.products = items.length;
     for (const item of items) {
       if (opts.signal?.aborted) break;

@@ -23,6 +23,7 @@
 /* ------------------------------------------------------------------ */
 
 import { createHash } from "node:crypto";
+import { SOURCE_SEED, sourceForUrl } from "@/lib/engine/registry";
 import { ProviderError, classifyHttp } from "@/lib/search/errors";
 import type { Deadline, Meter } from "@/lib/search/deadline";
 
@@ -912,6 +913,21 @@ function hostBlocked(url: string): boolean {
   return true;
 }
 
+/**
+ * True for a page on a registry store we may not read: terms that forbid,
+ * restrict or haven't been checked, or bot protection that blocks us. Hosts
+ * outside the registry are not judged here.
+ */
+export function extractRefused(url: string): boolean {
+  const source = sourceForUrl(url, SOURCE_SEED);
+  if (!source) return false;
+  return (
+    (source.permission !== "sanctioned" && source.permission !== "allowed") ||
+    source.liveClass === "blocked" ||
+    source.liveClass === "not_permitted"
+  );
+}
+
 function pageKey(url: string, depth: string, format: string): string {
   return `${depth}:${format}:${url.split("#")[0]}`;
 }
@@ -944,6 +960,12 @@ export async function tavilyExtract(
   // De-duplicate, serve what we already read, skip recent failures.
   const toFetch: string[] = [];
   for (const url of [...new Set(req.urls.filter((u) => /^https?:\/\//i.test(u)))]) {
+    // Reading a page through Tavily is still reading the store's page: never
+    // for stores whose terms forbid or restrict it, or that block bots (R3, A3.2).
+    if (extractRefused(url)) {
+      out.failed.push({ url, error: "this store's pages may not be read automatically" });
+      continue;
+    }
     if (hostBlocked(url)) {
       out.failed.push({ url, error: "this store blocks automated page reading" });
       continue;

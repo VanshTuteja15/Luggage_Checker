@@ -1,0 +1,37 @@
+{
+  "failure": "E1: the old web research showed a Samsonite Paralux LARGE at $150 at Samsonite.ca, cheaper than the Medium, with the Medium's 47 L capacity.",
+  "observed": "Screenshot 2026-10-09 23:40 (docs/CLIENT_REVIEW.md E1). Result rows rebuilt in the shape Tavily returns (title, url, content snippet).",
+  "query": "Samsonite Paralux Large",
+  "references": [
+    {
+      "price": 434.95,
+      "sizeClass": "medium",
+      "inches": null,
+      "note": "Canada Luggage Depot, Samsonite Paralux Hardside Expandable Spinner Medium, verified live 2026-10-10 (research session 6fee49c2)"
+    }
+  ],
+  "results": [
+    {
+      "url": "https://www.samsonite.ca/en/luggage/large-luggage/paralux-spinner-large/1502080000.html",
+      "title": "Paralux Spinner Large | Samsonite Canada",
+      "content": "Paralux Spinner Medium. Expandable hardside luggage with a 47 L capacity, 66 x 46 x 30 cm. C$ 150.00 Add to cart"
+    },
+    {
+      "url": "https://www.samsonite.ca/en/luggage/large-luggage/paralux-spinner-large/1502080001.html",
+      "title": "Paralux Spinner Large | Samsonite Canada",
+      "content": "Paralux Spinner Large. Expandable hardside luggage, 47 L. C$ 150.00 Add to cart"
+    }
+  ],
+  "expect": [
+    {
+      "url": "https://www.samsonite.ca/en/luggage/large-luggage/paralux-spinner-large/1502080000.html",
+      "outcome": "rejected",
+      "reasonsInclude": ["size mismatch"]
+    },
+    {
+      "url": "https://www.samsonite.ca/en/luggage/large-luggage/paralux-spinner-large/1502080001.html",
+      "outcome": "rejected",
+      "reasonsInclude": ["cheaper than the smaller size"]
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 /* ------------------------------------------------------------------ */
 
 import { engineConfig } from "@/lib/engine/config";
+import { createEstimateFinder } from "@/lib/engine/estimates/deps";
 import { luggagePack } from "@/lib/engine/packs/luggage";
 import { createRuntime } from "@/lib/engine/recorder";
 import { ResearchManager } from "@/lib/engine/research/manager";
@@ -53,6 +54,8 @@ async function main(): Promise<void> {
   const research = new ResearchManager(rt, luggagePack, {
     maxConcurrent: Number(process.env.WORKER_MAX_SESSIONS ?? 4) || 4,
     onError: (sessionId, err) => log("error", "research session crashed", { sessionId, err }),
+    // Web estimates (R3); skipped when TAVILY_API_KEY isn't set on the worker.
+    estimates: createEstimateFinder(rt, luggagePack),
   });
   const server = createWorkerServer({
     secret,

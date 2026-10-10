@@ -415,7 +415,8 @@ export class MemoryEngineStore implements EngineStore {
       id: String(++this.obsSeq),
     };
     this.observations.push(rec);
-    if (rec.validation.outcome !== "rejected") this.collapse(rec);
+    // As in Postgres (migration 006): an estimate never extends verified price history.
+    if (rec.validation.outcome !== "rejected" && rec.adapter !== "web_estimate") this.collapse(rec);
     return structuredClone(rec);
   }
 

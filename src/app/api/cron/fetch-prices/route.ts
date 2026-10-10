@@ -1,204 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTrackedProducts } from "@/lib/db/products";
-import { refreshProducts } from "@/lib/db/refresh";
-import { activeProvider, getBudget } from "@/lib/search";
-import { fetchTavilyUsage, processCreditsSpent } from "@/lib/tavily";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { runScheduledEngine, type EngineCronResult } from "@/lib/engine/cron";
-import { flagOn } from "@/lib/engine/flags";
-import { getEngine } from "@/lib/engine/server";
-import { legacyRetailerFilter } from "@/lib/stores";
-
-function envInt(name: string, fallback: number): number {
-  const n = Number.parseInt(process.env[name] ?? "", 10);
-  return Number.isFinite(n) && n >= 0 ? n : fallback;
-}
+import { cronAuthorized } from "@/lib/cron-auth";
+import { runScheduledEngine } from "@/lib/engine/cron";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * Scheduled price check.
+ * Scheduled price check: the price engine re-verifies tracked products
+ * (on the worker, or here within a time limit) and applies retention.
  *
- * Called by Vercel Cron (or the GitHub Actions workflow) every 6 hours.
- * Runs the same live-search pipeline the app uses, per user, so each user's
- * retailer settings are respected.
+ * The engine is the only source of current prices (MASTER_PROMPT_V2 §4).
+ * The old web-research refresh that wrote search-result prices into the
+ * tracking tables no longer runs: those prices could be wrong (E1/E2), and
+ * web estimates now go through the R3 checks and stay labelled instead.
  *
- * Protected by CRON_SECRET. Uses the service-role client because there is no
- * signed-in user in a cron context — this is the only place that's allowed.
+ * Protected by CRON_SECRET (constant-time compare). /api/cron/tick runs the
+ * same job on the morning-email schedule; this route stays for Vercel Cron.
  */
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-
-  const header =
-    req.headers.get("x-cron-secret") ??
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    "";
-
-  return header === secret;
-}
-
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) {
+  if (!cronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
   try {
-    const supabase = getSupabaseAdmin();
-
-    // Which users track anything, and what are their retailer preferences?
-    const { data: trackedRows, error: trackedErr } = await supabase
-      .from("tracked_products")
-      .select("user_id, product_id");
-    if (trackedErr) throw trackedErr;
-
-    const byUser = new Map<string, string[]>();
-    for (const row of trackedRows ?? []) {
-      const list = byUser.get(row.user_id) ?? [];
-      list.push(row.product_id);
-      byUser.set(row.user_id, list);
-    }
-
-    if (byUser.size === 0) {
-      return NextResponse.json({ message: "No tracked products", checked: 0 });
-    }
-
-    // ── Verified prices first: the price engine (worker, or inline) ──
-    // Products it verified today skip the paid-credit web research below;
-    // once the engine is the default search, web research doesn't run here.
-    let engine: EngineCronResult | { mode: "error"; error: string; verifiedProductIds: string[] };
-    try {
-      engine = await runScheduledEngine({ timeLimitMs: 120_000 });
-    } catch (err) {
-      engine = {
-        mode: "error",
-        error: err instanceof Error ? err.message : "engine run failed",
-        verifiedProductIds: [],
-      };
-    }
-    const engineVerified = new Set(engine.verifiedProductIds);
-    // Web research is skipped only when the engine actually ran: if it is
-    // unavailable or failed, tracked products still get their daily check.
-    const engineRan = engine.mode === "inline" || engine.mode === "worker";
-    if (engineRan && flagOn(await getEngine().rt.flags(), "engine.default_search")) {
-      return NextResponse.json({ message: "Price check complete (verified engine)", engine });
-    }
-
-    // ── Spend only what the free allowance has left ──────────────
-    // A scheduled job that burns a month's quota in one run is worse than
-    // one that checks fewer products. Leave a small reserve so manual
-    // refreshes and searches still work between runs.
-    const provider = activeProvider();
-    if (!provider) {
-      return NextResponse.json(
-        { error: "No price source configured", checked: 0 },
-        { status: 503 },
-      );
-    }
-
-    // Read Tavily's own balance first (free), so a cold start or a missing
-    // usage table can't make the job think the month is untouched.
-    await fetchTavilyUsage(true);
-    const budget = await getBudget(supabase, provider);
-
-    // Automatic refreshes must never crowd out people doing research. The
-    // job stops once the month's free credits fall to the reserve, and a
-    // single run is capped too, so a large tracked list can't drain the
-    // allowance overnight. Neither can push past the free plan: the
-    // research client refuses any call beyond its monthly cap.
-    const RESERVE = envInt("CRON_CREDIT_RESERVE", 200);
-    const PER_RUN_MAX = envInt("CRON_MAX_CREDITS_PER_RUN", 25);
-    const spendable = budget
-      ? Math.min(PER_RUN_MAX, Math.max(0, budget.remaining - RESERVE))
-      : PER_RUN_MAX;
-
-    if (spendable === 0) {
-      return NextResponse.json({
-        message:
-          "Skipped — monthly research credits are at the reserve kept for interactive searches",
-        provider,
-        budget,
-        checked: 0,
-      });
-    }
-
-    let callsLeft = spendable;
-
-    // A refresh can cost more than one credit (a retry, a broader query), so
-    // the run is stopped on credits actually spent, not products checked.
-    // Measured with a counter that never resets, so a run that straddles
-    // midnight on the 1st can't lose track of what it has spent.
-    const creditsAtStart = processCreditsSpent();
-    const runBudgetSpent = () => processCreditsSpent() - creditsAtStart >= spendable;
-
-    const { data: allSettings } = await supabase.from("user_settings").select("user_id, retailers");
-
-    const retailersByUser = new Map<string, string[]>(
-      (allSettings ?? []).map((s) => [
-        s.user_id as string,
-        Array.isArray(s.retailers) ? legacyRetailerFilter(s.retailers as string[]) : [],
-      ]),
-    );
-
-    // A product tracked by several users only needs checking once.
-    const seen = new Set<string>();
-    const totalDistinctProducts = new Set([...byUser.values()].flat()).size;
-    const summary: { userId: string; checked: number; updated: number; failed: number }[] = [];
-
-    for (const [userId, productIds] of byUser) {
-      if (callsLeft <= 0 || runBudgetSpent()) break;
-
-      const fresh = productIds.filter((id) => !seen.has(id) && !engineVerified.has(id));
-      if (fresh.length === 0) continue;
-
-      const products = await getTrackedProducts(supabase, userId, { days: 2 });
-
-      // Stalest first, so a budget-capped run still makes progress across
-      // the whole list rather than re-checking the same few products.
-      const queue = products
-        .filter((p) => fresh.includes(p.id))
-        .sort((a, b) => (a.lastCheckedAt ?? "").localeCompare(b.lastCheckedAt ?? ""))
-        .slice(0, callsLeft);
-
-      queue.forEach((p) => seen.add(p.id));
-      callsLeft -= queue.length;
-
-      const results = await refreshProducts(supabase, queue, {
-        allowedRetailers: retailersByUser.get(userId) ?? [],
-        // Research credits are metered; pace the requests.
-        delayMs: 1500,
-        shouldStop: runBudgetSpent,
-      });
-
-      summary.push({
-        userId,
-        checked: results.length,
-        updated: results.filter((r) => r.offersFound > 0).length,
-        failed: results.filter((r) => r.error).length,
-      });
-    }
-
-    const finalBudget = await getBudget(supabase, provider);
-
-    return NextResponse.json({
-      message: "Price check complete",
-      engine,
-      provider,
-      budget: finalBudget,
-      skippedForBudget: Math.max(0, totalDistinctProducts - seen.size),
-      users: summary.length,
-      checked: summary.reduce((n, s) => n + s.checked, 0),
-      updated: summary.reduce((n, s) => n + s.updated, 0),
-      failed: summary.reduce((n, s) => n + s.failed, 0),
-      summary,
-    });
+    const engine = await runScheduledEngine({ timeLimitMs: 120_000 });
+    return NextResponse.json({ message: "Price check complete (verified engine)", engine });
   } catch (err) {
     console.error("Cron fetch-prices error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "The daily price check couldn't run." }, { status: 500 });
   }
 }
 

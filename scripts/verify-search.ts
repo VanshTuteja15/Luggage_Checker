@@ -38,6 +38,13 @@ import {
 import { brandStoreFor } from "../src/lib/retailers";
 import { resetSweepState } from "../src/lib/search/providers/tavily";
 import type { SearchProduct } from "../src/lib/search/types";
+import { luggagePack } from "../src/lib/engine/packs/luggage";
+import { SOURCE_SEED } from "../src/lib/engine/registry";
+import {
+  expectedFromQuery,
+  readEstimatePrice,
+  validateEstimates,
+} from "../src/lib/engine/estimates/validate";
 
 /* ------------------------------------------------------------------ */
 /*  Realistic retailer pages, as Tavily returns them                  */
@@ -1737,18 +1744,45 @@ async function main() {
     "Add to cart",
   ].join("\n");
 
-  section("F1. Store pages without a price are read — brand store first");
+  // Pages the reader MAY open (stores outside the source registry's refusals):
+  // a brand's own store for its own bag, and a known chain. The reading
+  // mechanics below are tested on these; registry stores whose terms forbid
+  // or restrict reading, or that block bots, are refused (F1, F1c).
+  const READ_QUERY = "rimowa essential cabin";
+  const READ_A = "https://www.rimowa.com/ca/en/luggage/cabin/essential-cabin/83253634.html";
+  const READ_B = "https://www.thebay.com/product/rimowa-essential-cabin-0600-123.html";
+  const readablePages = (): TavilyRow[] => [
+    productPage({
+      name: "RIMOWA Essential Cabin",
+      site: "Amazon.ca",
+      url: "https://www.amazon.ca/dp/ESSENTIAL1",
+      price: "$1,150.00",
+    }),
+    {
+      title: "Essential Cabin | RIMOWA",
+      url: READ_A,
+      content: "Essential Cabin. Polycarbonate shell, multiwheel system.",
+      score: 0.9,
+      raw_content: null,
+    },
+    {
+      title: "RIMOWA Essential Cabin - Hudson's Bay",
+      url: READ_B,
+      content: "RIMOWA Essential Cabin, hardside carry-on.",
+      score: 0.8,
+      raw_content: null,
+    },
+  ];
+  const readAText = ["Essential Cabin", "$1,250.00", "Colour: Black", "Add to cart"].join("\n");
+  const readBText = ["RIMOWA Essential Cabin", "Current price $1,199.99", "Add to cart"].join("\n");
+
+  section("F1. Stores we may not read are never sent to the page reader (A3.2)");
   installStub({
     search: () => tavilyJson(outlinePages()),
-    // Walmart blocks the basic reader; the advanced reader gets through.
     extract: (body) =>
-      body.extract_depth === "advanced"
-        ? extractJson([{ url: OUTLINE_WALMART, text: walmartProductText }], [], 0)
-        : extractJson(
-            [{ url: OUTLINE_SAMSONITE, text: samsoniteProductText }],
-            [OUTLINE_WALMART],
-            0,
-          ),
+      extractJson(
+        ((body.urls as string[]) ?? []).map((url) => ({ url, text: samsoniteProductText })),
+      ),
   });
   {
     const partials: SearchProduct[][] = [];
@@ -1756,68 +1790,33 @@ async function main() {
       onPartial: (p) => partials.push(p.products),
     });
     show(r.products);
-    const urls = (calls.extractBodies[0]?.urls as string[] | undefined) ?? [];
-    check("basic read, then ONE advanced re-read", calls.extract === 2, `${calls.extract}`);
-    const second = calls.extractBodies[1];
+    const sent = calls.extractBodies.flatMap((b) => (b.urls as string[]) ?? []);
     check(
-      "only the blocked page is re-read, with the advanced reader",
-      second?.extract_depth === "advanced" &&
-        JSON.stringify(second?.urls) === JSON.stringify([OUTLINE_WALMART]),
-      JSON.stringify(second),
+      "Samsonite.ca (blocks bots) and Walmart.ca (terms forbid) are never read",
+      !sent.some((u) => /samsonite\.ca|walmart\.ca/.test(u)),
+      sent.join(", "),
     );
-    check("the brand store's page is read first", urls[0] === OUTLINE_SAMSONITE, urls.join(", "));
-    check("the Walmart product page is read too", urls.includes(OUTLINE_WALMART));
+    check("no page-reading request is sent at all", calls.extract === 0, `${calls.extract}`);
     check(
       "a help page that isn't the product is NOT read (no credit wasted)",
-      !urls.includes(OUTLINE_HELP),
+      !sent.includes(OUTLINE_HELP),
     );
-    check(
-      "reading uses basic depth (1 credit per 5 pages)",
-      calls.extractBodies[0]?.extract_depth === "basic",
-    );
-
     const outline = r.products.find((p) => /outline pro/i.test(p.name) && !/cover/i.test(p.name));
-    const sam = outline?.offers.find((o) => o.retailer === "Samsonite.ca");
-    check("Samsonite.ca price read from its own page", sam?.price === 339.99, `${sam?.price}`);
-    const wm = outline?.offers.find((o) => o.retailer === "Walmart.ca");
-    check("Walmart's price got through on the second read", wm?.price === 279.97, `${wm?.price}`);
     check(
-      "…and it's cheapest, so it's listed first",
-      outline?.offers[0]?.retailer === "Walmart.ca" && outline?.lowestPrice === 279.97,
-      outline?.offers.map((o) => `${o.retailer} ${o.price}`).join(", "),
+      "only the price written in a search result is shown (Amazon $289.95)",
+      outline?.offers.map((o) => `${o.retailer} ${o.price}`).join(",") === "Amazon.ca 289.95",
+      outline?.offers.map((o) => `${o.retailer} ${o.price}`).join(","),
     );
     check(
-      "…then Amazon, then Samsonite.ca",
-      outline?.offers.map((o) => o.retailer).join(",") === "Walmart.ca,Amazon.ca,Samsonite.ca",
-      outline?.offers.map((o) => o.retailer).join(","),
-    );
-    check(
-      "the colours the stores offer are listed",
-      ["Black", "Ice Blue", "Sage", "Navy"].every((c) => outline?.colours?.includes(c)),
-      JSON.stringify(outline?.colours),
-    );
-    check(
-      "the bag is named the way the brand store names it",
-      outline?.name === "Samsonite Outline Pro Carry-On Spinner",
-      outline?.name,
+      "Samsonite.ca and Walmart.ca are offered as links, never a guessed price",
+      ["Samsonite.ca", "Walmart.ca"].every((name) => r.alsoCheck?.some((a) => a.retailer === name)),
+      JSON.stringify(r.alsoCheck),
     );
     check(
       '"You may also like" prices are ignored',
       !outline?.offers.some((o) => o.price === 249.99),
     );
-
-    check(
-      "first results were sent before the pages were read",
-      partials.length === 1 &&
-        !partials[0].some((p) => p.offers.some((o) => o.retailer === "Samsonite.ca")),
-    );
-    check(
-      "a page that got a price isn't also shown as a link",
-      !r.alsoCheck?.some((a) => a.retailer === "Walmart.ca"),
-      JSON.stringify(r.alsoCheck),
-    );
     check("result says it's final", r.phase === "final");
-
     const cover = r.products.findIndex((p) => /cover/i.test(p.name));
     const freeform = r.products.findIndex((p) => /freeform/i.test(p.name));
     check(
@@ -1837,24 +1836,55 @@ async function main() {
     );
   }
 
-  section("F1b. Blocked even by the advanced reader → a link, and free");
+  section("F1a. Pages we may read: basic read, then ONE advanced re-read");
   installStub({
-    search: () => tavilyJson(outlinePages()),
+    search: () => tavilyJson(readablePages()),
+    // The second store blocks the basic reader; the advanced reader gets through.
     extract: (body) =>
       body.extract_depth === "advanced"
-        ? extractJson([], [OUTLINE_WALMART], 0)
-        : extractJson(
-            [{ url: OUTLINE_SAMSONITE, text: samsoniteProductText }],
-            [OUTLINE_WALMART],
-            0,
-          ),
+        ? extractJson([{ url: READ_B, text: readBText }], [], 0)
+        : extractJson([{ url: READ_A, text: readAText }], [READ_B], 0),
   });
   {
-    const r = await search("samsonite outline pro");
+    const r = await search(READ_QUERY);
+    const urls = (calls.extractBodies[0]?.urls as string[] | undefined) ?? [];
+    check("basic read, then ONE advanced re-read", calls.extract === 2, `${calls.extract}`);
+    const second = calls.extractBodies[1];
+    check(
+      "only the blocked page is re-read, with the advanced reader",
+      second?.extract_depth === "advanced" &&
+        JSON.stringify(second?.urls) === JSON.stringify([READ_B]),
+      JSON.stringify(second),
+    );
+    check("both store pages are read", urls.includes(READ_A) && urls.includes(READ_B), urls.join(", "));
+    check(
+      "reading uses basic depth (1 credit per 5 pages)",
+      calls.extractBodies[0]?.extract_depth === "basic",
+    );
+    const bag = r.products.find((p) => /essential cabin/i.test(p.name));
+    const second2 = bag?.offers.find((o) => o.url === READ_B);
+    check("the second read's price got through", second2?.price === 1199.99, `${second2?.price}`);
+    check(
+      "a page that got a price isn't also shown as a link",
+      !r.alsoCheck?.some((a) => a.url === READ_B),
+      JSON.stringify(r.alsoCheck),
+    );
+  }
+
+  section("F1b. Blocked even by the advanced reader → a link, and free");
+  installStub({
+    search: () => tavilyJson(readablePages()),
+    extract: (body) =>
+      body.extract_depth === "advanced"
+        ? extractJson([], [READ_B], 0)
+        : extractJson([{ url: READ_A, text: readAText }], [READ_B], 0),
+  });
+  {
+    const r = await search(READ_QUERY);
     check("tried twice, no more", calls.extract === 2, `${calls.extract}`);
     check(
       "still offered as a link, never a guessed price",
-      r.alsoCheck?.some((a) => a.retailer === "Walmart.ca" && a.url === OUTLINE_WALMART) === true,
+      r.alsoCheck?.some((a) => a.url === READ_B) === true,
       JSON.stringify(r.alsoCheck),
     );
     check(
@@ -1864,20 +1894,50 @@ async function main() {
     );
   }
 
+  section("F1c. The page reader itself refuses stores we may not read (A3.2)");
+  installStub({
+    extract: (body) =>
+      extractJson(((body.urls as string[]) ?? []).map((url) => ({ url, text: "page" }))),
+  });
+  {
+    const refused = [
+      "https://www.amazon.ca/dp/B0TEST0001",
+      "https://www.walmart.ca/en/ip/samsonite/6000205",
+      "https://www.samsonite.ca/en/luggage/outline-pro/1330471041.html",
+      "https://ca.tumi.com/p/alpha-bravo-123.html",
+      "https://www.sportinglife.ca/en-CA/luggage/123.html",
+      "https://travelpro.ca/products/maxlite-5",
+    ];
+    const allowed = "https://www.canadaluggagedepot.ca/products/samsonite-outline-pro";
+    const r = await tavilyExtract({ urls: [...refused, allowed] });
+    const sent = calls.extractBodies.flatMap((b) => (b.urls as string[]) ?? []);
+    check(
+      "forbidden, restricted and bot-blocking stores are never sent",
+      refused.every((u) => !sent.includes(u)),
+      sent.join(", "),
+    );
+    check("a store that permits it is still read", sent.includes(allowed), sent.join(", "));
+    check(
+      "each refusal says why, in plain words",
+      refused.every((u) => r.failed.some((f) => f.url === u && /may not be read/.test(f.error))),
+      JSON.stringify(r.failed),
+    );
+  }
+
   section("F2. Page reading never crosses the credit cap");
   process.env.TAVILY_MONTHLY_CREDIT_CAP = "2";
   installStub({
-    search: () => tavilyJson(outlinePages()),
-    extract: () => extractJson([{ url: OUTLINE_SAMSONITE, text: samsoniteProductText }]),
+    search: () => tavilyJson(readablePages()),
+    extract: () => extractJson([{ url: READ_A, text: readAText }]),
   });
   {
-    const r = await search("samsonite outline pro");
+    const r = await search(READ_QUERY);
     check("the 2 searches fit the cap and ran", calls.search === 2, `${calls.search}`);
     check("reading would cross it → not sent at all", calls.extract === 0, `${calls.extract}`);
     check("search results are still shown", r.products.length > 0);
     check(
-      "the brand store is offered as a link instead",
-      r.alsoCheck?.some((a) => a.retailer === "Samsonite.ca") === true,
+      "the unread store is offered as a link instead",
+      r.alsoCheck?.some((a) => a.url === READ_A) === true,
       JSON.stringify(r.alsoCheck),
     );
   }
@@ -1962,11 +2022,10 @@ async function main() {
   }
   process.env.TAVILY_ADVANCED_RETRY_PAGES = "0";
   installStub({
-    search: () => tavilyJson(outlinePages()),
-    extract: () =>
-      extractJson([{ url: OUTLINE_SAMSONITE, text: samsoniteProductText }], [OUTLINE_WALMART], 0),
+    search: () => tavilyJson(readablePages()),
+    extract: () => extractJson([{ url: READ_A, text: readAText }], [READ_B], 0),
   });
-  await search("samsonite outline pro");
+  await search(READ_QUERY);
   check("TAVILY_ADVANCED_RETRY_PAGES=0 → no second read", calls.extract === 1, `${calls.extract}`);
   delete process.env.TAVILY_ADVANCED_RETRY_PAGES;
   installStub({
@@ -2017,18 +2076,18 @@ async function main() {
     );
   }
   installStub({
-    search: () => tavilyJson(outlinePages()),
+    search: () => tavilyJson(readablePages()),
     extract: (body) => extractJson([], (body.urls as string[]) ?? [], 0),
   });
   {
-    await search("samsonite outline pro");
+    await search(READ_QUERY);
     const first = calls.extract;
-    await search("samsonite outline pro medium", { bypassCache: true });
+    await search(`${READ_QUERY} black`, { bypassCache: true });
     const sentAgain = calls.extractBodies.slice(first).flatMap((b) => (b.urls as string[]) ?? []);
     check(
       "a store that blocked even the advanced reader isn't retried for a while",
-      !sentAgain.some((u) => /samsonite\.ca|walmart\.ca/.test(u)),
-      sentAgain.join(", "),
+      first > 0 && !sentAgain.some((u) => /rimowa\.com|thebay\.com/.test(u)),
+      `${first} first; then ${sentAgain.join(", ")}`,
     );
   }
   {
@@ -2086,11 +2145,11 @@ async function main() {
 
   section("F6. Daily price checks use the economical depth");
   installStub({
-    search: () => tavilyJson(outlinePages()),
+    search: () => tavilyJson(readablePages()),
     extract: (body) => extractJson([], (body.urls as string[]) ?? []),
   });
   {
-    await search("samsonite outline pro", { depth: "lite" });
+    await search(READ_QUERY, { depth: "lite" });
     const urls = (calls.extractBodies[0]?.urls as string[] | undefined) ?? [];
     check("lite → 1 search (no major-chains sweep)", calls.search === 1, `${calls.search}`);
     check("lite → at most 3 pages read", urls.length <= 3, `${urls.length}`);
@@ -2099,7 +2158,7 @@ async function main() {
       calls.extract === 1,
       `${calls.extract}`,
     );
-    await search("samsonite outline pro");
+    await search(READ_QUERY);
     // The full search must run its own major-chains search (a lite answer
     // is never served in its place) — but the identical general search is
     // reused from cache, so only 1 new call is paid for.
@@ -2214,6 +2273,53 @@ async function main() {
       ),
       JSON.stringify(calls.extractBodies.map((b) => b.urls)),
     );
+  }
+
+  section("G1. Web estimates reuse the price reader, strictly (R3.5)");
+  {
+    // The estimate reader uses findPriceCandidates and the same "not the
+    // selling price" phrases as page reading, but accepts only ONE price.
+    const read = (t: string) => readEstimatePrice("Bag", t);
+    const plain = read("Now $419.99");
+    check("plain price read", "price" in plain && plain.price === 419.99);
+    check("'from $199' is not a price", "reason" in read("From $199.99"));
+    check("a range is not a price", "reason" in read("$199.99 – $299.99"));
+    check("a monthly payment is not a price", "reason" in read("$25/mo"));
+    check("'save $50' is skipped, the selling price kept", (() => {
+      const r = read("Save $50.00, now $199.99");
+      return "price" in r && r.price === 199.99;
+    })());
+    check("two different prices → none", "reason" in read("$199.99 or $259.99"));
+    check("'Sky Max 3.0' is never a price", "reason" in readEstimatePrice("Sky Max 3.0", "Sky Max 3.0"));
+    const sources = new Map(SOURCE_SEED.map((s) => [s.id, s]));
+    for (const name of ["e1-paralux-large.json", "e2-aluminum-carry-on.json"]) {
+      const f = JSON.parse(readFileSync(resolve("scripts/fixtures/estimates", name), "utf8")) as {
+        query: string;
+        references: { price: number; sizeClass: string | null; inches: number | null }[];
+        results: { url: string; title: string; content: string }[];
+        expect: { url: string; outcome: string }[];
+      };
+      const cands = f.results.map((r) => ({
+        sourceId: SOURCE_SEED.find((s) => s.allowedDomains.includes(new URL(r.url).hostname))!.id,
+        url: r.url,
+        title: r.title,
+        snippet: r.content,
+        query: f.query,
+        foundAt: "2026-10-10T15:01:00Z",
+      }));
+      const out = validateEstimates(
+        cands,
+        sources,
+        expectedFromQuery(luggagePack.parseQuery(f.query)),
+        f.references,
+        luggagePack,
+      );
+      check(
+        `${name}: every result gets its expected verdict`,
+        f.expect.every((e) => out.find((o) => o.candidate.url === e.url)?.verdict.outcome === e.outcome),
+        out.map((o) => `${o.verdict.outcome}: ${o.verdict.reasons.join("; ")}`).join(" | "),
+      );
+    }
   }
 
   section("D1. Research never creates, imports or stores products");

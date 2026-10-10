@@ -433,7 +433,10 @@ export type SessionEventType =
   | "store_done"
   | "session_done"
   | "session_failed"
-  | "session_cancelled";
+  | "session_cancelled"
+  /** Web estimates (R3) started / finished for the stores we can't read live. */
+  | "estimates_started"
+  | "estimates_done";
 
 export type SessionEvent = {
   sessionId: string;

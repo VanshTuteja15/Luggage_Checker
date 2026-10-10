@@ -8,6 +8,7 @@
 /* ------------------------------------------------------------------ */
 
 import { engineConfig } from "../../src/lib/engine/config";
+import { createEstimateFinder } from "../../src/lib/engine/estimates/deps";
 import { luggagePack } from "../../src/lib/engine/packs/luggage";
 import { createRuntime } from "../../src/lib/engine/recorder";
 import { freshnessLabel } from "../../src/lib/engine/research/answer";
@@ -31,7 +32,12 @@ async function main(): Promise<void> {
      ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email RETURNING id`,
   );
   const rt = createRuntime(store);
-  const manager = new ResearchManager(rt, luggagePack, { maxConcurrent: 2 });
+  // --estimates: also look for web estimates (spends free Tavily credits, under the app's cap).
+  const withEstimates = process.argv.includes("--estimates");
+  const manager = new ResearchManager(rt, luggagePack, {
+    maxConcurrent: 2,
+    estimates: withEstimates ? createEstimateFinder(rt, luggagePack) : undefined,
+  });
   const created = await createSession(store, rows[0].id, { query }, engineConfig(), "inline");
   if (!created.ok) throw new Error(created.error);
   const t0 = Date.now();
@@ -60,6 +66,8 @@ async function main(): Promise<void> {
       console.log(
         `${at}  plan           checking: ${by("pending").join(", ") || "—"}\n${" ".repeat(25)}blocked: ${by("blocked").join(", ")}\n${" ".repeat(25)}link only: ${by("link_only").join(", ")}\n${" ".repeat(25)}not set up: ${by("not_configured").join(", ")}`,
       );
+    } else if (e.type === "estimates_done") {
+      console.log(`${at}  ${e.type.padEnd(14)} ${JSON.stringify(p)}`);
     } else if (e.type !== "session_done")
       console.log(`${at}  ${e.type}${e.sourceId ? ` ${e.sourceId}` : ""}`);
   });

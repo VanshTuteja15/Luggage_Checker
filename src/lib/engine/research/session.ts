@@ -47,6 +47,8 @@ import type {
   StoreStatusRow,
   StoreTaskState,
 } from "../types";
+import { referencePrices, type EstimateRequest, type EstimateResult } from "../estimates/run";
+import { expectedFromQuery } from "../estimates/validate";
 import { resolveListing } from "../identity/resolve";
 import { observeOffer } from "../observe";
 import type { ExpectedIdentity } from "../validate";
@@ -64,6 +66,11 @@ export type SessionRunDeps = {
   isCancelled?: () => Promise<boolean>;
   maxPagesPerStore?: number;
   now?: () => number;
+  /**
+   * Web estimates (R3) for the stores we can't read live. Absent = none
+   * (tests, scripts); the server and worker pass the real finder.
+   */
+  estimates?: (req: EstimateRequest) => Promise<EstimateResult>;
 };
 
 const STALE_WINDOW_MS = 30 * 86_400_000;
@@ -373,6 +380,18 @@ export async function runResearchSession(
     }
     writer.emit("plan", null, { stores: [...rows.values()] });
 
+    // Stores with no live route get a web estimate try (R3), if switched on.
+    const estimateStores = deps.estimates && flagOn(flags, "estimates.web")
+      ? active.filter((s) => {
+          const r = rows.get(s.id);
+          return (
+            !!r &&
+            (r.state === "link_only" || r.state === "blocked" || r.state === "not_configured") &&
+            s.allowedDomains.length > 0
+          );
+        })
+      : [];
+
     /* ── per-store tasks ──────────────────────────────────────────── */
 
     function ctxFor(source: SourceRecord): AdapterContext {
@@ -666,7 +685,7 @@ export async function runResearchSession(
     const deadlineP = new Promise<"deadline">((resolve) => {
       deadlineTimer = setTimeout(() => resolve("deadline"), Math.max(0, deadlineAt - now()));
     });
-    const allP = Promise.allSettled(
+    const liveP = Promise.allSettled(
       tasks.map((t) =>
         t.run().catch((err: unknown) => {
           const row = rows.get(t.sourceId);
@@ -682,7 +701,54 @@ export async function runResearchSession(
             );
         }),
       ),
-    ).then(() => "done" as const);
+    );
+
+    // Web estimates: the search starts now, alongside the stores; judging the
+    // results waits for the verified prices (or the deadline) so rule d can
+    // compare against them. Estimates that arrive after the answer is frozen
+    // are stored, not added.
+    const estimateP = (async () => {
+      if (!deps.estimates || estimateStores.length === 0) return;
+      writer.emit("estimates_started", null, { stores: estimateStores.length });
+      const expected = expectedFromQuery(parsed);
+      try {
+        const res = await deps.estimates({
+          purpose: "interactive",
+          query: session.query,
+          expected,
+          stores: estimateStores,
+          sessionId,
+          timeoutMs: Math.max(1_500, deadlineAt - now() - 1_500),
+          references: async () => {
+            await Promise.race([
+              liveP,
+              new Promise((r) => setTimeout(r, Math.max(0, deadlineAt - now() - 1_200))),
+            ]);
+            return referencePrices(
+              store,
+              pack,
+              expected,
+              collected.filter((o) => o.freshness.kind !== "estimate"),
+              now(),
+            );
+          },
+        });
+        const bySource = new Map<string, AnswerOffer[]>();
+        for (const o of res.offers) bySource.set(o.sourceId, [...(bySource.get(o.sourceId) ?? []), o]);
+        for (const [sourceId, offers] of bySource) addOffers(sourceId, offers);
+        if (!finished)
+          writer.emit("estimates_done", null, {
+            accepted: res.accepted,
+            rejected: res.rejected,
+            fromCache: res.fromCache,
+            skipped: res.skipped,
+          });
+      } catch {
+        if (!finished) writer.emit("estimates_done", null, { accepted: 0, rejected: 0, skipped: "error" });
+      }
+    })();
+
+    const allP = Promise.all([liveP, estimateP]).then(() => "done" as const);
 
     const outcome = await Promise.race([allP, deadlineP, cancelledP]);
     if (pollTimer) clearInterval(pollTimer);

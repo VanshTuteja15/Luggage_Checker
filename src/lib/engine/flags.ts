@@ -28,6 +28,12 @@ export const FLAG_DEFAULTS = {
    * dated prices and says "I don't know; run a search" otherwise.
    */
   "chat.enabled": false,
+  /**
+   * Web estimates (R3): prices from web search results for stores we can't
+   * read live, validated and labelled "confirm on site". Uses only Tavily's
+   * free credits under the app's cap; with Tavily unset this does nothing.
+   */
+  "estimates.web": true,
 
   /**
    * UCP on Shopify stores whose terms carry the generic anti-scrape clause

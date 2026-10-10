@@ -1,0 +1,43 @@
+{
+  "failure": "E2: the old web research returned non-luggage items (a domino set, pigeon rings) for \"Aluminum Carry-On\".",
+  "observed": "Screenshot 2026-10-09 23:32 (docs/CLIENT_REVIEW.md E2). Result rows rebuilt in the shape Tavily returns (title, url, content snippet); the last row is a genuine carry-on as a control.",
+  "query": "Aluminum Carry-On",
+  "references": [
+    {
+      "price": 1680,
+      "sizeClass": "carry_on",
+      "inches": null,
+      "note": "Canada Luggage Depot, Tumi 19 Degree Aluminum International Carry-On, verified live 2026-10-10 (research session c69c8e45)"
+    }
+  ],
+  "results": [
+    {
+      "url": "https://www.amazon.ca/dp/B07DOMINO1",
+      "title": "Aluminum Domino Set with Carry Case - Double Six Dominoes : Amazon.ca: Toys & Games",
+      "content": "Aluminum Domino Set with Carry Case, 28 double six dominoes for family game night. $29.99 FREE delivery"
+    },
+    {
+      "url": "https://www.walmart.ca/en/ip/aluminium-pigeon-rings-100-pcs/6000198765432",
+      "title": "Aluminium Pigeon Rings 100 pcs Bird Leg Bands | Walmart Canada",
+      "content": "Aluminium pigeon rings, 100 pcs bird leg bands in assorted colours. Current price $12.49"
+    },
+    {
+      "url": "https://www.amazon.ca/dp/B0TUMI19DG",
+      "title": "TUMI 19 Degree Aluminum International Carry-On, Silver : Amazon.ca",
+      "content": "TUMI 19 Degree Aluminum International Carry-On in Silver. $1,689.00 FREE delivery"
+    }
+  ],
+  "expect": [
+    {
+      "url": "https://www.amazon.ca/dp/B07DOMINO1",
+      "outcome": "rejected",
+      "reasonsInclude": ["size not stated"]
+    },
+    {
+      "url": "https://www.walmart.ca/en/ip/aluminium-pigeon-rings-100-pcs/6000198765432",
+      "outcome": "rejected",
+      "reasonsInclude": ["size not stated"]
+    },
+    { "url": "https://www.amazon.ca/dp/B0TUMI19DG", "outcome": "accepted", "reasonsInclude": [] }
+  ]
+}
