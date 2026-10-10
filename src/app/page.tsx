@@ -18,12 +18,16 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { signupAllowed } from "@/lib/auth/signup";
 import { useHydrated, useStore } from "@/lib/store";
 import { getSupabaseBrowser, isLiveMode } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type Tab = "signin" | "signup";
 type Panel = "form" | "forgot" | "verify" | "reset";
+
+/** One shared business login: the Create account tab exists only when sign-up is switched on (R5.1). */
+const SIGNUP_OPEN = signupAllowed();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,7 +52,12 @@ function authErrorMessage(message: string) {
   if (m.includes("email not confirmed")) {
     return "Please verify your email before signing in";
   }
-  return message;
+  if (m.includes("rate limit") || m.includes("too many")) {
+    return "Too many attempts. Wait a minute and try again.";
+  }
+  // The provider's own wording can be technical: log it, show a plain sentence.
+  console.warn("auth:", message);
+  return "That didn't work. Check the email and password and try again.";
 }
 
 function FieldFeedback({
@@ -108,13 +117,13 @@ function BrandingPanel() {
           <span className="text-xl font-semibold tracking-tight">LuggageTracker</span>
         </div>
         <p className="mt-5 max-w-sm text-base leading-relaxed text-muted-foreground/70 lg:mt-8 lg:text-lg">
-          Monitor luggage prices across 15+ Canadian retailers
+          Compare luggage prices across Canadian stores
         </p>
         <ul className="mt-8 hidden space-y-5 lg:block">
           {[
-            { icon: Store, text: "Compare prices across 15+ Canadian retailers" },
-            { icon: Bell, text: "Get notified the moment a tracked bag drops" },
-            { icon: TrendingDown, text: "Watch 30-day price history in one place" },
+            { icon: Store, text: "Lowest price first, with the store and the time each price was found" },
+            { icon: Bell, text: "A morning email with the prices of the bags you choose" },
+            { icon: TrendingDown, text: "Price changes and 30-day lows in plain tables" },
           ].map(({ icon: Icon, text }) => (
             <li key={text} className="flex items-start gap-3">
               <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary-foreground">
@@ -126,7 +135,7 @@ function BrandingPanel() {
         </ul>
       </div>
       <p className="relative mt-8 hidden text-xs text-muted-foreground/70 lg:block">
-        Built for Canadian travellers who wait for the right price.
+        Built for the Luggage Depot team in Calgary.
       </p>
     </aside>
   );
@@ -141,7 +150,7 @@ function AuthCard() {
 
   const [tab, setTab] = useState<Tab>("signin");
   const [panel, setPanel] = useState<Panel>("form");
-  const [email, setEmail] = useState(isLiveMode ? "" : "admin@luggagetracker.app");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -151,6 +160,7 @@ function AuthCard() {
   const confirmOk = confirmPassword.length > 0 && confirmPassword === password;
 
   const canSubmit =
+    isLiveMode &&
     !loading &&
     (panel === "forgot"
       ? emailOk
@@ -183,13 +193,6 @@ function AuthCard() {
   }
 
   async function handleSignIn() {
-    if (!isLiveMode) {
-      signIn(email.trim());
-      toast.success("Welcome back");
-      router.push(redirect);
-      return;
-    }
-
     setLoading(true);
     try {
       const supabase = getSupabaseBrowser();
@@ -208,60 +211,49 @@ function AuthCard() {
       signIn(email.trim());
       toast.success("Welcome back");
       router.push(redirect);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sign in failed");
+    } catch {
+      toast.error("Sign-in didn't work. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
   }
 
+  // Accounts are created by the server, which refuses when sign-up is off.
   async function handleSignUp() {
-    if (!isLiveMode) {
-      setPanel("verify");
-      return;
-    }
-
     setLoading(true);
     try {
-      const supabase = getSupabaseBrowser();
-      if (!supabase) throw new Error("Supabase not configured");
-
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password.trim(),
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
       });
-
-      if (error) {
-        toast.error(authErrorMessage(error.message));
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        session?: { accessToken: string; refreshToken: string } | null;
+      };
+      if (!res.ok) {
+        toast.error(body.error ?? "The account couldn't be created. Try again in a minute.");
         return;
       }
-
-      if (data.user?.identities?.length === 0) {
-        toast.error("An account with this email already exists");
-        return;
-      }
-
-      if (data.session) {
+      if (body.session) {
+        await getSupabaseBrowser()?.auth.setSession({
+          access_token: body.session.accessToken,
+          refresh_token: body.session.refreshToken,
+        });
         signIn(email.trim());
         toast.success("Welcome to LuggageTracker");
         router.push(redirect);
         return;
       }
-
       setPanel("verify");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sign up failed");
+    } catch {
+      toast.error("The account couldn't be created. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
   }
 
   async function handleReset() {
-    if (!isLiveMode) {
-      setPanel("reset");
-      return;
-    }
-
     setLoading(true);
     try {
       const supabase = getSupabaseBrowser();
@@ -277,8 +269,8 @@ function AuthCard() {
       }
 
       setPanel("reset");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not send reset email");
+    } catch {
+      toast.error("The reset email couldn't be sent. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -302,11 +294,13 @@ function AuthCard() {
         ? `We sent a verification link to ${email.trim()}`
         : panel === "reset"
           ? `We sent a password reset link to ${email.trim()}`
-          : isLiveMode
-            ? isSignup
+          : !isLiveMode
+            ? "Sign-in isn't set up on this server yet. Ask the person who installed LuggageTracker to finish the setup."
+            : isSignup
               ? "Start tracking luggage prices in minutes."
-              : "Sign in to continue tracking prices."
-            : "Demo mode — use a valid email and password";
+              : SIGNUP_OPEN
+                ? "Sign in to continue tracking prices."
+                : "Sign in with the Luggage Depot business login.";
 
   const submitLabel = loading
     ? panel === "forgot"
@@ -323,7 +317,7 @@ function AuthCard() {
   return (
     <div className="w-full max-w-md">
       <div className="rounded-xl border border-border bg-card p-6 shadow-lift sm:p-8">
-        {panel === "form" && (
+        {panel === "form" && SIGNUP_OPEN && (
           <div className="grid grid-cols-2 rounded-lg bg-muted p-1">
             {(["signin", "signup"] as const).map((id) => (
               <button
@@ -351,7 +345,7 @@ function AuthCard() {
           <h1
             className={cn(
               "text-lg font-semibold tracking-tight",
-              panel === "form" ? "mt-6" : "mt-0",
+              panel === "form" && SIGNUP_OPEN ? "mt-6" : "mt-0",
             )}
           >
             {heading}

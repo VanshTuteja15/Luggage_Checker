@@ -6,6 +6,18 @@ Secrets go **only** in `.env.local` (local) or the host's environment settings (
 
 _The ordered go-live checklist is at the end._
 
+## Client-ready release (V2) actions
+
+Added by the V2 work on `feat/client-ready` ([`MASTER_PROMPT_V2.md`](../MASTER_PROMPT_V2.md)). The final ordering is in the go-live checklist.
+
+### V2-1. Turn off public sign-up in Supabase (5 min) → one shared login
+
+The app hides "Create account" and its server refuses new accounts while `NEXT_PUBLIC_ALLOW_SIGNUP` is unset (the default). Supabase's public key could still be used to sign up directly, so switch it off at the source too:
+
+1. Supabase dashboard → **Authentication** → **Sign In / Providers** (older dashboards: Authentication → Settings).
+2. Turn **off** "Allow new users to sign up". Keep the Email provider on (the business login and "Forgot password" use it).
+3. **Check:** on the login page there is no "Create account" tab; `curl -X POST https://<app>/api/auth/signup -H 'content-type: application/json' -d '{"email":"x@example.com","password":"12345678!"}'` answers 403.
+
 ## 1. Publish the UCP agent profile → unlocks 6–10 Shopify stores
 
 Shopify's Catalog MCP requires every call to carry the URL of a public JSON profile describing our agent.
