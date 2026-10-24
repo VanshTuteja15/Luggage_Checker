@@ -60,6 +60,11 @@ All §2 statements were checked against the code. They hold, with these addition
 | Pre-order and back-order count as "Out of stock" | Three states for people (R6); neither can be bought off the shelf today. |
 | Migration 006 started in Q2 (stock column), extended in later phases | R6 is a Q2 requirement and needs the tri-state column; the file stays one additive, idempotent migration. The bridge checks the column exists, so deploying before 006 is safe. |
 | "All stores" tab and timing line removed from search | One row per store replaces the flat per-variant list; first-price timings are internal (Store status → Technical details). |
+| `POST /api/search` (old Tavily search) kept | It backs the protected Add New Product panel in `src/app/tracked/page.tsx` (rule 2). Its prices reach the tracking tables only through the protected `/api/track`. They are never shown as "Verified live": tracking-table prices are read back as "Last seen · {date}" in search fallback and email (Q4 labels each email row from its `retailer_offers` date). The search page itself uses only the engine session (R2.1). |
+| Estimates join a verified product only through `mergeEstimateGroups` | A snippet's title often drops a word the store's page has ("Expandable"). Joining only estimate-only groups, only into exactly one verified group of the same brand, size and inches, and only across optional line words keeps TUMI International vs International Expandable apart (identity rules) while putting Amazon's "Paralux Hardside Spinner Medium" next to CLD's "Paralux Hardside Expandable Spinner Medium". |
+| Estimate titles that fit two verified products stay on their own | Guessing which one they mean could show a price for the wrong bag (rule 10). |
+| Estimates run inside the research session, not as a separate request | One search (R2.1); the session already streams per-store events, so estimates appear as they arrive (R2.5) and their spend goes through the same Tavily credit reservation. |
+| Rejected estimates stored in `web_estimate_rejections`, not `observations` | They aren't readings of a listing (many have no product page), and they must never be shown; a separate admin-only table makes that structural. |
 
 ## New dependencies
 

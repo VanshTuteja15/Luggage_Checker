@@ -219,6 +219,102 @@ describe("product order and junk (R2.2, A2.2)", () => {
   });
 });
 
+describe("web estimates join the verified product (A2.1)", () => {
+  const estimate = (o: Partial<AnswerOffer> & Pick<AnswerOffer, "sourceId" | "retailer" | "price">) =>
+    offer({
+      method: "web_estimate",
+      freshness: { kind: "estimate", foundAt: "2026-10-10T15:01:00Z" },
+      availability: "unknown",
+      ...o,
+    });
+
+  it("puts estimates whose titles leave out an optional word in the store's product", () => {
+    const products = groupOffers(
+      [
+        offer({
+          ...CLD,
+          price: 434.95,
+          title: "Samsonite Paralux Hardside Expandable Spinner Medium",
+          url: "https://www.canadaluggagedepot.ca/products/paralux-medium",
+        }),
+        estimate({
+          sourceId: "amazon-ca",
+          retailer: "Amazon.ca",
+          price: 434.95,
+          title: "Samsonite Paralux Hardside Spinner Medium",
+          url: "https://www.amazon.ca/dp/B0PARALUX",
+        }),
+        estimate({
+          sourceId: "luggagecity",
+          retailer: "Luggage City",
+          price: 374.95,
+          title: "Samsonite Paralux Hardside Spinner Medium - Black",
+          url: "https://www.luggagecity.ca/products/paralux-medium",
+        }),
+      ],
+      luggagePack,
+    );
+    expect(products).toHaveLength(1);
+    expect(products[0].lowestPrice).toBe(374.95);
+    const rows = storeRows(products[0].offers);
+    expect(rows.map((r) => r.retailer)).toEqual(["Luggage City", "Canada Luggage Depot", "Amazon.ca"]);
+    const h = headlineFor(rows)!;
+    expect(h.row.retailer).toBe("Luggage City");
+    expect(h.confirmed?.retailer).toBe("Canada Luggage Depot");
+  });
+
+  it("never joins a different size, and stays apart when two verified products fit", () => {
+    const products = groupOffers(
+      [
+        offer({
+          sourceId: "tumi-ca",
+          retailer: "TUMI.ca",
+          brand: "TUMI",
+          price: 1095,
+          sizeClass: "carry_on",
+          title: "TUMI Alpha International Carry-On",
+          url: "https://www.tumi.ca/p/intl",
+        }),
+        offer({
+          sourceId: "tumi-ca",
+          retailer: "TUMI.ca",
+          brand: "TUMI",
+          price: 1195,
+          sizeClass: "carry_on",
+          title: "TUMI Alpha International Expandable Carry-On",
+          url: "https://www.tumi.ca/p/intl-exp",
+        }),
+        estimate({
+          sourceId: "amazon-ca",
+          retailer: "Amazon.ca",
+          brand: "TUMI",
+          price: 1050,
+          sizeClass: "carry_on",
+          title: "TUMI Alpha Carry-On",
+          url: "https://www.amazon.ca/dp/B0ALPHA",
+        }),
+        offer({ ...CLD, price: 434.95, title: "Samsonite Paralux Hardside Expandable Spinner Medium" }),
+        estimate({
+          sourceId: "samsonite-ca",
+          retailer: "Samsonite.ca",
+          price: 499.99,
+          sizeClass: "large",
+          title: "Samsonite Paralux Hardside Spinner Large",
+          url: "https://www.samsonite.ca/paralux-large",
+        }),
+      ],
+      luggagePack,
+    );
+    const byPrice = (price: number) => products.find((p) => p.offers.some((o) => o.price === price))!;
+    // TUMI's two verified pages stay two products; the estimate fits both, so joins neither.
+    expect(byPrice(1095)).not.toBe(byPrice(1195));
+    expect(byPrice(1050).offers).toHaveLength(1);
+    // A Large estimate never joins the Medium.
+    expect(byPrice(499.99)).not.toBe(byPrice(434.95));
+    expect(byPrice(434.95).offers).toHaveLength(1);
+  });
+});
+
 describe("labels (rule 5): nothing older than today looks like today's price", () => {
   it("uses the exact wording for every kind", () => {
     expect(freshnessLabel({ kind: "live", fetchedAt: TODAY_902 }, NOW)).toBe(

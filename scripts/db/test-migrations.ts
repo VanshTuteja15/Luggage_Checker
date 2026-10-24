@@ -434,6 +434,85 @@ async function main(): Promise<void> {
           [productId],
         )) !== null,
       );
+
+      // R3.1: a web estimate is kept as an observation but never extends verified history.
+      const rangesBefore = await c.query(
+        "SELECT id, price, observation_count FROM price_ranges WHERE listing_id = $1 ORDER BY id",
+        [listingId],
+      );
+      await c.query(
+        `INSERT INTO observations (listing_id, source_id, adapter, price, currency, availability, outcome, confidence, extractor_version, validator_version, fetched_at, evidence)
+         VALUES ($1, 'canadaluggagedepot', 'web_estimate', 279.95, 'CAD', 'unknown', 'accepted', 0.6, 'x', 'y', '2026-10-05T10:00:00Z',
+                 '{"query":"paralux medium","url":"https://www.canadaluggagedepot.ca/products/x","snippet":"$279.95"}')`,
+        [listingId],
+      );
+      const rangesAfter = await c.query(
+        "SELECT id, price, observation_count FROM price_ranges WHERE listing_id = $1 ORDER BY id",
+        [listingId],
+      );
+      check(
+        "a web estimate is stored but never opens or extends a price range",
+        JSON.stringify(rangesAfter.rows) === JSON.stringify(rangesBefore.rows),
+        JSON.stringify(rangesAfter.rows),
+      );
+      check(
+        "estimate searches refuse an unknown purpose",
+        (await expectError(
+          c,
+          "INSERT INTO web_estimate_searches (cache_key, query, purpose, expires_at) VALUES ('q:bad', 'x', 'marketing', now())",
+        )) !== null,
+      );
+      check(
+        "rejected estimates keep at most a 300-character snippet",
+        (await expectError(
+          c,
+          "INSERT INTO web_estimate_rejections (query, url, snippet) VALUES ('x', 'https://x.ca', repeat('a', 301))",
+        )) !== null,
+      );
+      check(
+        "estimate spend can't go negative",
+        (await expectError(
+          c,
+          "INSERT INTO web_estimate_spend (local_date, purpose, credits) VALUES ('2026-10-10', 'email', -1)",
+        )) !== null,
+      );
+      await c.query(
+        `INSERT INTO web_estimate_searches (cache_key, query, purpose, credits, expires_at)
+         VALUES ('q:old', 'old', 'interactive', 1, now() - interval '2 days'),
+                ('q:new', 'new', 'email', 1, now() + interval '6 hours')`,
+      );
+      await c.query(
+        `INSERT INTO web_estimate_rejections (source_id, query, url, reasons, found_at)
+         VALUES ('samsonite-ca', 'old', 'https://www.samsonite.ca/a', '["a different size"]', now() - interval '200 days'),
+                ('samsonite-ca', 'new', 'https://www.samsonite.ca/b', '["a different size"]', now())`,
+      );
+      await c.query(
+        "INSERT INTO web_estimate_spend (local_date, purpose, credits) VALUES ('2026-10-10', 'email', 3)",
+      );
+      const estimateTables = ["web_estimate_searches", "web_estimate_spend", "web_estimate_rejections"];
+      await asRole(c, "authenticated", userA, async () => {
+        for (const t of estimateTables) {
+          const { rows } = await c.query(`SELECT 1 FROM ${t}`);
+          check(`non-admins can't read ${t}`, rows.length === 0);
+        }
+        check(
+          "non-admins can't write estimate spend",
+          (await expectError(
+            c,
+            "INSERT INTO web_estimate_spend (local_date, purpose, credits) VALUES ('2026-10-11', 'email', 1)",
+          )) !== null,
+        );
+      });
+      await asRole(c, "authenticated", adminUser, async () => {
+        for (const t of estimateTables) {
+          const { rows } = await c.query(`SELECT 1 FROM ${t}`);
+          check(`admins can read ${t}`, rows.length >= 1);
+        }
+      });
+      await asRole(c, "anon", null, async () => {
+        for (const t of estimateTables)
+          check(`the anon key can't read ${t}`, (await expectError(c, `SELECT 1 FROM ${t}`)) !== null);
+      });
     }
 
     console.log(`\n${B}Retention${X}`);
@@ -443,6 +522,11 @@ async function main(): Promise<void> {
     );
     const { rows: ret } = await c.query("SELECT engine_retention(180) AS r");
     check("retention runs", typeof ret[0].r === "object");
+    check(
+      "retention removes expired estimate searches and old rejections only",
+      ret[0].r.estimate_searches === 1 && ret[0].r.estimate_rejections === 1,
+      JSON.stringify(ret[0].r),
+    );
     await c.end();
 
     /* ── Path B: legacy install (001 → 002 → 003 → 004) ───────────── */
