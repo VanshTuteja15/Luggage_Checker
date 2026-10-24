@@ -25,7 +25,8 @@
     "engine:research": "node scripts/run-ts.mjs scripts/engine/research.ts",
     "engine:reresolve": "node scripts/run-ts.mjs scripts/engine/reresolve.ts",
     "shadow:run": "node scripts/run-ts.mjs scripts/shadow/run.ts",
-    "shadow:report": "node scripts/run-ts.mjs scripts/shadow/report.ts"
+    "shadow:report": "node scripts/run-ts.mjs scripts/shadow/report.ts",
+    "e2e:auth": "node scripts/run-ts.mjs scripts/e2e/local-auth.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -65,6 +66,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "next": "^15.3.0",
+    "nodemailer": "10.0.16",
     "pg": "^8.23.1",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
@@ -84,6 +86,7 @@
     "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/node": "^22.16.5",
+    "@types/nodemailer": "8.0.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

@@ -64,7 +64,8 @@ function changeLabel(oldP: number, newP: number): string {
   return `${arrow} ${cad(Math.abs(diff))} (${Math.abs(pct).toFixed(1)}%)`;
 }
 
-function esc(s: string): string {
+/** HTML-escape text and attribute values (attributes are always double-quoted). */
+export function esc(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

@@ -18,6 +18,27 @@ The app hides "Create account" and its server refuses new accounts while `NEXT_P
 2. Turn **off** "Allow new users to sign up". Keep the Email provider on (the business login and "Forgot password" use it).
 3. **Check:** on the login page there is no "Create account" tab; `curl -X POST https://<app>/api/auth/signup -H 'content-type: application/json' -d '{"email":"x@example.com","password":"12345678!"}'` answers 403.
 
+### V2-2. Run migration 006 in Supabase (5 min) → morning email, estimates, stock, groups
+
+1. Supabase dashboard → **SQL Editor** → paste all of `supabase/migrations/006_client_ready.sql` → **Run**. It only adds tables and columns and is safe to run again.
+2. **Check:** Table Editor lists `email_digest_settings`, `email_digest_products`, `email_digest_runs`, `product_groups`, `web_estimate_searches`. Opening **Morning Email** in the app shows the page (not "needs the price database").
+
+### V2-3. Connect a free email sender (15 min) → the morning email can be sent
+
+Pick one. Nothing here costs money; stay on the free plans.
+
+**Option A: Resend (recommended).** The free plan sends 100 emails a day; the app stops at 90 (`EMAIL_DAILY_LIMIT`).
+1. resend.com → **Domains** → **Add domain** → the business domain (e.g. `luggagedepot.ca`) → add the DNS records it shows at the domain host → wait for "Verified".
+2. Vercel (and `.env.local` for local use): `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=<new key>`, `REPORT_FROM_EMAIL=LuggageTracker <prices@luggagedepot.ca>` (an address **on the verified domain**). With the shared `onboarding@resend.dev` sender, only the Resend account owner receives mail; the Morning Email page warns about this.
+
+**Option B: a Gmail account (SMTP).** Gmail's own sending limit applies (not verified for this account; check Google's current limit for personal accounts before relying on it).
+1. Google account → **Security** → turn on 2-Step Verification → **App passwords** → create one for "LuggageTracker".
+2. Vercel: `EMAIL_PROVIDER=smtp`, `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<the Gmail address>`, `SMTP_PASS=<the app password>`, `SMTP_FROM=LuggageTracker <the Gmail address>`.
+
+Also set `APP_URL=https://<your app address>` so the links in the email work.
+
+**Check:** Morning Email says "Email is set up. It's sent from …". Add your address, tick a product, press **Send test now**; the email arrives within a minute and the send log shows "Sent".
+
 ## 1. Publish the UCP agent profile → unlocks 6–10 Shopify stores
 
 Shopify's Catalog MCP requires every call to carry the URL of a public JSON profile describing our agent.

@@ -513,6 +513,158 @@ async function main(): Promise<void> {
         for (const t of estimateTables)
           check(`the anon key can't read ${t}`, (await expectError(c, `SELECT 1 FROM ${t}`)) !== null);
       });
+
+      /* ── Morning email (R1.3, R1.6) and groups (R7.2) ───────────── */
+      const { rows: tp } = await c.query(
+        `INSERT INTO tracked_products (user_id, product_id) VALUES ($1, $3), ($2, $3) RETURNING id, user_id`,
+        [userA, userB, productId],
+      );
+      const trackedA = tp.find((r) => r.user_id === userA)!.id as string;
+      const trackedB = tp.find((r) => r.user_id === userB)!.id as string;
+      check(
+        "email settings default to on, 09:00, America/Edmonton, no recipients",
+        await (async () => {
+          const { rows } = await c.query(
+            "INSERT INTO email_digest_settings (user_id) VALUES ($1) RETURNING enabled, send_time::text AS t, timezone, recipients",
+            [userA],
+          );
+          const r = rows[0];
+          return r.enabled === true && r.t === "09:00:00" && r.timezone === "America/Edmonton" && r.recipients.length === 0;
+        })(),
+      );
+      check(
+        "at most 10 recipients",
+        (await expectError(
+          c,
+          "UPDATE email_digest_settings SET recipients = (SELECT array_agg('p' || g || '@example.test') FROM generate_series(1, 11) g) WHERE user_id = $1",
+          [userA],
+        )) !== null,
+      );
+      await c.query(
+        "INSERT INTO email_digest_products (user_id, tracked_product_id, position) VALUES ($1, $2, 0)",
+        [userA, trackedA],
+      );
+      await c.query(
+        "INSERT INTO email_digest_runs (user_id, local_date, kind, status) VALUES ($1, '2026-10-10', 'daily', 'claimed')",
+        [userA],
+      );
+      const { rowCount: second } = await c.query(
+        `INSERT INTO email_digest_runs (user_id, local_date, kind) VALUES ($1, '2026-10-10', 'daily')
+         ON CONFLICT (user_id, local_date) WHERE kind = 'daily' DO NOTHING RETURNING id`,
+        [userA],
+      );
+      check("one daily run per account and local date (a second claim gets nothing)", second === 0);
+      check(
+        "test sends don't count against the daily run",
+        (await expectError(
+          c,
+          "INSERT INTO email_digest_runs (user_id, local_date, kind, status) VALUES ($1, '2026-10-10', 'test', 'sent'), ($1, '2026-10-10', 'test', 'sent')",
+          [userA],
+        )) === null,
+      );
+      check(
+        "a run refuses an unknown status",
+        (await expectError(
+          c,
+          "INSERT INTO email_digest_runs (user_id, local_date, kind, status) VALUES ($1, '2026-10-11', 'daily', 'maybe')",
+          [userA],
+        )) !== null,
+      );
+      const { rows: grp } = await c.query(
+        "INSERT INTO product_groups (user_id, name) VALUES ($1, 'Carry-ons') RETURNING id",
+        [userA],
+      );
+      await c.query(
+        "INSERT INTO product_group_members (group_id, tracked_product_id) VALUES ($1, $2)",
+        [grp[0].id, trackedA],
+      );
+      check(
+        "group names are unique per account, ignoring case",
+        (await expectError(c, "INSERT INTO product_groups (user_id, name) VALUES ($1, 'CARRY-ONS')", [
+          userA,
+        ])) !== null,
+      );
+
+      await asRole(c, "authenticated", userA, async () => {
+        const { rows: own } = await c.query("SELECT 1 FROM email_digest_products");
+        check("the owner sees their chosen products", own.length === 1);
+        check(
+          "the owner can't choose someone else's tracked product",
+          (await expectError(
+            c,
+            "INSERT INTO email_digest_products (user_id, tracked_product_id) VALUES ($1, $2)",
+            [userA, trackedB],
+          )) !== null,
+        );
+        check(
+          "the owner can't claim a daily run (scheduler only)",
+          (await expectError(
+            c,
+            "INSERT INTO email_digest_runs (user_id, local_date, kind) VALUES ($1, '2026-10-12', 'daily')",
+            [userA],
+          )) !== null,
+        );
+        check(
+          "the owner can log a test send",
+          (await expectError(
+            c,
+            "INSERT INTO email_digest_runs (user_id, local_date, kind, status) VALUES ($1, '2026-10-12', 'test', 'sent')",
+            [userA],
+          )) === null,
+        );
+        check(
+          "the owner can't change a daily run",
+          (await c.query("UPDATE email_digest_runs SET status = 'sent' WHERE kind = 'daily'")).rowCount === 0,
+        );
+        check(
+          "the owner can't add someone else's product to a group",
+          (await expectError(
+            c,
+            "INSERT INTO product_group_members (group_id, tracked_product_id) VALUES ($1, $2)",
+            [grp[0].id, trackedB],
+          )) !== null,
+        );
+      });
+      await asRole(c, "authenticated", userB, async () => {
+        for (const t of ["email_digest_settings", "email_digest_products", "email_digest_runs", "product_groups", "product_group_members"]) {
+          const { rows } = await c.query(`SELECT 1 FROM ${t}`);
+          check(`another user can't see ${t}`, rows.length === 0);
+        }
+        check(
+          "another user can't change the owner's recipients",
+          (await c.query("UPDATE email_digest_settings SET recipients = '{x@example.test}'")).rowCount === 0,
+        );
+      });
+      await asRole(c, "anon", null, async () => {
+        check(
+          "the anon key can't read email settings",
+          (await expectError(c, "SELECT 1 FROM email_digest_settings")) !== null,
+        );
+      });
+
+      await c.query("DELETE FROM tracked_products WHERE id = $1", [trackedA]);
+      const { rows: afterUntrack } = await c.query(
+        `SELECT (SELECT count(*)::int FROM email_digest_products WHERE tracked_product_id = $1) AS chosen,
+                (SELECT count(*)::int FROM product_group_members WHERE tracked_product_id = $1) AS members`,
+        [trackedA],
+      );
+      check(
+        "untracking a product removes it from the email and its groups (cascade)",
+        afterUntrack[0].chosen === 0 && afterUntrack[0].members === 0,
+        JSON.stringify(afterUntrack[0]),
+      );
+      const { rows: link } = await c.query(
+        "SELECT link_status, link_failures FROM listings WHERE id = $1",
+        [listingId],
+      );
+      check(
+        "listings start with a working link",
+        link[0].link_status === "ok" && link[0].link_failures === 0,
+      );
+      check(
+        "a link status is ok or broken",
+        (await expectError(c, "UPDATE listings SET link_status = 'gone' WHERE id = $1", [listingId])) !== null,
+      );
     }
 
     console.log(`\n${B}Retention${X}`);
@@ -552,7 +704,7 @@ async function main(): Promise<void> {
 
     /* ── EngineStore contract against real Postgres ────────────────── */
     console.log(`\n${B}EngineStore contract (PgEngineStore)${X}`);
-    const vitest = spawnSync("npx", ["vitest", "run", "tests/engine/store.test.ts"], {
+    const vitest = spawnSync("npx", ["vitest", "run", "tests/engine/store.test.ts", "tests/app/digest-store.test.ts"], {
       stdio: "inherit",
       shell: process.platform === "win32",
       env: { ...process.env, ENGINE_TEST_DATABASE_URL: url("fresh") },

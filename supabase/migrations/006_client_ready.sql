@@ -163,3 +163,154 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE EXECUTE ON FUNCTION engine_retention(INTEGER) FROM PUBLIC;
+
+-- ============================================================
+-- Morning email (R1)
+--
+-- One settings row per account, the products chosen for the email
+-- (in order), and a log of every run. A daily run is claimed before
+-- anything is sent: the partial unique index allows one daily row per
+-- account and local date, so retries and parallel ticks never send
+-- twice (R1.6). Untracking a product removes it from the email (R1.3).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS email_digest_settings (
+  user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  enabled    BOOLEAN NOT NULL DEFAULT true,
+  send_time  TIME NOT NULL DEFAULT '09:00',
+  timezone   TEXT NOT NULL DEFAULT 'America/Edmonton',
+  recipients TEXT[] NOT NULL DEFAULT '{}' CHECK (cardinality(recipients) <= 10),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS email_digest_products (
+  user_id            UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  tracked_product_id UUID NOT NULL REFERENCES tracked_products(id) ON DELETE CASCADE,
+  position           INTEGER NOT NULL DEFAULT 0,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, tracked_product_id)
+);
+
+CREATE TABLE IF NOT EXISTS email_digest_runs (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  local_date    DATE NOT NULL,
+  kind          TEXT NOT NULL CHECK (kind IN ('daily', 'test')),
+  status        TEXT NOT NULL DEFAULT 'claimed'
+                CHECK (status IN ('claimed', 'preparing', 'sending', 'sent', 'partial', 'failed', 'missed', 'skipped')),
+  claimed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  prepared_at   TIMESTAMPTZ,
+  sent_at       TIMESTAMPTZ,
+  -- Per address: { address, status: 'sent' | 'failed', providerId, error, attempts }.
+  recipients    JSONB NOT NULL DEFAULT '[]',
+  product_count INTEGER NOT NULL DEFAULT 0 CHECK (product_count >= 0),
+  -- What was sent: subject and the summary lines (not the whole email).
+  snapshot      JSONB,
+  error         TEXT,
+  -- Plain sentences for the log ("The scheduler was late today").
+  notes         JSONB NOT NULL DEFAULT '[]'
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS email_digest_runs_one_daily
+  ON email_digest_runs (user_id, local_date) WHERE kind = 'daily';
+CREATE INDEX IF NOT EXISTS idx_email_digest_runs_user_date
+  ON email_digest_runs (user_id, local_date DESC);
+CREATE INDEX IF NOT EXISTS idx_email_digest_runs_sent
+  ON email_digest_runs (sent_at DESC) WHERE sent_at IS NOT NULL;
+
+-- ============================================================
+-- Product groups (R7.2)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS product_groups (
+  id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 60),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS product_groups_user_name ON product_groups (user_id, lower(name));
+
+CREATE TABLE IF NOT EXISTS product_group_members (
+  group_id           UUID NOT NULL REFERENCES product_groups(id) ON DELETE CASCADE,
+  tracked_product_id UUID NOT NULL REFERENCES tracked_products(id) ON DELETE CASCADE,
+  PRIMARY KEY (group_id, tracked_product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_group_members_tracked ON product_group_members (tracked_product_id);
+
+-- ============================================================
+-- Broken store links (R7.4)
+--
+-- A known product page that answers 404/410 twice in a row is marked
+-- 'broken' (Store status, email summary); a good read resets it.
+-- ============================================================
+
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS link_status   TEXT NOT NULL DEFAULT 'ok';
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS link_failures INTEGER NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'listings_link_status_check') THEN
+    ALTER TABLE listings
+      ADD CONSTRAINT listings_link_status_check CHECK (link_status IN ('ok', 'broken'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'listings_link_failures_check') THEN
+    ALTER TABLE listings
+      ADD CONSTRAINT listings_link_failures_check CHECK (link_failures >= 0);
+  END IF;
+END $$;
+
+-- ============================================================
+-- Row Level Security for the email and groups
+--
+-- The owner reads and writes their own rows. Daily runs are written
+-- by the scheduler (service role) only; the owner may log test sends.
+-- ============================================================
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    EXECUTE 'REVOKE ALL ON email_digest_settings, email_digest_products, email_digest_runs, product_groups, product_group_members FROM anon';
+  END IF;
+END $$;
+
+ALTER TABLE email_digest_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_digest_products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_digest_runs     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_groups        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_group_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Owner manages email settings" ON email_digest_settings;
+CREATE POLICY "Owner manages email settings" ON email_digest_settings FOR ALL TO authenticated
+  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Owner manages email products" ON email_digest_products;
+CREATE POLICY "Owner manages email products" ON email_digest_products FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (SELECT 1 FROM tracked_products t WHERE t.id = tracked_product_id AND t.user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "Owner reads email runs" ON email_digest_runs;
+CREATE POLICY "Owner reads email runs" ON email_digest_runs FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "Owner logs test sends" ON email_digest_runs;
+CREATE POLICY "Owner logs test sends" ON email_digest_runs FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid() AND kind = 'test');
+DROP POLICY IF EXISTS "Owner updates test sends" ON email_digest_runs;
+CREATE POLICY "Owner updates test sends" ON email_digest_runs FOR UPDATE TO authenticated
+  USING (user_id = auth.uid() AND kind = 'test') WITH CHECK (user_id = auth.uid() AND kind = 'test');
+
+DROP POLICY IF EXISTS "Owner manages groups" ON product_groups;
+CREATE POLICY "Owner manages groups" ON product_groups FOR ALL TO authenticated
+  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Owner manages group members" ON product_group_members;
+CREATE POLICY "Owner manages group members" ON product_group_members FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM product_groups g WHERE g.id = group_id AND g.user_id = auth.uid()))
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM product_groups g WHERE g.id = group_id AND g.user_id = auth.uid())
+    AND EXISTS (SELECT 1 FROM tracked_products t WHERE t.id = tracked_product_id AND t.user_id = auth.uid())
+  );
