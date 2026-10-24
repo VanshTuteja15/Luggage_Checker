@@ -21,7 +21,7 @@
 /* ------------------------------------------------------------------ */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { Pool } from "pg";
+import { Pool, types as pgTypes } from "pg";
 
 const PORT = Number(process.env.E2E_AUTH_PORT ?? 54398);
 const USER_ID = "00000000-0000-4000-8000-0000000e2e01";
@@ -113,6 +113,99 @@ async function seed(url: string): Promise<void> {
   }
 }
 
+/* ── A read-only subset of Supabase's REST API (PostgREST) ─────────── */
+/* Enough for the pages that read tracked products and settings:        */
+/* select=, col=eq|neq|in|gt|gte|lt|lte|is.value, order=, limit=. Each   */
+/* query runs as the signed-in user (role authenticated + JWT claims),   */
+/* so the database's row-level security decides what is visible.        */
+
+const IDENT = /^[a-z_][a-z0-9_]*$/;
+const OPS: Record<string, string> = { eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" };
+let restPool: Pool | null = null;
+
+function userFrom(req: IncomingMessage): string | null {
+  const [, payload] = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").split(".");
+  try {
+    const claims = JSON.parse(Buffer.from(payload ?? "", "base64url").toString());
+    return claims.sub === USER_ID && claims.exp * 1000 > Date.now() ? USER_ID : null;
+  } catch {
+    return null;
+  }
+}
+
+async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string): Promise<void> {
+  const u = new URL(req.url ?? "/", "http://x");
+  const table = u.pathname.slice("/rest/v1/".length);
+  if (!IDENT.test(table)) return send(res, 400, { message: "bad table" });
+  const select = (u.searchParams.get("select") ?? "*").split(",").map((c) => c.trim());
+  if (!select.every((c) => c === "*" || IDENT.test(c))) return send(res, 400, { message: "unsupported select" });
+  const where: string[] = [];
+  const params: unknown[] = [];
+  let order = "";
+  let limit = "";
+  for (const [key, raw] of u.searchParams) {
+    if (key === "select") continue;
+    if (key === "order") {
+      const parts = raw.split(",").map((p) => p.split("."));
+      if (!parts.every(([c, d]) => IDENT.test(c) && (!d || d === "asc" || d === "desc")))
+        return send(res, 400, { message: "bad order" });
+      order = ` ORDER BY ${parts.map(([c, d]) => `${c} ${d === "desc" ? "DESC" : "ASC"}`).join(", ")}`;
+      continue;
+    }
+    if (key === "limit") {
+      limit = ` LIMIT ${Math.min(1000, Number.parseInt(raw, 10) || 1000)}`;
+      continue;
+    }
+    if (!IDENT.test(key)) return send(res, 400, { message: "bad filter" });
+    const dot = raw.indexOf(".");
+    const op = raw.slice(0, dot);
+    const value = raw.slice(dot + 1);
+    if (op === "in") {
+      const list = value.replace(/^\(|\)$/g, "").split(",").map((v) => v.replace(/^"|"$/g, ""));
+      params.push(list);
+      where.push(`${key}::text = ANY($${params.length}::text[])`);
+    } else if (op === "is") {
+      where.push(`${key} IS ${value === "null" ? "NULL" : value === "true" ? "TRUE" : "FALSE"}`);
+    } else if (OPS[op]) {
+      params.push(value);
+      where.push(`${key}::text ${OPS[op]} $${params.length}`);
+    } else return send(res, 400, { message: `unsupported operator ${op}` });
+  }
+  const user = userFrom(req);
+  restPool ??= new Pool({
+    connectionString: dbUrl,
+    max: 2,
+    // PostgREST returns dates as YYYY-MM-DD; the app compares them as strings.
+    types: { getTypeParser: (oid: number, format?: string) => (oid === 1082 ? (v: string) => v : (pgTypes.getTypeParser as (o: number, f?: string) => (v: string) => unknown)(oid, format)) },
+  });
+  const client = await restPool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL ROLE ${user ? "authenticated" : "anon"}`);
+    await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
+      JSON.stringify(user ? { sub: user, role: "authenticated" } : { role: "anon" }),
+    ]);
+    const cols = select.includes("*") ? "*" : select.join(", ");
+    const sql = `SELECT ${cols} FROM public.${table}${where.length ? ` WHERE ${where.join(" AND ")}` : ""}${order}${limit}`;
+    const { rows } = await client.query(sql, params);
+    await client.query("COMMIT");
+    const numeric = rows.map((r) =>
+      Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === "string" && /^-?\d+\.\d+$/.test(v) ? Number(v) : v])),
+    );
+    if ((req.headers.accept ?? "").includes("vnd.pgrst.object")) {
+      if (numeric.length !== 1)
+        return send(res, 406, { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned", details: `The result contains ${numeric.length} rows` });
+      return send(res, 200, numeric[0]);
+    }
+    return send(res, 200, numeric);
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    return send(res, 400, { message: err instanceof Error ? err.message : "query failed" });
+  } finally {
+    client.release();
+  }
+}
+
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL ?? "";
   if (!/@127\.0\.0\.1:/.test(url))
@@ -142,6 +235,7 @@ async function main(): Promise<void> {
         return send(res, 401, { message: "invalid token" });
       }
       if (path === "/auth/v1/logout") return send(res, 204);
+      if (path.startsWith("/rest/v1/") && req.method === "GET") return restGet(req, res, url);
       return send(res, 501, { message: "not part of the local stand-in" });
     })();
   }).listen(PORT, "127.0.0.1", () => {

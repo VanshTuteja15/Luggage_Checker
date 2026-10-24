@@ -1,21 +1,17 @@
 "use client";
 
+/* ------------------------------------------------------------------ */
+/*  Price History (R4.2): readable as tables and sentences, no charts. */
+/*  Changes table with filters, "Biggest drops this week", and a       */
+/*  comparison table. Tables become stacked cards under 640 px.        */
+/* ------------------------------------------------------------------ */
+
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useMemo, useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { EmptyState, ErrorState, SectionTitle, TableSkeleton } from "@/components/Bits";
-import { Sparkline } from "@/components/Sparkline";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -23,123 +19,79 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { prettyDate, usd } from "@/lib/format";
+import { usd } from "@/lib/format";
+import { biggestDrops, priceChanges, type PriceChange } from "@/lib/history/tables";
 import { errorMessage, useTrackedProducts } from "@/lib/queries";
 import { useStore } from "@/lib/store";
+import { addDays, formatYmdWeekday, localDate } from "@/lib/time/local";
 import type { TrackedProduct } from "@/lib/types";
 
-const CHART_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--primary)",
-  "var(--muted-foreground)",
-  "var(--foreground)",
-];
-
-/** How many series stay readable on one chart. */
-const MAX_SERIES = 8;
-
 type Range = 7 | 30 | 90;
+const ALL = "all";
 
-/** Price on or before a target date — the last known price, not a gap. */
-function priceOnOrBefore(product: TrackedProduct, isoDate: string): number | null {
+/** The last recorded lowest price on or before a date. */
+function lowestOnOrBefore(product: TrackedProduct, date: string): number | null {
   let result: number | null = null;
   for (const point of product.history) {
-    if (point.date <= isoDate) result = point.price;
+    if (point.date <= date) result = point.price;
     else break;
   }
   return result;
 }
 
-function daysAgoIso(days: number): string {
-  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+function ChangeCell({ c }: { c: PriceChange }) {
+  return (
+    <span className={c.kind === "down" ? "font-medium text-success" : "font-medium text-danger"}>
+      {c.text}
+    </span>
+  );
 }
 
 export default function HistoryPage() {
   const { authed, ready } = useStore();
   const [range, setRange] = useState<Range>(30);
-  const [brand, setBrand] = useState("all");
-  const [charted, setCharted] = useState<string[]>([]);
+  const [productId, setProductId] = useState(ALL);
+  const [retailer, setRetailer] = useState(ALL);
 
-  const { data, isLoading, isError, error, refetch } = useTrackedProducts(
-    range,
-    ready && authed,
-  );
-
+  // A week more than the range, so the first change in range has the price before it.
+  const { data, isLoading, isError, error, refetch } = useTrackedProducts(range + 8, ready && authed);
   const tracked = useMemo(() => data ?? [], [data]);
+  const today = localDate(new Date());
+  const from = addDays(today, -(range - 1));
 
-  const brands = useMemo(
-    () => Array.from(new Set(tracked.map((p) => p.brand))).sort(),
+  const retailers = useMemo(
+    () =>
+      [...new Set(tracked.flatMap((p) => Object.keys(p.historyByRetailer)))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
     [tracked],
   );
 
-  const filtered = useMemo(
-    () => (brand === "all" ? tracked : tracked.filter((p) => p.brand === brand)),
-    [tracked, brand],
+  const changes = useMemo(
+    () =>
+      priceChanges(tracked, {
+        from,
+        productId: productId === ALL ? null : productId,
+        retailer: retailer === ALL ? null : retailer,
+      }),
+    [tracked, from, productId, retailer],
   );
+  const drops = useMemo(() => biggestDrops(changes, addDays(today, -6)), [changes, today]);
 
-  // Default the chart to the first few products, but let the user choose.
-  // The old page silently sliced to 10 with no way to see the rest.
-  useEffect(() => {
-    setCharted((current) => {
-      const stillValid = current.filter((id) => filtered.some((p) => p.id === id));
-      if (stillValid.length > 0) return stillValid;
-      return filtered.slice(0, MAX_SERIES).map((p) => p.id);
-    });
-  }, [filtered]);
-
-  const chartProducts = filtered.filter((p) => charted.includes(p.id));
-
-  const chartData = useMemo(() => {
-    const dates = new Set<string>();
-    for (const p of chartProducts) for (const point of p.history) dates.add(point.date);
-
-    return [...dates]
-      .sort()
-      .map((date) => {
-        const row: Record<string, string | number> = { date: prettyDate(date) };
-        for (const p of chartProducts) {
-          const point = p.history.find((h) => h.date === date);
-          if (point) row[p.id] = point.price;
-        }
-        return row;
-      });
-  }, [chartProducts]);
-
-  const tableData = useMemo(() => {
-    const iso7 = daysAgoIso(7);
-    const iso30 = daysAgoIso(30);
-
-    return filtered.map((p) => {
-      const prices = p.history.map((h) => h.price);
-      const lowestInRange = prices.length > 0 ? Math.min(...prices) : null;
-      return {
-        product: p,
-        current: p.lowestPrice,
-        ago7: priceOnOrBefore(p, iso7),
-        ago30: priceOnOrBefore(p, iso30),
-        lowestInRange,
-        change: p.change,
-        spark: p.history.slice(-14).map((h) => h.price),
-      };
-    });
-  }, [filtered]);
-
-  function toggleSeries(id: string) {
-    setCharted((current) =>
-      current.includes(id)
-        ? current.filter((x) => x !== id)
-        : current.length >= MAX_SERIES
-          ? current
-          : [...current, id],
-    );
-  }
+  const shown = productId === ALL ? tracked : tracked.filter((p) => p.id === productId);
+  const comparison = shown.map((p) => {
+    const inRange = p.history.filter((h) => h.date >= from).map((h) => h.price);
+    return {
+      product: p,
+      current: p.lowestPrice,
+      ago7: lowestOnOrBefore(p, addDays(today, -7)),
+      ago30: lowestOnOrBefore(p, addDays(today, -30)),
+      lowest: inRange.length ? Math.min(...inRange) : null,
+    };
+  });
 
   return (
-    <AppLayout title="Price History" subtitle="Price trends across your tracked products">
+    <AppLayout title="Price History" subtitle="Every price change, newest first">
       {isLoading ? (
         <TableSkeleton rows={6} />
       ) : isError ? (
@@ -147,7 +99,7 @@ export default function HistoryPage() {
       ) : tracked.length === 0 ? (
         <EmptyState
           title="No history yet"
-          description="Track a product and its price history builds automatically on every refresh."
+          description="Track a product and its price history builds up every day it is checked."
           action={
             <Button asChild>
               <Link href="/tracked">Add products</Link>
@@ -156,208 +108,220 @@ export default function HistoryPage() {
         />
       ) : (
         <>
-          {/* Controls */}
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <Select value={brand} onValueChange={setBrand}>
-              <SelectTrigger className="h-9 w-[150px]">
-                <SelectValue placeholder="Brand" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All brands</SelectItem>
-                {brands.map((b) => (
-                  <SelectItem key={b} value={b}>
-                    {b}
-                  </SelectItem>
+          {/* Filters */}
+          <div className="mb-6 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
+            <div className="space-y-1">
+              <span className="block text-xs font-medium text-muted-foreground" id="range-label">
+                Period
+              </span>
+              <div className="flex rounded-md border border-border text-sm" role="group" aria-labelledby="range-label">
+                {([7, 30, 90] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setRange(d)}
+                    aria-pressed={range === d}
+                    className={`flex-1 px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      range === d ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {d} days
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
-
-            <div className="flex rounded-md border border-border text-sm">
-              {([7, 30, 90] as const).map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setRange(d)}
-                  className={`px-3 py-1.5 ${
-                    range === d ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  {d} days
-                </button>
-              ))}
+              </div>
+            </div>
+            <div className="space-y-1 sm:w-64">
+              <Label htmlFor="history-product" className="text-xs text-muted-foreground">
+                Product
+              </Label>
+              <Select value={productId} onValueChange={setProductId}>
+                <SelectTrigger id="history-product" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All products</SelectItem>
+                  {tracked.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 sm:w-56">
+              <Label htmlFor="history-store" className="text-xs text-muted-foreground">
+                Store
+              </Label>
+              <Select value={retailer} onValueChange={setRetailer}>
+                <SelectTrigger id="history-store" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All stores</SelectItem>
+                  {retailers.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          {/* Chart */}
-          <div className="mb-8">
-            <SectionTitle
-              title="Price Trends"
-              description={`Lowest price per product over ${range} days`}
-            />
-
-            {/* Explicit series picker — no silent truncation. */}
-            {filtered.length > 1 && (
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  Showing {chartProducts.length} of {filtered.length}
-                  {filtered.length > MAX_SERIES && ` (max ${MAX_SERIES})`}:
-                </span>
-                {filtered.map((p) => {
-                  const on = charted.includes(p.id);
-                  const atLimit = !on && charted.length >= MAX_SERIES;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => toggleSeries(p.id)}
-                      disabled={atLimit}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                        on
-                          ? "border-transparent bg-muted font-medium"
-                          : "border-border text-muted-foreground hover:bg-muted/50"
-                      } ${atLimit ? "cursor-not-allowed opacity-40" : ""}`}
-                      title={atLimit ? `Deselect one to add another` : p.name}
-                    >
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{
-                          backgroundColor: on
-                            ? CHART_COLORS[chartProducts.findIndex((c) => c.id === p.id) % CHART_COLORS.length]
-                            : "transparent",
-                          border: on ? undefined : "1px solid currentColor",
-                        }}
-                      />
-                      {p.name.length > 26 ? `${p.name.slice(0, 24)}…` : p.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
+          {/* Biggest drops this week */}
+          <section className="mb-8" aria-labelledby="drops-title">
+            <div id="drops-title">
+              <SectionTitle title="Biggest drops this week" description="The last 7 days, largest first" />
+            </div>
             <div className="card-surface p-4">
-              {chartData.length === 0 ? (
-                <p className="py-16 text-center text-sm text-muted-foreground">
-                  No price points recorded yet. Prices are recorded on each refresh.
-                </p>
+              {drops.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No price drops in the last 7 days.</p>
               ) : (
-                <div className="h-96">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                        tickFormatter={(v: number) => `$${v}`}
-                        tickLine={false}
-                        width={60}
-                        domain={["auto", "auto"]}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--card)",
-                          border: "1px solid var(--border)",
-                          borderRadius: 8,
-                          fontSize: 12,
-                        }}
-                        formatter={(value: number, name: string) => {
-                          const p = chartProducts.find((x) => x.id === name);
-                          return [usd(value), p?.name ?? name];
-                        }}
-                      />
-                      <Legend
-                        formatter={(value: string) => {
-                          const p = chartProducts.find((x) => x.id === value);
-                          const name = p?.name ?? value;
-                          return name.length > 30 ? `${name.slice(0, 28)}…` : name;
-                        }}
-                      />
-                      {chartProducts.map((p, i) => (
-                        <Line
-                          key={p.id}
-                          type="monotone"
-                          dataKey={p.id}
-                          stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                          strokeWidth={2}
-                          dot={false}
-                          connectNulls
-                        />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                <ol className="space-y-2">
+                  {drops.map((c, i) => (
+                    <li key={`${c.productId}-${c.retailer}-${c.date}`} className="flex gap-3 text-sm">
+                      <span className="w-5 shrink-0 text-right tabular-nums text-muted-foreground">{i + 1}.</span>
+                      <span className="min-w-0">
+                        <Link href={`/products/${c.productId}`} className="font-medium hover:text-primary">
+                          {c.productName}
+                        </Link>{" "}
+                        at {c.retailer}: {usd(c.oldPrice)} → <strong className="tabular-nums">{usd(c.newPrice)}</strong>{" "}
+                        <ChangeCell c={c} />{" "}
+                        <span className="text-muted-foreground">· {formatYmdWeekday(c.date)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               )}
             </div>
-          </div>
+          </section>
 
-          {/* Table */}
-          <SectionTitle
-            title="Price Comparison"
-            description={`Figures cover the last ${range} days of recorded history`}
-          />
-          <div className="card-surface overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="px-4 py-3 font-medium text-muted-foreground">Product</th>
-                  <th className="px-4 py-3 font-medium text-muted-foreground">Current</th>
-                  <th className="px-4 py-3 font-medium text-muted-foreground">7d ago</th>
-                  <th className="px-4 py-3 font-medium text-muted-foreground">30d ago</th>
-                  {/* Previously mislabelled "Lowest Ever" while only covering the window. */}
-                  <th className="px-4 py-3 font-medium text-muted-foreground">
-                    Lowest ({range}d)
-                  </th>
-                  <th className="px-4 py-3 font-medium text-muted-foreground">Trend</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {tableData.map((row) => (
-                  <tr key={row.product.id} className="hover:bg-muted/40">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/products/${row.product.id}`}
-                        className="font-medium hover:text-primary"
-                      >
-                        {row.product.name}
+          {/* Changes */}
+          <section className="mb-8" aria-labelledby="changes-title">
+            <div id="changes-title">
+              <SectionTitle
+                title="Changes"
+                description={`${changes.length} price change${changes.length === 1 ? "" : "s"} in the last ${range} days`}
+              />
+            </div>
+            {changes.length === 0 ? (
+              <div className="card-surface p-4 text-sm text-muted-foreground">
+                No price changes in the last {range} days for this selection.
+              </div>
+            ) : (
+              <div className="card-surface">
+                <table className="hidden w-full text-sm sm:table">
+                  <thead>
+                    <tr className="border-b border-border text-left text-muted-foreground">
+                      <th className="px-4 py-3 font-medium">Date</th>
+                      <th className="px-4 py-3 font-medium">Product</th>
+                      <th className="px-4 py-3 font-medium">Store</th>
+                      <th className="px-4 py-3 text-right font-medium">Old → new</th>
+                      <th className="px-4 py-3 text-right font-medium">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {changes.map((c) => (
+                      <tr key={`${c.productId}-${c.retailer}-${c.date}`}>
+                        <td className="whitespace-nowrap px-4 py-3">{formatYmdWeekday(c.date)}</td>
+                        <td className="px-4 py-3">
+                          <Link href={`/products/${c.productId}`} className="font-medium hover:text-primary">
+                            {c.productName}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">{c.brand}</p>
+                        </td>
+                        <td className="px-4 py-3">{c.retailer}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                          {usd(c.oldPrice)} → <strong>{usd(c.newPrice)}</strong>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                          <ChangeCell c={c} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <ul className="divide-y divide-border sm:hidden">
+                  {changes.map((c) => (
+                    <li key={`${c.productId}-${c.retailer}-${c.date}`} className="space-y-0.5 p-3 text-sm">
+                      <Link href={`/products/${c.productId}`} className="block font-medium">
+                        {c.productName}
                       </Link>
-                      <p className="text-xs text-muted-foreground">{row.product.brand}</p>
-                    </td>
-                    <td className="px-4 py-3 font-semibold tabular-nums">
-                      {row.current === null ? "—" : usd(row.current)}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                      {row.ago7 === null ? "—" : usd(row.ago7)}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                      {row.ago30 === null ? "—" : usd(row.ago30)}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                      {row.lowestInRange === null ? "—" : usd(row.lowestInRange)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="w-24">
-                        {row.spark.length > 1 ? (
-                          <Sparkline
-                            data={row.spark}
-                            color={
-                              row.change < 0
-                                ? "var(--chart-5)"
-                                : row.change > 0
-                                  ? "var(--destructive)"
-                                  : "var(--chart-1)"
-                            }
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Not enough data</span>
-                        )}
-                      </div>
-                    </td>
+                      <p className="text-muted-foreground">
+                        {c.retailer} · {formatYmdWeekday(c.date)}
+                      </p>
+                      <p className="tabular-nums">
+                        {usd(c.oldPrice)} → <strong>{usd(c.newPrice)}</strong> <ChangeCell c={c} />
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+
+          {/* Comparison */}
+          <section aria-labelledby="compare-title">
+            <div id="compare-title">
+              <SectionTitle title="Lowest price by product" description="Today, a week ago and a month ago" />
+            </div>
+            <div className="card-surface">
+              <table className="hidden w-full text-sm sm:table">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">Product</th>
+                    <th className="px-4 py-3 text-right font-medium">Now</th>
+                    <th className="px-4 py-3 text-right font-medium">7 days ago</th>
+                    <th className="px-4 py-3 text-right font-medium">30 days ago</th>
+                    <th className="px-4 py-3 text-right font-medium">Lowest ({range} days)</th>
                   </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {comparison.map((row) => (
+                    <tr key={row.product.id}>
+                      <td className="px-4 py-3">
+                        <Link href={`/products/${row.product.id}`} className="font-medium hover:text-primary">
+                          {row.product.name}
+                        </Link>
+                        <p className="text-xs text-muted-foreground">{row.product.brand}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        {row.current === null ? "—" : usd(row.current)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        {row.ago7 === null ? "—" : usd(row.ago7)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        {row.ago30 === null ? "—" : usd(row.ago30)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        {row.lowest === null ? "—" : usd(row.lowest)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <ul className="divide-y divide-border sm:hidden">
+                {comparison.map((row) => (
+                  <li key={row.product.id} className="p-3 text-sm">
+                    <Link href={`/products/${row.product.id}`} className="block font-medium">
+                      {row.product.name}
+                    </Link>
+                    <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
+                      <dt className="text-muted-foreground">Now</dt>
+                      <dd className="text-right font-semibold">{row.current === null ? "—" : usd(row.current)}</dd>
+                      <dt className="text-muted-foreground">7 days ago</dt>
+                      <dd className="text-right">{row.ago7 === null ? "—" : usd(row.ago7)}</dd>
+                      <dt className="text-muted-foreground">30 days ago</dt>
+                      <dd className="text-right">{row.ago30 === null ? "—" : usd(row.ago30)}</dd>
+                      <dt className="text-muted-foreground">Lowest ({range} days)</dt>
+                      <dd className="text-right">{row.lowest === null ? "—" : usd(row.lowest)}</dd>
+                    </dl>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </ul>
+            </div>
+          </section>
         </>
       )}
     </AppLayout>

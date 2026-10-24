@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ExternalLink, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
 import { ChangeBadge, Freshness, RetailerTag, StockBadge, TargetBadge } from "@/components/Bits";
 import { ProductThumb } from "@/components/ProductThumb";
-import { Sparkline } from "@/components/Sparkline";
+import { productSummary } from "@/lib/history/tables";
+import { localDate } from "@/lib/time/local";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +26,7 @@ export function TrackedProductCard({
   onRefresh?: (id: string) => void;
   refreshing?: boolean;
 }) {
-  const spark = product.history.slice(-14).map((p) => p.price);
+  const summary = productSummary(product, localDate(new Date()));
 
   return (
     <div className="card-surface flex flex-col gap-3 p-4">
@@ -98,14 +99,8 @@ export function TrackedProductCard({
         </div>
       </div>
 
-      {spark.length > 1 && (
-        <Sparkline
-          data={spark}
-          color={
-            product.change < 0 ? "var(--chart-5)" : product.change > 0 ? "var(--destructive)" : "var(--chart-1)"
-          }
-        />
-      )}
+      {/* No chart (R4): the same story in one sentence. */}
+      <p className="text-xs text-muted-foreground">{summary.sentence}</p>
 
       <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
         <span className="text-xs text-muted-foreground">

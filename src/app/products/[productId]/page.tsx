@@ -12,16 +12,6 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { AppLayout } from "@/components/AppLayout";
 import {
   ChangeBadge,
@@ -35,6 +25,7 @@ import { ProductThumb } from "@/components/ProductThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { prettyDate, percentChange, usd } from "@/lib/format";
+import { byStore, dailyLowest, productSummary } from "@/lib/history/tables";
 import {
   errorMessage,
   useRefreshPrices,
@@ -44,19 +35,24 @@ import {
 } from "@/lib/queries";
 import { retailerColor } from "@/lib/retailers";
 import { useStore } from "@/lib/store";
+import { addDays, formatYmdWeekday, localDate } from "@/lib/time/local";
 import { priceStats } from "@/lib/types";
+
+/** Tables cover the last 30 days (R4.3). */
+const DAYS = 30;
 
 export default function ProductDetailPage() {
   const params = useParams<{ productId: string }>();
   const productId = params?.productId ?? "";
   const { authed, ready } = useStore();
-  const [range, setRange] = useState<7 | 30 | 90>(30);
 
+  // A week more than the tables show, so "7 days ago" and the first day's change have data.
   const { data: product, isLoading, isError, error, refetch } = useTrackedProduct(
     productId,
-    range,
+    DAYS + 8,
     ready && authed,
   );
+  const today = localDate(new Date());
 
   const refresh = useRefreshPrices();
   const untrack = useUntrackProducts();
@@ -65,24 +61,14 @@ export default function ProductDetailPage() {
   const [targetInput, setTargetInput] = useState("");
   const [editingAlert, setEditingAlert] = useState(false);
 
-  const stats = useMemo(() => priceStats(product?.history ?? []), [product?.history]);
-
-  const chartData = useMemo(() => {
-    if (!product) return [];
-    const retailers = Object.keys(product.historyByRetailer);
-    const dates = new Set<string>();
-    for (const series of Object.values(product.historyByRetailer)) {
-      for (const point of series) dates.add(point.date);
-    }
-    return [...dates].sort().map((date) => {
-      const row: Record<string, string | number> = { date: prettyDate(date) };
-      for (const r of retailers) {
-        const point = product.historyByRetailer[r].find((p) => p.date === date);
-        if (point) row[r] = point.price;
-      }
-      return row;
-    });
-  }, [product]);
+  const stats = useMemo(
+    () =>
+      priceStats((product?.history ?? []).filter((h) => h.date >= addDays(today, -(DAYS - 1)))),
+    [product?.history, today],
+  );
+  const daily = useMemo(() => (product ? dailyLowest(product, today, DAYS) : []), [product, today]);
+  const stores = useMemo(() => (product ? byStore(product, today) : []), [product, today]);
+  const summary = useMemo(() => (product ? productSummary(product, today) : null), [product, today]);
 
   if (isLoading) {
     return (
@@ -192,6 +178,22 @@ export default function ProductDetailPage() {
               )}
             </p>
           )}
+          {summary && (
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span>{summary.sentence}</span>
+              {summary.badge && (
+                <span
+                  className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                    summary.badge === "Lowest in 30 days"
+                      ? "bg-success-soft text-success"
+                      : "bg-danger/10 text-danger"
+                  }`}
+                >
+                  {summary.badge}
+                </span>
+              )}
+            </p>
+          )}
           <div className="mt-2">
             <Freshness isoDate={product.lastCheckedAt} />
           </div>
@@ -275,8 +277,39 @@ export default function ProductDetailPage() {
           product.spread > 0 ? ` · ${usd(product.spread)} between cheapest and dearest` : ""
         }`}
       />
-      <div className="card-surface mb-8 overflow-x-auto">
-        <table className="w-full min-w-[620px] text-sm">
+      <div className="card-surface mb-8 sm:overflow-x-auto">
+        <ul className="divide-y divide-border sm:hidden">
+          {product.offers.map((offer, i) => (
+            <li key={`${offer.retailer}-${i}`} className="space-y-1 p-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-2 font-medium">
+                  {offer.retailer}
+                  {i === 0 && (
+                    <span className="rounded bg-success-soft px-1.5 py-0.5 text-xs font-medium text-success">
+                      Best
+                    </span>
+                  )}
+                </span>
+                <span className="font-semibold tabular-nums">{usd(offer.price)}</span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <StockBadge inStock={offer.inStock} />
+                <Freshness isoDate={offer.lastCheckedAt} />
+                {offer.url && (
+                  <a
+                    href={offer.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 hover:text-foreground"
+                  >
+                    Visit <ExternalLink className="h-3 w-3" aria-hidden />
+                  </a>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <table className="hidden w-full min-w-[620px] text-sm sm:table">
           <thead>
             <tr className="border-b border-border text-left">
               <th className="px-4 py-3 font-medium text-muted-foreground">Retailer</th>
@@ -335,91 +368,132 @@ export default function ProductDetailPage() {
         </table>
       </div>
 
-      {/* ── History ─────────────────────────────────────────── */}
-      <SectionTitle
-        title="Price History"
-        description="One line per retailer"
-        right={
-          <div className="flex rounded-md border border-border text-sm">
-            {([7, 30, 90] as const).map((d) => (
-              <button
-                key={d}
-                onClick={() => setRange(d)}
-                className={`px-3 py-1.5 ${
-                  range === d ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
-                }`}
-              >
-                {d}d
-              </button>
-            ))}
-          </div>
-        }
-      />
-
-      <div className="card-surface mb-8 p-4">
-        {chartData.length < 2 ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
-            Not enough history yet — prices are recorded on each refresh, so this fills in over the
-            next few days.
+      {/* ── History: tables, no charts (R4.3) ──────────────── */}
+      <SectionTitle title="Daily lowest price" description={`The last ${DAYS} days, newest first`} />
+      <div className="card-surface mb-8">
+        {daily.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            No prices recorded yet. A row is added each day the price is checked.
           </p>
         ) : (
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  tickFormatter={(v: number) => `$${v}`}
-                  tickLine={false}
-                  width={60}
-                  domain={["auto", "auto"]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  formatter={(value: number, name: string) => [usd(value), name]}
-                />
-                <Legend />
-                {Object.keys(product.historyByRetailer).map((retailer) => (
-                  <Line
-                    key={retailer}
-                    type="monotone"
-                    dataKey={retailer}
-                    stroke={retailerColor(retailer)}
-                    strokeWidth={2}
-                    dot={false}
-                    connectNulls
-                  />
+          <>
+            <table className="hidden w-full text-sm sm:table">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 text-right font-medium">Lowest price</th>
+                  <th className="px-4 py-3 font-medium">Store</th>
+                  <th className="px-4 py-3 text-right font-medium">vs day before</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {daily.map((d) => (
+                  <tr key={d.date}>
+                    <td className="whitespace-nowrap px-4 py-3">{formatYmdWeekday(d.date)}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{usd(d.price)}</td>
+                    <td className="px-4 py-3">{d.retailers.join(", ")}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                      <DayChange kind={d.kind} text={d.change} />
+                    </td>
+                  </tr>
                 ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+              </tbody>
+            </table>
+            <ul className="divide-y divide-border sm:hidden">
+              {daily.map((d) => (
+                <li key={d.date} className="flex items-start justify-between gap-3 p-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium">{formatYmdWeekday(d.date)}</p>
+                    <p className="text-muted-foreground">{d.retailers.join(", ")}</p>
+                  </div>
+                  <div className="text-right tabular-nums">
+                    <p className="font-semibold">{usd(d.price)}</p>
+                    <DayChange kind={d.kind} text={d.change} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      <SectionTitle
+        title="By store"
+        description="Recorded prices; a dash means the store wasn't checked that day"
+      />
+      <div className="card-surface mb-8">
+        {stores.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">No store prices recorded yet.</p>
+        ) : (
+          <>
+            <table className="hidden w-full text-sm md:table">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Store</th>
+                  <th className="px-4 py-3 text-right font-medium">Today</th>
+                  <th className="px-4 py-3 text-right font-medium">Yesterday</th>
+                  <th className="px-4 py-3 text-right font-medium">7 days ago</th>
+                  <th className="px-4 py-3 text-right font-medium">30-day lowest</th>
+                  <th className="px-4 py-3 text-right font-medium">30-day highest</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {stores.map((r) => (
+                  <tr key={r.retailer}>
+                    <td className="px-4 py-3">{r.retailer}</td>
+                    {[r.today, r.yesterday, r.weekAgo, r.low30, r.high30].map((v, i) => (
+                      <td
+                        key={i}
+                        className={`px-4 py-3 text-right tabular-nums ${i === 0 ? "font-semibold" : "text-muted-foreground"}`}
+                      >
+                        {v === null ? "—" : usd(v)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <ul className="divide-y divide-border md:hidden">
+              {stores.map((r) => (
+                <li key={r.retailer} className="p-3 text-sm">
+                  <p className="font-medium">{r.retailer}</p>
+                  <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
+                    {(
+                      [
+                        ["Today", r.today],
+                        ["Yesterday", r.yesterday],
+                        ["7 days ago", r.weekAgo],
+                        ["30-day lowest", r.low30],
+                        ["30-day highest", r.high30],
+                      ] as const
+                    ).map(([label, v]) => (
+                      <div key={label} className="contents">
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd className="text-right">{v === null ? "—" : usd(v)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
 
       {/* ── Stats ───────────────────────────────────────────── */}
-      <SectionTitle title="Statistics" description={`Based on ${stats.days} day(s) of recorded history`} />
+      <SectionTitle title="Last 30 days" description={`Based on ${stats.days} day(s) of recorded prices`} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatBox
-          label={`Lowest (${range}d)`}
+          label="Lowest"
           value={stats.lowest ? usd(stats.lowest.price) : "—"}
           hint={stats.lowest ? prettyDate(stats.lowest.date) : undefined}
         />
         <StatBox
-          label={`Highest (${range}d)`}
+          label="Highest"
           value={stats.highest ? usd(stats.highest.price) : "—"}
           hint={stats.highest ? prettyDate(stats.highest.date) : undefined}
         />
-        <StatBox label={`Average (${range}d)`} value={stats.average ? usd(stats.average) : "—"} />
+        <StatBox label="Average" value={stats.average ? usd(stats.average) : "—"} />
         <StatBox
           label="Retailer spread"
           value={product.spread > 0 ? usd(product.spread) : "—"}
@@ -438,4 +512,15 @@ function StatBox({ label, value, hint }: { label: string; value: string; hint?: 
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
+}
+
+function DayChange({ kind, text }: { kind: "down" | "up" | "same" | null; text: string | null }) {
+  if (!text) return <span className="text-muted-foreground">—</span>;
+  const tone =
+    kind === "down"
+      ? "font-medium text-success"
+      : kind === "up"
+        ? "font-medium text-danger"
+        : "text-muted-foreground";
+  return <span className={tone}>{text}</span>;
 }
