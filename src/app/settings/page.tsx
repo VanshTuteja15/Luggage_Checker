@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Info, Loader2, Save } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, Info, Loader2, Mail, Save } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorState, SectionTitle } from "@/components/Bits";
@@ -22,14 +23,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import {
   errorMessage,
   useSearchProvider,
   useSettings,
@@ -41,15 +34,6 @@ import { retailerColor } from "@/lib/retailers";
 import { useStore } from "@/lib/store";
 import { STORE_GROUPS, STORES } from "@/lib/stores";
 import type { UserSettings } from "@/lib/types";
-
-const TIMEZONES = [
-  "America/Edmonton",
-  "America/Vancouver",
-  "America/Winnipeg",
-  "America/Toronto",
-  "America/Halifax",
-  "America/St_Johns",
-];
 
 function Section({
   title,
@@ -147,80 +131,31 @@ export default function SettingsPage() {
       </Section>
 
       {/* ── General ─────────────────────────────────────────── */}
-      <Section title="General" description="Account and locale">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="adminEmail">Account email</Label>
-            <Input
-              id="adminEmail"
-              type="email"
-              value={draft.adminEmail}
-              onChange={(e) => patch({ adminEmail: e.target.value })}
-              placeholder={email || "you@example.com"}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="timezone">Timezone</Label>
-            <Select value={draft.timezone} onValueChange={(v) => patch({ timezone: v })}>
-              <SelectTrigger id="timezone">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz.replace("America/", "")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <Section title="General" description="Your account">
+        <div className="space-y-2 sm:max-w-sm">
+          <Label htmlFor="adminEmail">Account email</Label>
+          <Input
+            id="adminEmail"
+            type="email"
+            value={draft.adminEmail}
+            onChange={(e) => patch({ adminEmail: e.target.value })}
+            placeholder={email || "you@example.com"}
+          />
         </div>
       </Section>
 
-      {/* ── Daily report ────────────────────────────────────── */}
-      <Section title="Daily Report" description="A summary email of overnight price movement">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium">Send a daily report</p>
-            <p className="text-sm text-muted-foreground">
-              Delivered each morning in your timezone.
-            </p>
-          </div>
-          <Switch checked={draft.dailyReport} onCheckedChange={(v) => patch({ dailyReport: v })} />
+      {/* ── Morning email (moved to its own page) ───────────── */}
+      <Section title="Morning email" description="The daily price email">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Recipients, products, send time and time zone are set on the Morning Email page.
+          </p>
+          <Button asChild variant="outline" className="shrink-0 gap-2">
+            <Link href="/email">
+              <Mail className="h-4 w-4" aria-hidden /> Open Morning Email
+            </Link>
+          </Button>
         </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="reportEmail">Send reports to</Label>
-          <Input
-            id="reportEmail"
-            type="email"
-            value={draft.reportEmail}
-            onChange={(e) => patch({ reportEmail: e.target.value })}
-            disabled={!draft.dailyReport}
-            placeholder="reports@example.com"
-          />
-        </div>
-
-        <fieldset className="space-y-3" disabled={!draft.dailyReport}>
-          <legend className="mb-1 text-sm font-medium">Include in the report</legend>
-          {(
-            [
-              ["drops", "Price drops"],
-              ["increases", "Price increases"],
-              ["oos", "Out-of-stock alerts"],
-              ["summary", "Best-deal summary"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-3 text-sm">
-              <Checkbox
-                checked={draft.include[key]}
-                onCheckedChange={(v) => patch({ include: { ...draft.include, [key]: v === true } })}
-              />
-              {label}
-            </label>
-          ))}
-        </fieldset>
       </Section>
 
       {/* ── Stores ──────────────────────────────────────────── */}

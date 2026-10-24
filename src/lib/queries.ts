@@ -319,6 +319,167 @@ export function useFeatures(enabled = true) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Morning email                                                     */
+/* ------------------------------------------------------------------ */
+
+export type EmailRecipient = {
+  address: string;
+  lastDeliveredAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+};
+
+export type EmailProduct = {
+  productId: string;
+  name: string;
+  brand: string;
+  color: string;
+  imageUrl: string | null;
+  targetPrice: number | null;
+  chosen: boolean;
+  position: number | null;
+};
+
+export type EmailLogRow = {
+  id: string;
+  localDate: string;
+  kind: "daily" | "test";
+  status: string;
+  statusText: string;
+  sentAt: string | null;
+  products: number;
+  delivered: number;
+  failed: number;
+  details: string[];
+};
+
+export type EmailOverview = {
+  settings: { enabled: boolean; sendTime: string; timeZone: string; recipients: EmailRecipient[] };
+  provider: {
+    configured: boolean;
+    from: string | null;
+    warning: string | null;
+    missing: string | null;
+    dailyLimit: number;
+    sentLast24h: number;
+  };
+  products: EmailProduct[];
+  log: EmailLogRow[];
+  banner: string | null;
+  timeZones: { id: string; label: string }[];
+};
+
+export type EmailSettingsPatch = Partial<{
+  enabled: boolean;
+  sendTime: string;
+  timeZone: string;
+  recipients: string[];
+}>;
+
+const emailKey = ["email"] as const;
+
+export function useEmailOverview(enabled = true) {
+  return useQuery({
+    queryKey: emailKey,
+    enabled,
+    staleTime: 30_000,
+    queryFn: () => apiFetch<EmailOverview>("/api/email"),
+  });
+}
+
+export function useSaveEmailSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: EmailSettingsPatch) =>
+      apiFetch<{ settings: EmailSettingsPatch }>("/api/email/settings", { method: "PUT", json: patch }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: emailKey }),
+  });
+}
+
+export function useSaveEmailProducts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (productIds: string[]) =>
+      apiFetch<{ chosen: number }>("/api/email/products", { method: "PUT", json: { productIds } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: emailKey }),
+  });
+}
+
+export function useEmailPreview() {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ subject: string; html: string; text: string; productCount: number }>(
+        "/api/email/preview",
+      ),
+  });
+}
+
+export function useSendTestEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (to: string) =>
+      apiFetch<{ status: string; providerId: string | null }>("/api/email/test", {
+        method: "POST",
+        json: { to },
+      }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: emailKey }),
+  });
+}
+
+/**
+ * "Add to morning email" from search (R1.2): track the product first when
+ * needed (through the existing /api/track flow), then add it to the email.
+ * The toast's Undo takes it out again, and untracks it if this action
+ * tracked it.
+ */
+export function useAddToEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { productId?: string; product?: SearchProduct }) => {
+      let productId = input.productId;
+      let newlyTracked = false;
+      if (!productId && input.product) {
+        const r = await apiFetch<{ product: TrackedProduct }>("/api/track", {
+          method: "POST",
+          json: { product: input.product },
+        });
+        productId = r.product.id;
+        newlyTracked = true;
+      }
+      if (!productId) throw new Error("This product can't be added yet.");
+      await apiFetch("/api/email/products", { method: "POST", json: { productId } });
+      return { productId, newlyTracked };
+    },
+    onSuccess: ({ productId, newlyTracked }) => {
+      invalidateProducts(qc);
+      void qc.invalidateQueries({ queryKey: emailKey });
+      toast.success(newlyTracked ? "Tracked and added to the morning email" : "Added to the morning email", {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void (async () => {
+              try {
+                await apiFetch(`/api/email/products?productId=${encodeURIComponent(productId)}`, {
+                  method: "DELETE",
+                });
+                if (newlyTracked)
+                  await apiFetch("/api/track", { method: "DELETE", json: { productIds: [productId] } });
+                invalidateProducts(qc);
+                void qc.invalidateQueries({ queryKey: emailKey });
+                toast.info("Taken out of the morning email");
+              } catch (err) {
+                toast.error(errorMessage(err, "Couldn't undo that. Untick it on Morning Email."));
+              }
+            })();
+          },
+        },
+      });
+    },
+    onError: (err) => toast.error(errorMessage(err, "Couldn't add that to the morning email")),
+  });
+}
+
+/* ------------------------------------------------------------------ */
 
 export function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiRequestError) return err.message;

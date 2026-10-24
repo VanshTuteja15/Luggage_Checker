@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   LogOut,
   Luggage,
+  Mail,
   Menu,
   Search,
   Settings as SettingsIcon,
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/search", label: "Search Products", icon: Search },
   { href: "/tracked", label: "Tracked Products", icon: BookmarkCheck },
+  { href: "/email", label: "Morning Email", icon: Mail },
   { href: "/history", label: "Price History", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   // Admin-only content: the page and its API refuse anyone not in app_admins.

@@ -146,8 +146,10 @@
   --accent-foreground: oklch(0.9851 0 0);
   --destructive: oklch(0.3123 0.0852 29.7877);
   --destructive-foreground: oklch(0.9368 0.0045 34.3092);
-  --danger: oklch(0.3123 0.0852 29.7877);
-  --danger-foreground: oklch(0.9368 0.0045 34.3092);
+  /* Light enough to read as text on the dark background (WCAG AA); buttons
+     that fill with it use the dark foreground below. */
+  --danger: oklch(0.72 0.16 27);
+  --danger-foreground: oklch(0.2 0.03 27);
   --danger-soft: oklch(0.28 0.05 29.79);
   --success: oklch(0.7845 0.1325 181.912);
   --success-foreground: oklch(0.1822 0 0);

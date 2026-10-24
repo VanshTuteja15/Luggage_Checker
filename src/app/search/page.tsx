@@ -11,7 +11,7 @@
 /* ------------------------------------------------------------------ */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, RefreshCw, ShoppingBag } from "lucide-react";
+import { AlertTriangle, Check, Mail, RefreshCw, ShoppingBag } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { SearchBox } from "@/components/SearchBox";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,12 @@ import {
 } from "@/components/research/ResearchResults";
 import { toSearchProduct } from "@/components/research/track";
 import type { AnswerProduct } from "@/lib/engine/types";
-import { useTrackProduct, useTrackedProducts } from "@/lib/queries";
+import {
+  useAddToEmail,
+  useEmailOverview,
+  useTrackProduct,
+  useTrackedProducts,
+} from "@/lib/queries";
 import { useLastKnown, useResearch } from "@/lib/research-client";
 import { useStore } from "@/lib/store";
 
@@ -67,6 +72,48 @@ export default function SearchPage() {
   const onTrack = (p: AnswerProduct) => {
     const sp = toSearchProduct(p);
     if (sp) track.mutate(sp);
+  };
+
+  // "Add to morning email" (R1.2): tracks first when needed, then adds.
+  const addToEmail = useAddToEmail();
+  const email = useEmailOverview(authed);
+  const trackedIdByKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of tracked ?? []) {
+      m.set(p.slug, p.id);
+      if (p.upc) m.set(`gtin-${p.upc}`, p.id);
+    }
+    return m;
+  }, [tracked]);
+  const inEmail = useMemo(
+    () => new Set((email.data?.products ?? []).filter((p) => p.chosen).map((p) => p.productId)),
+    [email.data],
+  );
+  const renderActions = (p: AnswerProduct) => {
+    const trackedId = trackedIdByKey.get(p.key);
+    const chosen = !!trackedId && inEmail.has(trackedId);
+    const sp = trackedId ? null : toSearchProduct(p);
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5 text-xs"
+        disabled={chosen || addToEmail.isPending || (!trackedId && !sp)}
+        onClick={() => addToEmail.mutate(trackedId ? { productId: trackedId } : { product: sp! })}
+        title={
+          !trackedId && !sp
+            ? "Only products with a price found today at a store's own page can be added"
+            : undefined
+        }
+      >
+        {chosen ? (
+          <Check className="h-3.5 w-3.5" aria-hidden />
+        ) : (
+          <Mail className="h-3.5 w-3.5" aria-hidden />
+        )}
+        {chosen ? "In morning email" : "Add to morning email"}
+      </Button>
+    );
   };
 
   const runSearch = useCallback(
@@ -161,6 +208,7 @@ export default function SearchPage() {
             onTrack={onTrack}
             trackedKeys={trackedKeys}
             trackPending={track.isPending}
+            renderActions={renderActions}
           />
         </div>
       )}
@@ -175,6 +223,7 @@ export default function SearchPage() {
           onTrack={onTrack}
           trackedKeys={trackedKeys}
           trackPending={track.isPending}
+          renderActions={renderActions}
         />
       )}
     </AppLayout>
