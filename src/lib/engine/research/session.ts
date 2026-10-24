@@ -744,6 +744,7 @@ export async function runResearchSession(
             rejected: res.rejected,
             fromCache: res.fromCache,
             skipped: res.skipped,
+            brandSearch: res.brandSearch,
           });
       } catch {
         if (!finished)

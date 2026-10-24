@@ -9,21 +9,32 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { luggagePack as pack } from "@/lib/engine/packs/luggage";
 import { SOURCE_SEED } from "@/lib/engine/registry";
+import { SNIPPET_MIN_ATTEMPT_MS } from "@/lib/engine/estimates/deps";
 import { findEstimates, type EstimateDeps } from "@/lib/engine/estimates/run";
 import { MemoryEstimateStore } from "@/lib/engine/estimates/store";
 import {
   expectedFromQuery,
+  houseBrandStore,
   identityReasons,
   isProductPage,
   plausibility,
   readEstimatePrice,
+  readListingTile,
   validateEstimates,
   type EstimateCandidate,
   type ExpectedProduct,
   type ReferencePrice,
 } from "@/lib/engine/estimates/validate";
 import { MemoryEngineStore } from "@/lib/engine/store/memory";
-import { extractRefused, resetTavilyState, tavilyExtract } from "@/lib/tavily";
+import { freshnessShortLabel } from "@/lib/engine/research/answer";
+import { Deadline } from "@/lib/search/deadline";
+import {
+  extractRefused,
+  resetTavilyState,
+  tavilyExtract,
+  tavilySearch,
+  type TavilySearchRequest,
+} from "@/lib/tavily";
 
 const src = (id: string) => SOURCE_SEED.find((s) => s.id === id)!;
 const SOURCES = new Map(SOURCE_SEED.map((s) => [s.id, s]));
@@ -440,5 +451,363 @@ describe("finding estimates (R3.1, R3.4, A3.2)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(r.results).toEqual([]);
     expect(r.failed).toHaveLength(refused.length);
+  });
+});
+
+/* ── the brand's own store is always checked (R3 follow-up) ───────── */
+
+const SAMSONITE = "https://www.samsonite.ca/en/luggage/large-luggage";
+const LARGE_PAGE = `${SAMSONITE}/paralux-spinner-large/1502081041.html`;
+const paraluxLarge28 = expectedFromQuery(pack.parseQuery('Samsonite Paralux Large 28"'));
+
+const result = (url: string, title: string, content: string) => ({
+  url,
+  title,
+  content,
+  score: 0.8,
+  rawContent: null,
+});
+
+/** The combined search finds Amazon's Large and Samsonite.ca's Medium page only. */
+const COMBINED = [
+  result(
+    "https://www.amazon.ca/dp/B0PARALUXL",
+    'Samsonite Paralux Hardside Spinner Large 28" : Amazon.ca',
+    'Samsonite Paralux Spinner Large 28". $509.99 FREE delivery',
+  ),
+  result(
+    "https://www.samsonite.ca/en/luggage/medium-luggage/paralux-spinner-medium/1502071041.html",
+    "Paralux Spinner Medium | Samsonite Canada",
+    "Paralux Spinner Medium. Expandable hardside luggage, 47 L. C$ 434.95 Add to cart",
+  ),
+];
+
+const BRAND_PAGE = [
+  result(LARGE_PAGE, 'Paralux Spinner Large 28" | Samsonite Canada', "C$ 529.95 Add to cart"),
+];
+
+function brandDeps(
+  brandResults: ReturnType<typeof result>[],
+  over: Partial<EstimateDeps> = {},
+  combined = COMBINED,
+) {
+  const base = deps(over);
+  const search = vi.fn<EstimateDeps["search"]>(async (req) => ({
+    creditsUsed: 1,
+    results: req.includeDomains?.join() === "www.samsonite.ca" ? brandResults : combined,
+  }));
+  base.d.search = search;
+  return { ...base, search };
+}
+
+const largeRequest = (over: Record<string, unknown> = {}) => ({
+  purpose: "interactive" as const,
+  query: 'Samsonite Paralux Large 28"',
+  expected: paraluxLarge28,
+  stores: [src("amazon-ca"), src("samsonite-ca")],
+  references: async () => [] as ReferencePrice[],
+  ...over,
+});
+
+describe("the brand's own store is always checked", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resetTavilyState();
+  });
+
+  it("knows each brand's own store from the registry", () => {
+    expect(houseBrandStore("Samsonite", SOURCE_SEED)?.id).toBe("samsonite-ca");
+    expect(houseBrandStore("TUMI", SOURCE_SEED)?.id).toBe("tumi-ca");
+    expect(houseBrandStore("Briggs & Riley", SOURCE_SEED)?.id).toBe("briggs-riley-ca");
+    for (const b of ["Delsey", "Travelpro", "Heys", "Monos", "Away"])
+      expect(houseBrandStore(b, SOURCE_SEED)?.identityQuality.houseBrand).toBe(b);
+    expect(houseBrandStore("Osprey", SOURCE_SEED)).toBeNull();
+    expect(houseBrandStore(null, SOURCE_SEED)).toBeNull();
+  });
+
+  it('finds Paralux Large 28" on Samsonite.ca with one targeted search of its domain', async () => {
+    const { d, search, estimates } = brandDeps([
+      result(
+        LARGE_PAGE,
+        'Paralux Spinner Large 28" | Samsonite Canada',
+        "Paralux Spinner Large. Expandable hardside luggage, 105 L. C$ 529.95 Add to cart",
+      ),
+    ]);
+    const res = await findEstimates(largeRequest(), d);
+    expect(search).toHaveBeenCalledTimes(2);
+    const [targeted] = search.mock.calls[1];
+    expect(targeted).toMatchObject({
+      includeDomains: ["www.samsonite.ca"],
+      searchDepth: "basic",
+      includeRawContent: false, // snippets only
+    });
+    expect(res.brandSearch).toBe("searched");
+    expect(res.credits).toBe(2);
+    expect(await estimates.spentOn("2026-10-10", "interactive")).toBe(2);
+    expect(res.offers.find((o) => o.sourceId === "samsonite-ca")).toMatchObject({
+      retailer: "Samsonite.ca",
+      price: 529.95,
+      url: LARGE_PAGE,
+      method: "web_estimate",
+    });
+    expect(res.offers.map((o) => o.sourceId).sort()).toEqual(["amazon-ca", "samsonite-ca"]);
+    // The Medium page from the combined search is still refused for its size.
+    expect(estimates.rejections.map((r) => r.reasons.join())).toEqual([
+      expect.stringMatching(/different size/),
+    ]);
+  });
+
+  it("doesn't search again when the combined search already gave the brand store's estimate", async () => {
+    const { d, search } = brandDeps([], {}, [...COMBINED, ...BRAND_PAGE]);
+    const res = await findEstimates(largeRequest(), d);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(res.brandSearch).toBe("found");
+    expect(res.offers.some((o) => o.sourceId === "samsonite-ca")).toBe(true);
+  });
+
+  it("searches the brand's domain after the price check too, when its only result failed it (E1)", async () => {
+    const e1 = result(
+      `${SAMSONITE}/paralux-spinner-large/1502080001.html`,
+      'Paralux Spinner Large 28" | Samsonite Canada',
+      "Paralux Spinner Large. C$ 150.00 Add to cart",
+    );
+    const { d, search } = brandDeps(BRAND_PAGE, {}, [...COMBINED, e1]);
+    const res = await findEstimates(
+      largeRequest({
+        references: async () => [{ price: 434.95, sizeClass: "medium", inches: null }],
+      }),
+      d,
+    );
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(res.brandSearch).toBe("searched");
+    const samsonite = res.offers.filter((o) => o.sourceId === "samsonite-ca");
+    expect(samsonite.map((o) => o.price)).toEqual([529.95]); // never the $150
+  });
+
+  it("does nothing extra when the brand's store isn't among the stores asked", async () => {
+    const { d, search } = brandDeps(BRAND_PAGE);
+    const res = await findEstimates(largeRequest({ stores: [src("amazon-ca")] }), d);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(res.brandSearch).toBeNull();
+  });
+
+  it("reads an exact tile from a Samsonite.ca listing page, labelled and linked to the listing", async () => {
+    const listing = `${SAMSONITE}/`;
+    const { d, engine } = brandDeps([
+      result(
+        listing,
+        "Large Luggage | Samsonite Canada",
+        "Paralux Spinner Medium C$ 434.95 Paralux Spinner Large C$ 529.95 Omni 3.0 Spinner Large C$ 389.99",
+      ),
+    ]);
+    const res = await findEstimates(largeRequest(), d);
+    const o = res.offers.find((x) => x.sourceId === "samsonite-ca")!;
+    expect(o).toMatchObject({ title: "Paralux Spinner Large", price: 529.95, url: listing });
+    expect(o.reasons).toContain("read from the store's listing page");
+    expect(freshnessShortLabel(o.freshness, new Date("2026-10-10T16:00:00Z"))).toBe(
+      "Web estimate · confirm on site",
+    );
+    // Kept per product: another product's tile on the same page never shares this record.
+    const obs = await engine.latestObservation(o.listingId!, { shownOnly: true });
+    expect(obs).toMatchObject({ adapter: "web_estimate", price: 529.95 });
+    expect(
+      await engine.findListingByUrl("samsonite-ca", `${listing}#tile=paralux-spinner-large`),
+    ).not.toBeNull();
+  });
+
+  it("links a tile to the product's own page when a result shows it", async () => {
+    const { d } = brandDeps([
+      result(
+        `${SAMSONITE}/`,
+        "Large Luggage | Samsonite Canada",
+        "Paralux Spinner Large C$ 529.95 Omni 3.0 Spinner Large C$ 389.99",
+      ),
+      result(LARGE_PAGE, "Paralux Spinner Large | Samsonite Canada", "Expandable. Add to cart"),
+    ]);
+    const res = await findEstimates(largeRequest(), d);
+    expect(res.offers.find((x) => x.sourceId === "samsonite-ca")).toMatchObject({
+      price: 529.95,
+      url: LARGE_PAGE,
+    });
+  });
+
+  it("never takes a Paralux Medium tile for a Large", async () => {
+    const { d, estimates } = brandDeps([
+      result(
+        `${SAMSONITE}/`,
+        "Paralux | Samsonite Canada",
+        "Paralux Spinner Medium C$ 434.95 Paralux Carry-On Spinner C$ 379.95",
+      ),
+    ]);
+    const res = await findEstimates(largeRequest(), d);
+    expect(res.offers.some((o) => o.sourceId === "samsonite-ca")).toBe(false);
+    expect(estimates.rejections.map((r) => r.reasons.join()).join(" | ")).toMatch(
+      /no tile for this exact product/,
+    );
+  });
+
+  describe("readListingTile: only the exact product, with its own $ price", () => {
+    const sam = src("samsonite-ca");
+    const at = (snippet: string) => cand({ sourceId: sam.id, url: `${SAMSONITE}/`, snippet });
+    const large = expectedFromQuery(pack.parseQuery("Samsonite Paralux Large"));
+
+    it("a Medium tile never matches a Large query, and the other way round", () => {
+      expect(
+        readListingTile(at("Paralux Spinner Medium C$ 434.95"), sam, large, pack),
+      ).toHaveProperty("reason");
+      expect(
+        readListingTile(at("Paralux Spinner Large C$ 529.95"), sam, paraluxMedium, pack),
+      ).toHaveProperty("reason");
+      expect(
+        readListingTile(at("Paralux Spinner Large C$ 529.95"), sam, large, pack),
+      ).toMatchObject({ name: "Paralux Spinner Large", price: 529.95 });
+    });
+
+    it("needs the same line words and no others, and the same stated inches", () => {
+      const outline = expectedFromQuery(pack.parseQuery("Samsonite Outline Large"));
+      expect(
+        readListingTile(at("Outline Pro Spinner Large C$ 459.95"), sam, outline, pack),
+      ).toHaveProperty("reason");
+      expect(
+        readListingTile(at('Paralux Spinner Large 31" C$ 559.95'), sam, paraluxLarge28, pack),
+      ).toHaveProperty("reason");
+      expect(
+        readListingTile(at('Paralux Spinner Large 28" C$ 529.95'), sam, paraluxLarge28, pack),
+      ).toMatchObject({ price: 529.95 });
+    });
+
+    it('needs a "$" amount, and refuses two prices for the same bag', () => {
+      expect(
+        readListingTile(at("Paralux Spinner Large 529.95 CAD"), sam, large, pack),
+      ).toHaveProperty("reason");
+      expect(
+        readListingTile(at("Paralux Spinner Large C$ 529.95 C$ 449.95"), sam, large, pack),
+      ).toMatchObject({ reason: expect.stringMatching(/more than one price/) });
+      expect(
+        readListingTile(
+          at("Paralux Spinner Large C$ 529.95 · Paralux Spinner Large C$ 499.95"),
+          sam,
+          large,
+          pack,
+        ),
+      ).toMatchObject({ reason: expect.stringMatching(/more than one price/) });
+    });
+
+    it("only on the brand's own store: another store's listing page stays refused", () => {
+      const out = validateEstimates(
+        [
+          cand({
+            url: "https://www.amazon.ca/s?k=samsonite+paralux",
+            title: "Amazon.ca: samsonite paralux",
+            snippet: "Samsonite Paralux Spinner Large $509.99",
+          }),
+        ],
+        SOURCES,
+        large,
+        [],
+        pack,
+      );
+      expect(out[0].verdict.outcome).toBe("rejected");
+    });
+  });
+
+  describe("budget, cap and cache", () => {
+    it("stops at the monthly cap: no targeted search once the last credit is gone", async () => {
+      const { d, search } = brandDeps(BRAND_PAGE, {
+        usage: async () => ({ cap: 950, used: 949 }),
+      });
+      const res = await findEstimates(largeRequest(), d);
+      expect(search).toHaveBeenCalledTimes(1);
+      expect(res.brandSearch).toBe("cap");
+      expect(res.credits).toBe(1);
+    });
+
+    it("keeps the morning email's reserve: one spare credit buys one search", async () => {
+      // Oct 10: 22 days left at 2 credits a day for the email = 44 held back; 45 left.
+      const { d, search } = brandDeps(BRAND_PAGE, {
+        usage: async () => ({ cap: 950, used: 905 }),
+        emailDailyNeed: async () => 2,
+      });
+      const res = await findEstimates(largeRequest(), d);
+      expect(search).toHaveBeenCalledTimes(1);
+      expect(res.brandSearch).toBe("budget");
+    });
+
+    it("stays inside the email's allowance", async () => {
+      const one = brandDeps(BRAND_PAGE);
+      const r1 = await findEstimates(
+        largeRequest({ purpose: "email", preBudgeted: true, maxCredits: 1 }),
+        one.d,
+      );
+      expect(one.search).toHaveBeenCalledTimes(1);
+      expect(r1.brandSearch).toBe("budget");
+      const two = brandDeps(BRAND_PAGE);
+      const r2 = await findEstimates(
+        largeRequest({ purpose: "email", preBudgeted: true, maxCredits: 2 }),
+        two.d,
+      );
+      expect(two.search).toHaveBeenCalledTimes(2);
+      expect(r2.brandSearch).toBe("searched");
+      expect(await two.estimates.spentOn("2026-10-10", "email")).toBe(2);
+    });
+
+    it("is cached 12 h per product: a repeat costs nothing and still shows the brand store", async () => {
+      const { d, search } = brandDeps(BRAND_PAGE);
+      await findEstimates(largeRequest(), d);
+      const later = await findEstimates(largeRequest(), {
+        ...d,
+        now: () => Date.parse("2026-10-11T02:00:00Z"), // 11 h later
+      });
+      expect(search).toHaveBeenCalledTimes(2);
+      expect(later).toMatchObject({ credits: 0, fromCache: true, brandSearch: "cached" });
+      expect(later.offers.find((o) => o.sourceId === "samsonite-ca")?.price).toBe(529.95);
+      await findEstimates(largeRequest(), { ...d, now: () => Date.parse("2026-10-11T04:00:00Z") });
+      expect(search).toHaveBeenCalledTimes(4); // 13 h: both searches have expired
+    });
+  });
+
+  it("never asks Tavily to read a Samsonite.ca page: snippet searches only, through the real client", async () => {
+    vi.stubEnv("TAVILY_API_KEY", "tvly-test");
+    const bodies: Record<string, unknown>[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/usage"))
+        return new Response(
+          JSON.stringify({ key: { usage: 10 }, account: { plan_usage: 10, plan_limit: 1000 } }),
+        );
+      if (url.endsWith("/search")) {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        bodies.push(body);
+        const brandOnly =
+          (body.include_domains as string[] | undefined)?.join() === "www.samsonite.ca";
+        return new Response(
+          JSON.stringify({
+            results: (brandOnly ? BRAND_PAGE : COMBINED).map((r) => ({
+              url: r.url,
+              title: r.title,
+              content: r.content,
+              score: r.score,
+            })),
+            usage: { credits: 1 },
+          }),
+        );
+      }
+      throw new Error(`unexpected request to ${url}`);
+    });
+    const { d } = deps();
+    d.search = async (req: TavilySearchRequest, timeoutMs: number) => {
+      const r = await tavilySearch(req, {
+        deadline: Deadline.in(timeoutMs),
+        minAttemptMs: SNIPPET_MIN_ATTEMPT_MS,
+      });
+      return { results: r.results, creditsUsed: r.creditsUsed };
+    };
+    const res = await findEstimates(largeRequest({ timeoutMs: 6_000 }), d);
+    expect(res.offers.find((o) => o.sourceId === "samsonite-ca")?.price).toBe(529.95);
+    const urls = fetchSpy.mock.calls.map(([u]) => String(u));
+    expect(urls.filter((u) => u.endsWith("/search"))).toHaveLength(2);
+    expect(urls.some((u) => /\/extract|samsonite\.ca/.test(u))).toBe(false);
+    for (const b of bodies) expect(b.include_raw_content ?? false).toBe(false);
   });
 });

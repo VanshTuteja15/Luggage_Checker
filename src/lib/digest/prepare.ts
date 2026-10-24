@@ -124,12 +124,14 @@ export function serverPrepare(rt: EngineRuntime, pack: CategoryPack): PrepareFn 
             expected: item.expected,
             stores,
             preBudgeted: true,
+            // The brand-store search, when needed, comes out of the same allowance.
+            maxCredits: Math.max(0, credits),
             timeoutMs: 8_000,
             references: () => referencePrices(rt.store, pack, item.expected, [], ctx.now.getTime()),
           },
           { ...deps, now: () => ctx.now.getTime(), timeZone: ctx.timeZone },
         );
-        if (!cached) credits -= Math.max(1, res.credits);
+        credits -= cached ? res.credits : Math.max(1, res.credits);
         if (res.skipped === null) estimated += 1;
         if (res.skipped === "cap") break;
       }

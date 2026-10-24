@@ -387,6 +387,7 @@ describe("web estimates inside a session (R3, R2.5)", () => {
           credits: 1,
           fromCache: false,
           skipped: null,
+          brandSearch: null,
         };
       },
     });

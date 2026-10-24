@@ -809,7 +809,15 @@ export function queryMatch(title: string, terms: string): number {
 /*  visible this way.                                                 */
 /* ------------------------------------------------------------------ */
 
-export type ListingTile = { name: string; price: number; evidence: string };
+export type ListingTile = {
+  name: string;
+  price: number;
+  evidence: string;
+  /** The amount as written ("C$ 529.95", "529.95 CAD"). */
+  amount: string;
+  /** Where the amount ends in the text. */
+  end: number;
+};
 
 /** What may sit between a tile's name and its price. */
 const TILE_CONNECTOR =
@@ -865,6 +873,8 @@ export function extractListingTiles(text: string, terms: string): ListingTile[] 
         Math.max(0, c.index - Math.min(name.length + connectorText.length, 70)),
         c.end,
       ),
+      amount: body.slice(c.index, c.end),
+      end: c.end,
     });
   }
   return tiles;

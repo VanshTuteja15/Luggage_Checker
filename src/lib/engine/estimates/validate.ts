@@ -17,12 +17,18 @@
 /*      "single source";                                                 */
 /*   e. not an accessory when the search is for a bag.                  */
 /*                                                                     */
+/*  One exception to a: a brand's own store (Samsonite.ca for a         */
+/*  Samsonite) often shows up only as a collection page. Its snippet    */
+/*  counts when one tile names exactly our product with its own "$"     */
+/*  price right after the name (readListingTile).                       */
+/*                                                                     */
 /*  Pure: no network, no database. Category knowledge comes from the   */
 /*  pack; store knowledge from the registry record.                    */
 /* ------------------------------------------------------------------ */
 
 import {
   cleanPageTitle,
+  extractListingTiles,
   findPriceCandidates,
   isAccessoryTitle,
   isHomePage,
@@ -73,6 +79,8 @@ export type EstimateVerdict = {
   singleSource: boolean;
   /** The snippet text around the price (≤ 300 chars), kept as evidence. */
   excerpt: string;
+  /** The tile's name when the price was read from a brand store's listing page. */
+  tile: string | null;
 };
 
 const SIZE_ORDER: Record<string, number> = {
@@ -126,7 +134,8 @@ const PRODUCT_PAGE: Record<string, RegExp> = {
   "ebay-ca": /\/itm\//,
 };
 
-export function isProductPage(source: SourceRecord, url: string): string | null {
+/** A secure page on the store's own registry domain, other than its home page. */
+export function onStoreSite(source: SourceRecord, url: string): string | null {
   let u: URL;
   try {
     u = new URL(url);
@@ -138,6 +147,13 @@ export function isProductPage(source: SourceRecord, url: string): string | null 
   if (!source.allowedDomains.some((d) => normaliseHost(d) === host))
     return "not on the store's own website";
   if (isHomePage(url)) return "the store's home page, not a product";
+  return null;
+}
+
+export function isProductPage(source: SourceRecord, url: string): string | null {
+  const site = onStoreSite(source, url);
+  if (site) return site;
+  const u = new URL(url);
   const specific = PRODUCT_PAGE[source.id];
   if (specific) return specific.test(url) ? null : "not a product page";
   if (/shopify/i.test(source.platform) && !/\/products\/[^/?#]+/.test(u.pathname))
@@ -234,6 +250,67 @@ export function identityReasons(
   return reasons;
 }
 
+/* ── a brand store's listing page ─────────────────────────────────── */
+
+/** The store is the brand's own (Samsonite.ca for Samsonite). */
+export function isHouseBrandStore(source: SourceRecord, brand: string | null): boolean {
+  const house = source.identityQuality.houseBrand;
+  return !!brand && !!house && house.toLowerCase() === brand.toLowerCase();
+}
+
+/** The brand's own store among these, if there is one. */
+export function houseBrandStore(
+  brand: string | null,
+  sources: SourceRecord[],
+): SourceRecord | null {
+  return sources.find((s) => isHouseBrandStore(s, brand)) ?? null;
+}
+
+/** Another amount right after a tile's price ("C$ 529.95 C$ 449.95"): which one is it? */
+const SECOND_AMOUNT =
+  /^\s*(?:CAD\b)?[\s.,·•|:–—-]*(?:(?:sale|now|special)\s*(?:price)?\s*[:\-–]?\s*)?(?:CA\$|C\$|CAD\s?\$?|\$)\s?\d/i;
+
+function lineSet(words: string[], pack: CategoryPack): Set<string> {
+  return new Set(words.map((w) => w.toLowerCase()).filter((w) => !pack.optionalLineWords.has(w)));
+}
+
+export type TileRead = { name: string; price: number; excerpt: string } | { reason: string };
+
+/**
+ * Our product's price from a listing page's snippet. Only a tile whose
+ * name is exactly our product counts: brand (or the store's own), the same
+ * line words and no others (Outline is not Outline Pro), the same size
+ * class and stated inches if any, with a "$" amount right after the name.
+ * Two such tiles at different prices, or a second amount right after the
+ * price, are refused: we can't tell which one is the bag.
+ */
+export function readListingTile(
+  cand: EstimateCandidate,
+  source: SourceRecord,
+  expected: ExpectedProduct,
+  pack: CategoryPack,
+): TileRead {
+  const ours = lineSet(expected.line, pack);
+  if (!expected.brand || !expected.sizeClass || ours.size === 0)
+    return { reason: "the search doesn't name one exact product" };
+  const exact: { name: string; price: number; excerpt: string }[] = [];
+  let doubled = false;
+  for (const t of extractListingTiles(cand.snippet, [...ours].join(" "))) {
+    if (!t.amount.includes("$") || WEAK_BEFORE.test(t.name)) continue;
+    const tileCand = { ...cand, title: t.name, snippet: `${t.name} ${t.amount}` };
+    if (identityReasons(tileCand, source, expected, pack).length) continue;
+    const brand = pack.brandOf(t.name) ?? source.identityQuality.houseBrand ?? null;
+    const theirs = lineSet(pack.lineOf(t.name, brand), pack);
+    if (theirs.size !== ours.size || [...ours].some((w) => !theirs.has(w))) continue;
+    if (SECOND_AMOUNT.test(cand.snippet.slice(t.end, t.end + 40))) doubled = true;
+    exact.push({ name: t.name, price: t.price, excerpt: t.evidence.slice(0, 300) });
+  }
+  if (exact.length === 0) return { reason: "no tile for this exact product with its own price" };
+  if (doubled || new Set(exact.map((t) => t.price)).size > 1)
+    return { reason: "more than one price for this product on the listing page" };
+  return exact[0];
+}
+
 /* ── c. one clear selling price ───────────────────────────────────── */
 
 export type PriceRead = { price: number; excerpt: string } | { reason: string };
@@ -327,23 +404,54 @@ export function plausibility(
 
 /* ── all rules ────────────────────────────────────────────────────── */
 
+export type ScreenedEstimate = {
+  price: number | null;
+  excerpt: string;
+  reasons: string[];
+  /** Set when the price came from a tile on the brand store's listing page. */
+  tile: string | null;
+};
+
 /** Rules a, b, c, e for one result; rule d needs the other results too. */
 export function screenEstimate(
   cand: EstimateCandidate,
   source: SourceRecord,
   expected: ExpectedProduct,
   pack: CategoryPack,
-): { price: number | null; excerpt: string; reasons: string[] } {
+): ScreenedEstimate {
   const reasons: string[] = [];
   const page = isProductPage(source, cand.url);
+  // The brand's own store, on a listing page: its exact tile or nothing.
+  if (page && !onStoreSite(source, cand.url) && isHouseBrandStore(source, expected.brand)) {
+    const tile = readListingTile(cand, source, expected, pack);
+    if ("reason" in tile)
+      return {
+        price: null,
+        excerpt: cand.snippet.slice(0, 300),
+        reasons: [page, tile.reason],
+        tile: null,
+      };
+    return { price: tile.price, excerpt: tile.excerpt, reasons: [], tile: tile.name };
+  }
   if (page) reasons.push(page);
   reasons.push(...identityReasons(cand, source, expected, pack));
   const read = readEstimatePrice(productTitle(cand.title), cand.snippet);
   if ("reason" in read) {
     reasons.push(read.reason);
-    return { price: null, excerpt: cand.snippet.slice(0, 300), reasons };
+    return { price: null, excerpt: cand.snippet.slice(0, 300), reasons, tile: null };
   }
-  return { price: read.price, excerpt: read.excerpt, reasons };
+  return { price: read.price, excerpt: read.excerpt, reasons, tile: null };
+}
+
+/** Passes every rule that doesn't need the other results (all but d). */
+export function passesScreen(
+  cand: EstimateCandidate,
+  source: SourceRecord,
+  expected: ExpectedProduct,
+  pack: CategoryPack,
+): boolean {
+  const s = screenEstimate(cand, source, expected, pack);
+  return s.reasons.length === 0 && s.price !== null;
 }
 
 /**
@@ -360,9 +468,9 @@ export function validateEstimates(
 ): { candidate: EstimateCandidate; verdict: EstimateVerdict }[] {
   const screened = candidates.map((candidate) => {
     const source = sources.get(candidate.sourceId);
-    const s = source
+    const s: ScreenedEstimate = source
       ? screenEstimate(candidate, source, expected, pack)
-      : { price: null, excerpt: "", reasons: ["not a store we know"] };
+      : { price: null, excerpt: "", reasons: ["not a store we know"], tile: null };
     return { candidate, ...s };
   });
   const survivors = screened.filter((s) => s.reasons.length === 0 && s.price !== null);
@@ -377,6 +485,7 @@ export function validateEstimates(
           reasons: s.reasons,
           singleSource: false,
           excerpt: s.excerpt,
+          tile: s.tile,
         },
       };
     }
@@ -395,13 +504,18 @@ export function validateEstimates(
             reasons: [p.reason],
             singleSource: false,
             excerpt: s.excerpt,
+            tile: s.tile,
           }
         : {
             outcome: "accepted" as const,
             price: s.price,
-            reasons: p.singleSource ? ["single source"] : [],
+            reasons: [
+              ...(p.singleSource ? ["single source"] : []),
+              ...(s.tile ? ["read from the store's listing page"] : []),
+            ],
             singleSource: p.singleSource,
             excerpt: s.excerpt,
+            tile: s.tile,
           },
     };
   });

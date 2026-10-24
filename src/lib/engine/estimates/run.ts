@@ -11,6 +11,12 @@
 /*  Spending: the search result is cached (12 h for a named product,   */
 /*  6 h for a free-text query), so a repeat costs nothing; otherwise    */
 /*  the budget planner decides first, after reading the month's usage. */
+/*                                                                     */
+/*  The brand's own store (Samsonite.ca for a Samsonite) is always     */
+/*  checked: when the combined search brings back nothing we accept    */
+/*  from it, one more search covers that store's domain only, under    */
+/*  the same budget, cap and cache rules (1 credit, cached per product */
+/*  and store).                                                         */
 /* ------------------------------------------------------------------ */
 
 import { createHash } from "node:crypto";
@@ -31,6 +37,10 @@ import {
 import type { EstimateRejection, EstimateStore, SearchResultLite } from "./store";
 import {
   ESTIMATE_VALIDATOR_VERSION,
+  houseBrandStore,
+  identityReasons,
+  isProductPage,
+  passesScreen,
   validateEstimates,
   type EstimateCandidate,
   type ExpectedProduct,
@@ -73,9 +83,18 @@ export type EstimateRequest = {
   sessionId?: string | null;
   /** Skip the planner (the caller already budgeted, e.g. the email's rotation). */
   preBudgeted?: boolean;
+  /** Most credits this call may spend (the email's allowance left today). */
+  maxCredits?: number;
 };
 
 export type EstimateSkip = "no_stores" | "not_configured" | "budget" | "cap" | "error";
+
+/**
+ * The brand's own store: "found" when the combined search already gave an
+ * estimate from it, "searched"/"cached" for the targeted search, or why that
+ * search wasn't made.
+ */
+export type BrandSearchOutcome = "found" | "searched" | "cached" | EstimateSkip;
 
 export type EstimateResult = {
   offers: AnswerOffer[];
@@ -84,6 +103,8 @@ export type EstimateResult = {
   credits: number;
   fromCache: boolean;
   skipped: EstimateSkip | null;
+  /** null when the product's brand has no store of its own among the asked stores. */
+  brandSearch: BrandSearchOutcome | null;
 };
 
 const empty = (skipped: EstimateSkip | null): EstimateResult => ({
@@ -93,6 +114,7 @@ const empty = (skipped: EstimateSkip | null): EstimateResult => ({
   credits: 0,
   fromCache: false,
   skipped,
+  brandSearch: null,
 });
 
 /** Named products share a key across wordings; free text is keyed by its words. */
@@ -124,6 +146,11 @@ export function cacheKeyFor(query: string, e: ExpectedProduct): { key: string; t
   };
 }
 
+/** The brand-store search's cache entry: per product (or query) and store. */
+export function brandCacheKey(key: string, sourceId: string): string {
+  return `b:${createHash("sha256").update(`${key}|${sourceId}`).digest("hex").slice(0, 32)}`;
+}
+
 function searchText(query: string, e: ExpectedProduct): string {
   const named = [e.brand, ...e.line].filter(Boolean).join(" ");
   const base = named && e.sizeClass ? `${named} ${e.sizeClass.replace("_", "-")}` : query;
@@ -142,98 +169,204 @@ export async function findEstimates(
   const today = localDate(new Date(nowMs), tz);
   const { key, ttlMs } = cacheKeyFor(req.query, req.expected);
 
-  /* ── results: cached, or one budgeted search ─────────────────────── */
-  let results: SearchResultLite[];
-  let foundAt = nowIso;
+  const startedAt = Date.now();
+  const timeLeft = () => Math.max(1_000, (req.timeoutMs ?? 8_000) - (Date.now() - startedAt));
+  const words = searchText(req.query, req.expected);
+
+  /* ── spending: the planner before every paid search ──────────────── */
   let credits = 0;
-  let fromCache = false;
-  const cached = await deps.estimates.cachedSearch(key, nowIso).catch(() => null);
-  if (cached) {
-    results = cached.results;
-    foundAt = cached.searchedAt;
-    fromCache = true;
-  } else {
-    const usage = await deps.usage().catch(() => null);
-    if (!usage) return empty("not_configured");
-    if (!req.preBudgeted) {
-      const [emailSpentToday, emailDailyNeed, emailDoneToday] = await Promise.all([
-        deps.estimates.spentOn(today, "email").catch(() => 0),
-        deps.emailDailyNeed().catch(() => 0),
-        deps.emailDoneToday().catch(() => false),
-      ]);
-      const state = {
-        cap: usage.cap,
-        usedThisMonth: usage.used,
-        emailSpentToday,
-        emailDailyNeed,
-        daysLeftInMonth: daysLeftInMonth(today),
-        emailDoneToday,
-      };
-      if (remainingThisMonth(state) < 1) return empty("cap");
-      if (allowance(req.purpose, state, estimateDailyBudget()) < 1) return empty("budget");
-    } else if (usage.used >= usage.cap) {
-      return empty("cap");
-    }
+  let usage: { cap: number; used: number } | null | undefined;
+  const maySpend = async (): Promise<EstimateSkip | null> => {
+    if (usage === undefined) usage = await deps.usage().catch(() => null);
+    if (!usage) return "not_configured";
+    // This call's own searches count at once: the month's usage was read before them.
+    const used = usage.used + credits;
+    const overCall = req.maxCredits !== undefined && credits + 1 > req.maxCredits;
+    if (req.preBudgeted) return used >= usage.cap ? "cap" : overCall ? "budget" : null;
+    const [emailSpentToday, emailDailyNeed, emailDoneToday] = await Promise.all([
+      deps.estimates.spentOn(today, "email").catch(() => 0),
+      deps.emailDailyNeed().catch(() => 0),
+      deps.emailDoneToday().catch(() => false),
+    ]);
+    const state = {
+      cap: usage.cap,
+      usedThisMonth: used,
+      emailSpentToday,
+      emailDailyNeed,
+      daysLeftInMonth: daysLeftInMonth(today),
+      emailDoneToday,
+    };
+    if (remainingThisMonth(state) < 1) return "cap";
+    if (allowance(req.purpose, state, estimateDailyBudget()) < 1 || overCall) return "budget";
+    return null;
+  };
+
+  /* ── results: cached, or one budgeted search ─────────────────────── */
+  type Fetched = { results: SearchResultLite[]; foundAt: string; fresh: boolean };
+  const fetchResults = async (
+    cacheKey: string,
+    includeDomains: string[],
+    maxResults: number,
+  ): Promise<Fetched | EstimateSkip> => {
+    const cached = await deps.estimates.cachedSearch(cacheKey, nowIso).catch(() => null);
+    if (cached) return { results: cached.results, foundAt: cached.searchedAt, fresh: false };
+    const skip = await maySpend();
+    if (skip) return skip;
+    let results: SearchResultLite[];
+    let spent: number;
     try {
       const res = await deps.search(
         {
-          query: searchText(req.query, req.expected),
+          query: words,
           searchDepth: "basic",
-          maxResults: 15,
-          includeDomains: [...new Set(stores.flatMap((s) => s.allowedDomains))],
+          maxResults,
+          includeDomains,
           country: "canada",
           // Snippets only: never the page text (R3).
           includeRawContent: false,
         },
-        req.timeoutMs ?? 8_000,
+        timeLeft(),
       );
-      credits = res.creditsUsed;
+      spent = res.creditsUsed;
       results = res.results.map((r) => ({ url: r.url, title: r.title, content: r.content }));
     } catch (err) {
       const quota = err instanceof Error && /cap|credit|quota|pay-as-you-go/i.test(err.message);
-      return empty(quota ? "cap" : "error");
+      return quota ? "cap" : "error";
     }
+    credits += spent;
     await deps.estimates
       .saveSearch({
-        key,
+        key: cacheKey,
         query: req.query,
         purpose: req.purpose,
         results,
-        credits,
+        credits: spent,
         searchedAt: nowIso,
         expiresAt: new Date(nowMs + ttlMs).toISOString(),
       })
       .catch(() => undefined);
-    await deps.estimates.addSpend(today, req.purpose, credits).catch(() => undefined);
-  }
+    await deps.estimates.addSpend(today, req.purpose, spent).catch(() => undefined);
+    return { results, foundAt: nowIso, fresh: true };
+  };
+
+  const combined = await fetchResults(
+    key,
+    [...new Set(stores.flatMap((s) => s.allowedDomains))],
+    15,
+  );
+  if (typeof combined === "string") return empty(combined);
 
   /* ── candidates for the asked stores only ───────────────────────── */
   const wanted = new Map(stores.map((s) => [s.id, s]));
   const candidates: EstimateCandidate[] = [];
-  for (const r of results) {
-    const source = sourceForUrl(r.url, deps.sources);
-    if (!source || !wanted.has(source.id)) continue;
-    candidates.push({
-      sourceId: source.id,
-      url: r.url,
-      title: r.title,
-      snippet: r.content,
-      query: req.query,
-      foundAt,
-    });
-  }
-  if (candidates.length === 0) return { ...empty(null), credits, fromCache };
+  // Results of a search made now; a cached search's were stored when it was made.
+  const fresh = new Set<EstimateCandidate>();
+  const seen = new Set<string>();
+  const collect = (f: Fetched, onlySourceId?: string) => {
+    for (const r of f.results) {
+      const source = sourceForUrl(r.url, deps.sources);
+      if (!source || !wanted.has(source.id) || (onlySourceId && source.id !== onlySourceId))
+        continue;
+      if (seen.has(r.url)) continue; // the targeted search often repeats a result
+      seen.add(r.url);
+      const c: EstimateCandidate = {
+        sourceId: source.id,
+        url: r.url,
+        title: r.title,
+        snippet: r.content,
+        query: req.query,
+        foundAt: f.foundAt,
+      };
+      candidates.push(c);
+      if (f.fresh) fresh.add(c);
+    }
+  };
+  collect(combined);
 
-  const references = await req.references().catch(() => []);
-  const verdicts = validateEstimates(candidates, wanted, req.expected, references, deps.pack);
+  /* ── the brand's own store: always checked ───────────────────────── */
+  const brandStore = houseBrandStore(req.expected.brand, stores);
+  // (assigned inside searchBrandStore: a wide type keeps TypeScript from narrowing it)
+  let brandSearch = (brandStore ? "found" : null) as BrandSearchOutcome | null;
+  const searchBrandStore = async (store: SourceRecord) => {
+    const got = await fetchResults(brandCacheKey(key, store.id), store.allowedDomains, 10);
+    if (typeof got === "string") {
+      brandSearch = got;
+      return;
+    }
+    brandSearch = got.fresh ? "searched" : "cached";
+    collect(got, store.id);
+  };
+  // Nothing from it passes the rules that don't need verified prices: search
+  // its domain now, while those prices are still coming in.
+  const early =
+    brandStore &&
+    !candidates.some(
+      (c) => c.sourceId === brandStore.id && passesScreen(c, brandStore, req.expected, deps.pack),
+    )
+      ? searchBrandStore(brandStore)
+      : null;
+  const hadCandidates = candidates.length > 0;
+  let [references] = await Promise.all([
+    hadCandidates ? req.references().catch(() => []) : Promise.resolve([] as ReferencePrice[]),
+    early,
+  ]);
+  if (candidates.length === 0) {
+    return {
+      ...empty(null),
+      credits,
+      fromCache: !combined.fresh && brandSearch !== "searched",
+      brandSearch,
+    };
+  }
+  if (!hadCandidates) references = await req.references().catch(() => []);
+  let verdicts = validateEstimates(candidates, wanted, req.expected, references, deps.pack);
+  if (
+    brandStore &&
+    !early &&
+    !verdicts.some(
+      (x) => x.candidate.sourceId === brandStore.id && x.verdict.outcome === "accepted",
+    )
+  ) {
+    // Its result passed those rules but not the price check: its own domain may hold the right page.
+    await searchBrandStore(brandStore);
+    verdicts = validateEstimates(candidates, wanted, req.expected, references, deps.pack);
+  }
+  const fromCache = !combined.fresh && brandSearch !== "searched";
 
   /* ── store and shape ──────────────────────────────────────────────── */
+  const canonical = (u: string) => {
+    try {
+      return canonicalUrl(u);
+    } catch {
+      return u;
+    }
+  };
+  // A listing-page price links to the product's own page when a result shows it.
+  const productPageOf = (source: SourceRecord): string | null => {
+    const hit = candidates.find(
+      (c) =>
+        c.sourceId === source.id &&
+        !isProductPage(source, c.url) &&
+        identityReasons(c, source, req.expected, deps.pack).length === 0,
+    );
+    return hit ? canonical(hit.url) : null;
+  };
+  // A product page's estimate beats a listing tile; one tile per store at most.
+  const pageAccepted = new Set(
+    verdicts
+      .filter((x) => x.verdict.outcome === "accepted" && !x.verdict.tile)
+      .map((x) => x.candidate.sourceId),
+  );
+  const tileShown = new Set<string>();
+
   const offers: AnswerOffer[] = [];
   const rejections: EstimateRejection[] = [];
   const shownPages = new Set<string>();
   for (const { candidate: c, verdict: v } of verdicts) {
     const source = wanted.get(c.sourceId)!;
+    const isFresh = fresh.has(c);
     if (v.outcome === "rejected" || v.price === null) {
+      if (!isFresh) continue;
       rejections.push({
         sourceId: c.sourceId,
         query: c.query,
@@ -246,24 +379,32 @@ export async function findEstimates(
       });
       continue;
     }
-    let url = c.url;
-    try {
-      url = canonicalUrl(c.url);
-    } catch {
-      /* keep as is */
+    let url: string;
+    // Where the observation is kept: one listing per page, and per product on a listing page.
+    let listingUrl: string;
+    if (v.tile) {
+      if (pageAccepted.has(c.sourceId) || tileShown.has(c.sourceId)) continue;
+      tileShown.add(c.sourceId);
+      const product = productPageOf(source);
+      // A listing page keeps its query (?q=…): without it the link goes nowhere.
+      url = product ?? c.url;
+      listingUrl = product ?? `${c.url.split("#")[0]}#tile=${tileSlug(v.tile)}`;
+    } else {
+      url = canonical(c.url);
+      listingUrl = url;
     }
     if (shownPages.has(url)) continue;
     shownPages.add(url);
-    const title = cleanPageTitle(c.title).name || c.title;
+    const title = v.tile ?? (cleanPageTitle(c.title).name || c.title);
     const brand = deps.pack.brandOf(title) ?? source.identityQuality.houseBrand ?? null;
     let listing: ListingRecord | null = null;
     let observationId: string | null = null;
     // A cached search was stored when it was first made: only new results are written.
-    if (!fromCache) {
+    if (isFresh) {
       listing = await deps.engine
         .upsertListing({
           sourceId: source.id,
-          url,
+          url: listingUrl,
           externalId: null,
           title,
           brand,
@@ -310,7 +451,7 @@ export async function findEstimates(
         observationId = obs?.id ?? null;
       }
     } else {
-      listing = await deps.engine.findListingByUrl(source.id, url).catch(() => null);
+      listing = await deps.engine.findListingByUrl(source.id, listingUrl).catch(() => null);
     }
     offers.push({
       sourceId: source.id,
@@ -337,8 +478,7 @@ export async function findEstimates(
       evidence: v.excerpt.slice(0, 300),
     });
   }
-  if (!fromCache && rejections.length)
-    await deps.estimates.recordRejections(rejections).catch(() => undefined);
+  if (rejections.length) await deps.estimates.recordRejections(rejections).catch(() => undefined);
 
   return {
     offers,
@@ -347,7 +487,16 @@ export async function findEstimates(
     credits,
     fromCache,
     skipped: null,
+    brandSearch,
   };
+}
+
+function tileSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
 }
 
 /**

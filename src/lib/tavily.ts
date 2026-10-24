@@ -81,6 +81,11 @@ export type TavilyCallOptions = {
   meter?: Meter;
   /** Skip the cache and force a fresh (billable) call. */
   bypassCache?: boolean;
+  /**
+   * Shortest time left worth starting an attempt in. Default 8 s, sized for
+   * calls that return page text; a basic snippet-only search answers in 1–2 s.
+   */
+  minAttemptMs?: number;
 };
 
 /* ------------------------------------------------------------------ */
@@ -675,7 +680,7 @@ async function runSearch(
    * attempt squeezed into less time than this would likely time out AFTER
    * Tavily had done (and billed) the work — so it isn't started at all.
    */
-  const MIN_ATTEMPT_MS = 8_000;
+  const MIN_ATTEMPT_MS = opts.minAttemptMs ?? 8_000;
 
   let minimal = false;
   let lastError: ProviderError | null = null;

@@ -2114,6 +2114,18 @@ async function main() {
       "samsonite outline pro",
     );
     check("a tile must name the searched product", other.length === 0);
+    const written = extractListingTiles(
+      "Paralux Spinner Medium C$ 434.95 Paralux Spinner Large C$ 529.95",
+      "paralux large",
+    );
+    check(
+      "a tile keeps its amount as written and where it ends (brand-store estimates)",
+      written.length === 1 &&
+        written[0].amount === "C$ 529.95" &&
+        written[0].end ===
+          "Paralux Spinner Medium C$ 434.95 Paralux Spinner Large C$ 529.95".length,
+      JSON.stringify(written),
+    );
   }
 
   section("F4. Brand store detection and title clean-up");
