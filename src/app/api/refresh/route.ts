@@ -7,7 +7,7 @@ import { PgTrackedBridge } from "@/lib/engine/bridge/tracked";
 import { verifyTracked } from "@/lib/engine/jobs/verify-tracked";
 import { luggagePack } from "@/lib/engine/packs/luggage";
 import { getEngine } from "@/lib/engine/server";
-import { PgEngineStore } from "@/lib/engine/store/pg";
+import { pgPoolOf } from "@/lib/engine/store/pg";
 import { requireUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { rt } = getEngine();
-    if (!(rt.store instanceof PgEngineStore)) {
+    const pool = pgPoolOf(rt.store);
+    if (!pool) {
       return NextResponse.json(
         { error: "Live price checks aren't set up on this server yet." },
         { status: 503 },
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
     const { stats, verifiedProductIds } = await verifyTracked(
       rt,
       luggagePack,
-      new PgTrackedBridge(rt.store.pool),
+      new PgTrackedBridge(pool),
       {
         productIds: queue.map((p) => p.id),
         maxProducts: queue.length,

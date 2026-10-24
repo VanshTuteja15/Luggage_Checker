@@ -219,6 +219,15 @@ function toReview(r: Row): ReviewItem {
 
 /* ── store ────────────────────────────────────────────────────────── */
 
+/**
+ * The Postgres pool behind an engine store, or null for the memory store.
+ * Checked by shape, not `instanceof`: the engine is cached on globalThis,
+ * and after a dev hot reload the cached store's class is an older copy.
+ */
+export function pgPoolOf(store: EngineStore): Pool | null {
+  return store.kind === "postgres" && "pool" in store ? (store as PgEngineStore).pool : null;
+}
+
 export class PgEngineStore implements EngineStore {
   readonly kind = "postgres" as const;
   readonly pool: Pool;
@@ -686,6 +695,34 @@ export class PgEngineStore implements EngineStore {
       [listingId, opts.shownOnly ?? false],
     );
     return r ? toObservation(r) : null;
+  }
+
+  async latestObservations(listingIds: string[]): Promise<Observation[]> {
+    if (listingIds.length === 0) return [];
+    const rows = await this.q(
+      `SELECT DISTINCT ON (listing_id) * FROM observations
+        WHERE listing_id = ANY($1::uuid[]) AND outcome <> 'rejected'
+        ORDER BY listing_id, fetched_at DESC, id DESC`,
+      [listingIds],
+    );
+    return rows.map(toObservation);
+  }
+
+  async priceRangesSince(listingIds: string[], sinceIso: string): Promise<PriceRange[]> {
+    if (listingIds.length === 0) return [];
+    const rows = await this.q(
+      `SELECT * FROM price_ranges WHERE listing_id = ANY($1::uuid[]) AND last_seen_at >= $2
+        ORDER BY last_seen_at DESC, id DESC`,
+      [listingIds, sinceIso],
+    );
+    return rows.map((r) => ({
+      listingId: r.listing_id,
+      price: Number(r.price ?? 0),
+      availability: r.availability,
+      firstSeenAt: isoReq(r.first_seen_at),
+      lastSeenAt: isoReq(r.last_seen_at),
+      observationCount: r.observation_count,
+    }));
   }
 
   async priceRanges(listingId: string, limit: number): Promise<PriceRange[]> {

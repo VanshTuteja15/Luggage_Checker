@@ -269,6 +269,27 @@ for (const h of harnesses) {
       expect((await store.recentRejections(50)).some((r) => r.listingId === l.id)).toBe(true);
     });
 
+    it("reads the latest shown reading and recent ranges of many listings at once", async () => {
+      const a = await store.upsertListing(listing());
+      const b = await store.upsertListing(listing());
+      const none = await store.upsertListing(listing());
+      await store.insertObservation(observation(a.id, 410, "2026-10-01T10:00:00.000Z"));
+      await store.insertObservation(observation(a.id, 400, "2026-10-05T10:00:00.000Z"));
+      await store.insertObservation(observation(a.id, 1, "2026-10-06T10:00:00.000Z", "rejected"));
+      await store.insertObservation(observation(b.id, 350, "2026-10-04T10:00:00.000Z"));
+      const latest = await store.latestObservations([a.id, b.id, none.id]);
+      expect(Object.fromEntries(latest.map((o) => [o.listingId, o.price]))).toEqual({
+        [a.id]: 400,
+        [b.id]: 350,
+      });
+      const ranges = await store.priceRangesSince([a.id, b.id], "2026-10-03T00:00:00.000Z");
+      expect(ranges.map((r) => [r.listingId, r.price])).toEqual([
+        [a.id, 400],
+        [b.id, 350],
+      ]);
+      expect(await store.latestObservations([])).toEqual([]);
+    });
+
     it("runs sessions with ordered, resumable events and per-user counts", async () => {
       const user = await newUser();
       const s = await store.createSession({

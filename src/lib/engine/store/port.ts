@@ -235,7 +235,11 @@ export interface EngineStore {
   /* observations */
   insertObservation(o: ObservationInput): Promise<Observation>;
   latestObservation(listingId: string, opts?: { shownOnly?: boolean }): Promise<Observation | null>;
+  /** The latest shown (not rejected) reading of each listing, in one query. */
+  latestObservations(listingIds: string[]): Promise<Observation[]>;
   priceRanges(listingId: string, limit: number): Promise<PriceRange[]>;
+  /** Verified price ranges of these listings last seen at or after `sinceIso`. */
+  priceRangesSince(listingIds: string[], sinceIso: string): Promise<PriceRange[]>;
 
   /* fetch attempts */
   insertFetchAttempts(a: FetchAttempt[]): Promise<void>;

@@ -454,6 +454,30 @@ export class MemoryEngineStore implements EngineStore {
     return list[0] ? structuredClone(list[0]) : null;
   }
 
+  async latestObservations(listingIds: string[]): Promise<Observation[]> {
+    const out: Observation[] = [];
+    for (const id of new Set(listingIds)) {
+      const o = await this.latestObservation(id, { shownOnly: true });
+      if (o) out.push(o);
+    }
+    return out;
+  }
+
+  async priceRangesSince(listingIds: string[], sinceIso: string): Promise<PriceRange[]> {
+    const ids = new Set(listingIds);
+    return this.ranges
+      .filter((r) => ids.has(r.listingId) && r.lastSeenAt >= sinceIso)
+      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || b.id - a.id)
+      .map((r) => ({
+        listingId: r.listingId,
+        price: r.price,
+        availability: r.availability,
+        firstSeenAt: r.firstSeenAt,
+        lastSeenAt: r.lastSeenAt,
+        observationCount: r.observationCount,
+      }));
+  }
+
   async priceRanges(listingId: string, limit: number): Promise<PriceRange[]> {
     return this.ranges
       .filter((r) => r.listingId === listingId)

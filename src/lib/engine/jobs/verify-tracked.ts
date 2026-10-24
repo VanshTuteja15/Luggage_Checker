@@ -53,7 +53,11 @@ function jaccard(a: string[], b: string[]): number {
 }
 
 /** Is this reading the tracked bag? Barcode first, otherwise brand + size + line. */
-export function sameBag(pack: CategoryPack, item: TrackedItem, o: RawOffer): boolean {
+export function sameBag(
+  pack: CategoryPack,
+  item: Pick<TrackedItem, "name" | "brand" | "upc">,
+  o: Pick<RawOffer, "identifiers" | "brand" | "title" | "options">,
+): boolean {
   const upc = normaliseGtin(item.upc);
   const gtins = o.identifiers.filter((i) => i.kind === "gtin").map((i) => i.value);
   if (upc && gtins.length) return gtins.includes(upc);

@@ -13,7 +13,7 @@ import { engineConfig } from "./config";
 import { verifyTracked, type VerifyTrackedStats } from "./jobs/verify-tracked";
 import { luggagePack } from "./packs/luggage";
 import { callWorker, getEngine } from "./server";
-import { PgEngineStore } from "./store/pg";
+import { PgEngineStore, pgPoolOf } from "./store/pg";
 
 type Retention = { fetchAttempts: number; sessionEvents: number } | null;
 
@@ -26,9 +26,9 @@ export type EngineCronResult = (
 /** Retention policy: 180 days of fetch attempts and session events, applied daily. */
 async function applyRetention(): Promise<Retention> {
   const { rt } = getEngine();
-  if (!(rt.store instanceof PgEngineStore)) return null;
+  if (!pgPoolOf(rt.store)) return null;
   try {
-    return await rt.store.retention(180);
+    return await (rt.store as PgEngineStore).retention(180);
   } catch (err) {
     console.error("engine: retention failed", err);
     return null;
@@ -51,7 +51,8 @@ export async function runScheduledEngine(
   }
 
   const { rt } = getEngine();
-  if (!(rt.store instanceof PgEngineStore)) {
+  const pool = pgPoolOf(rt.store);
+  if (!pool) {
     return {
       mode: "unavailable",
       reason: "DATABASE_URL not set: the engine can't reach the tracked products",
@@ -62,7 +63,7 @@ export async function runScheduledEngine(
   const { stats, verifiedProductIds } = await verifyTracked(
     rt,
     luggagePack,
-    new PgTrackedBridge(rt.store.pool),
+    new PgTrackedBridge(pool),
     {
       sendAlert: sendPriceAlert,
       signal: AbortSignal.timeout(opts.timeLimitMs ?? 120_000),

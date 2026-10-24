@@ -10,7 +10,7 @@ import { Deadline } from "@/lib/search/deadline";
 import { DEFAULT_TIME_ZONE, localDate } from "@/lib/time/local";
 import { fetchTavilyUsage, tavilyConfigured, tavilyCreditStatus, tavilySearch } from "@/lib/tavily";
 import type { EngineRuntime } from "../recorder";
-import { PgEngineStore } from "../store/pg";
+import { pgPoolOf } from "../store/pg";
 import type { CategoryPack } from "../types";
 import { estimateDailyBudget } from "./budget";
 import { findEstimates, type EstimateDeps, type EstimateRequest, type EstimateResult } from "./run";
@@ -21,7 +21,8 @@ export type EstimateFinder = (req: EstimateRequest) => Promise<EstimateResult>;
 const memory = new MemoryEstimateStore();
 
 export function estimateStoreFor(rt: EngineRuntime): EstimateStore {
-  return rt.store instanceof PgEngineStore ? new PgEstimateStore(rt.store.pool) : memory;
+  const pool = pgPoolOf(rt.store);
+  return pool ? new PgEstimateStore(pool) : memory;
 }
 
 /** The month's Tavily usage (free to read). null when web estimates aren't configured. */
@@ -37,7 +38,7 @@ export function estimateDeps(
   pack: CategoryPack,
   sources: EstimateDeps["sources"],
 ): EstimateDeps {
-  const pool = rt.store instanceof PgEngineStore ? rt.store.pool : null;
+  const pool = pgPoolOf(rt.store);
   return {
     engine: rt.store,
     estimates: estimateStoreFor(rt),
