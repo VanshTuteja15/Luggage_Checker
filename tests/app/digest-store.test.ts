@@ -7,7 +7,14 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, describe, expect, it } from "vitest";
+import { bannerFor } from "@/lib/digest/status";
 import { MemoryDigestStore, PgDigestStore, type DigestStore } from "@/lib/digest/store";
+import { runTick, type TickDeps } from "@/lib/digest/tick";
+import { luggagePack } from "@/lib/engine/packs/luggage";
+import { SOURCE_SEED } from "@/lib/engine/registry";
+import { MemoryEngineStore } from "@/lib/engine/store/memory";
+import { CaptureMailer } from "@/lib/mailer";
+import { zonedTimeToUtc } from "@/lib/time/local";
 
 const PG_URL = process.env.ENGINE_TEST_DATABASE_URL;
 
@@ -46,6 +53,7 @@ const worlds: { name: string; make: () => Promise<World> }[] = [
               imageUrl: null,
               targetPrice: null,
               knownUrls: [],
+              lastCheckedAt: null,
             }),
           );
           if (opts?.reportEmail) store.legacy.set(userId, opts.reportEmail);
@@ -197,6 +205,52 @@ for (const w of worlds) {
       // 1 + 3 attempts on the daily, 1 on the test; the instant filter applies.
       expect(await store.emailsSentSince("2026-10-10T00:00:00.000Z")).toBeGreaterThanOrEqual(5);
       expect(await store.emailsSentSince("2026-10-10T15:30:00.000Z")).toBeGreaterThanOrEqual(1);
+    });
+
+    it("runs the scheduler on this store: prepare, one send under parallel ticks, partial failure, banner", async () => {
+      const { store, user } = await w.make();
+      const a = await user(["Echo Medium"]);
+      await store.ensureSettings(a.userId, []);
+      await store.updateSettings(a.userId, { recipients: ["ok@example.test", "bad@example.test"] });
+      await store.setChosen(a.userId, a.ids);
+      // Other accounts in a shared test database must not be ticked here (the sign-up
+      // trigger gave each an old-report address, so migrate them first, then switch off).
+      for (const id of await store.accountsToMigrate()) await store.ensureSettings(id, []);
+      for (const other of await store.enabledAccounts())
+        if (other.userId !== a.userId) await store.updateSettings(other.userId, { enabled: false });
+      const mailer = new CaptureMailer({ "bad@example.test": "That address was refused by the email service. Check it for typos." });
+      let now = zonedTimeToUtc("2026-10-10", "08:00", "America/Edmonton");
+      let prepares = 0;
+      const deps: TickDeps = {
+        store,
+        engine: new MemoryEngineStore(SOURCE_SEED),
+        pack: luggagePack,
+        sources: async () => SOURCE_SEED,
+        mailer,
+        appUrl: "https://luggage.example.test",
+        now: () => now,
+        sleep: async () => undefined,
+        dailyLimit: 1000,
+        prepare: async () => {
+          prepares++;
+          return { done: true, verified: 1, estimated: 0 };
+        },
+      };
+      await runTick(deps);
+      expect(prepares).toBe(1);
+      expect((await store.getDailyRun(a.userId, "2026-10-10"))?.preparedAt).not.toBeNull();
+      now = zonedTimeToUtc("2026-10-10", "09:00", "America/Edmonton");
+      await Promise.all([runTick(deps), runTick(deps), runTick(deps), runTick(deps)]);
+      now = zonedTimeToUtc("2026-10-10", "09:15", "America/Edmonton");
+      await runTick(deps);
+      expect(mailer.sent.map((m) => m.to)).toEqual(["ok@example.test"]);
+      const run = await store.getDailyRun(a.userId, "2026-10-10");
+      expect(run).toMatchObject({ status: "partial", productCount: 1 });
+      const settings = (await store.getSettings(a.userId))!;
+      expect(bannerFor(run, settings)).toBe(
+        "Today's 9:00 a.m. email didn't reach 1 of 2 people: That address was refused by the email service. Check it for typos.",
+      );
+      expect(prepares).toBe(1);
     });
   });
 }

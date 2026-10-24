@@ -41,6 +41,8 @@ export type TrackedChoice = {
   position: number | null;
   /** Store pages it was tracked from, to find its engine listings. */
   knownUrls: string[];
+  /** When the engine last re-checked its prices (products.last_checked_at). */
+  lastCheckedAt: string | null;
 };
 
 export type RunRecipient = {
@@ -109,6 +111,8 @@ export interface DigestStore {
   /** Claim today's daily run (INSERT … ON CONFLICT DO NOTHING). null = already claimed. */
   claimDaily(userId: string, localDate: string, claimedAt: string, notes: string[]): Promise<DigestRun | null>;
   updateRun(id: string, patch: RunPatch): Promise<void>;
+  /** Move a claimed run to "sending". True for exactly one caller (the second lock after the claim). */
+  lockForSending(id: string): Promise<boolean>;
   getDailyRun(userId: string, localDate: string): Promise<DigestRun | null>;
   listRuns(userId: string, sinceLocalDate: string): Promise<DigestRun[]>;
   /** Emails attempted by every account since this instant (the provider's daily limit). */
@@ -116,6 +120,8 @@ export interface DigestStore {
   testSendsSince(userId: string, sinceIso: string): Promise<number>;
   /** Accounts with the email switched on (the scheduler's work list). */
   enabledAccounts(): Promise<DigestSettings[]>;
+  /** Accounts whose old daily report was on and that have no email settings yet (R1.14). */
+  accountsToMigrate(): Promise<string[]>;
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
@@ -204,7 +210,7 @@ export class PgDigestStore implements DigestStore {
 
   async legacyReportEmail(userId: string): Promise<string | null> {
     const [r] = await this.q(
-      "SELECT NULLIF(btrim(report_email), '') AS email FROM user_settings WHERE user_id = $1",
+      "SELECT NULLIF(btrim(report_email), '') AS email FROM user_settings WHERE user_id = $1 AND daily_report IS NOT FALSE",
       [userId],
     ).catch(() => []);
     return (r?.email as string | null) ?? null;
@@ -220,7 +226,7 @@ export class PgDigestStore implements DigestStore {
   async listTracked(userId: string): Promise<TrackedChoice[]> {
     const rows = await this.q(
       `SELECT t.id AS tracked_id, p.id AS product_id, p.name, p.brand, p.model, p.color, p.upc, p.image_url,
-              t.target_price, d.position,
+              t.target_price, d.position, p.last_checked_at,
               COALESCE((SELECT array_agg(o.url) FROM retailer_offers o WHERE o.product_id = p.id AND o.url IS NOT NULL), '{}') AS urls
          FROM tracked_products t
          JOIN products p ON p.id = t.product_id
@@ -242,6 +248,7 @@ export class PgDigestStore implements DigestStore {
       chosen: r.position != null,
       position: r.position == null ? null : Number(r.position),
       knownUrls: (r.urls as string[]) ?? [],
+      lastCheckedAt: isoOrNull(r.last_checked_at),
     }));
   }
 
@@ -347,6 +354,14 @@ export class PgDigestStore implements DigestStore {
     await this.q(`UPDATE email_digest_runs SET ${sets.join(", ")} WHERE id = $1`, params);
   }
 
+  async lockForSending(id: string): Promise<boolean> {
+    const rows = await this.q(
+      "UPDATE email_digest_runs SET status = 'sending' WHERE id = $1 AND status IN ('claimed', 'preparing') RETURNING id",
+      [id],
+    );
+    return rows.length === 1;
+  }
+
   async getDailyRun(userId: string, localDate: string): Promise<DigestRun | null> {
     const [r] = await this.q(
       "SELECT * FROM email_digest_runs WHERE user_id = $1 AND local_date = $2 AND kind = 'daily'",
@@ -385,6 +400,15 @@ export class PgDigestStore implements DigestStore {
   async enabledAccounts(): Promise<DigestSettings[]> {
     const rows = await this.q("SELECT * FROM email_digest_settings WHERE enabled ORDER BY user_id");
     return rows.map(toSettings);
+  }
+
+  async accountsToMigrate(): Promise<string[]> {
+    const rows = await this.q(
+      `SELECT s.user_id FROM user_settings s
+        WHERE NULLIF(btrim(s.report_email), '') IS NOT NULL AND s.daily_report IS NOT FALSE
+          AND NOT EXISTS (SELECT 1 FROM email_digest_settings e WHERE e.user_id = s.user_id)`,
+    );
+    return rows.map((r) => String(r.user_id));
   }
 }
 
@@ -456,6 +480,7 @@ export class MemoryDigestStore implements DigestStore {
           chosen: i >= 0,
           position: i >= 0 ? i : null,
           knownUrls: t.knownUrls,
+          lastCheckedAt: t.lastCheckedAt,
         };
         return choice;
       })
@@ -531,6 +556,13 @@ export class MemoryDigestStore implements DigestStore {
     if (r) Object.assign(r, structuredClone(patch));
   }
 
+  async lockForSending(id: string): Promise<boolean> {
+    const r = this.runs.find((x) => x.id === id);
+    if (!r || (r.status !== "claimed" && r.status !== "preparing")) return false;
+    r.status = "sending";
+    return true;
+  }
+
   async getDailyRun(userId: string, localDate: string): Promise<DigestRun | null> {
     const r = this.runs.find(
       (x) => x.userId === userId && x.localDate === localDate && x.kind === "daily",
@@ -561,5 +593,9 @@ export class MemoryDigestStore implements DigestStore {
 
   async enabledAccounts(): Promise<DigestSettings[]> {
     return [...this.settings.values()].filter((s) => s.enabled).map((s) => structuredClone(s));
+  }
+
+  async accountsToMigrate(): Promise<string[]> {
+    return [...this.legacy.keys()].filter((id) => !this.settings.has(id));
   }
 }

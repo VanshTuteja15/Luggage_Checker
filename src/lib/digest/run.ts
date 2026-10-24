@@ -54,12 +54,26 @@ const GAP_MS = 600;
 
 const sleepReal = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** The settings row; created on first use with the old daily report's address (R1.14). */
+/**
+ * The settings row, created on first use (R1.14). An account whose old daily
+ * report was on keeps getting what it got: its report address becomes the
+ * first recipient and every tracked product is chosen (the old report covered
+ * them all). The owner can change both on Morning Email.
+ */
 export async function settingsFor(store: DigestStore, userId: string): Promise<DigestSettings> {
   const existing = await store.getSettings(userId);
   if (existing) return existing;
   const legacy = await store.legacyReportEmail(userId).catch(() => null);
-  return store.ensureSettings(userId, legacy ? [legacy.toLowerCase()] : []);
+  const settings = await store.ensureSettings(userId, legacy ? [legacy.toLowerCase()] : []);
+  if (legacy) {
+    const tracked = await store.listTracked(userId);
+    if (!tracked.some((t) => t.chosen))
+      await store.setChosen(
+        userId,
+        tracked.map((t) => t.productId),
+      );
+  }
+  return settings;
 }
 
 /** R1.7: the next email starts with a short note when yesterday's had a problem. */

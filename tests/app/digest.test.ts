@@ -48,6 +48,7 @@ function tracked(over: Partial<MemoryTracked> & Pick<MemoryTracked, "productId" 
     imageUrl: null,
     targetPrice: null,
     knownUrls: [],
+    lastCheckedAt: null,
     ...over,
   };
 }

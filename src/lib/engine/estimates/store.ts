@@ -42,6 +42,8 @@ export interface EstimateStore {
   addSpend(localDate: string, purpose: EstimatePurpose, credits: number): Promise<void>;
   recordRejections(rows: EstimateRejection[]): Promise<void>;
   recentRejections(limit: number): Promise<EstimateRejection[]>;
+  /** When this search was last paid for (expired or not), for the email's rotation. */
+  lastSearchedAt(key: string): Promise<string | null>;
 }
 
 export class MemoryEstimateStore implements EstimateStore {
@@ -52,6 +54,9 @@ export class MemoryEstimateStore implements EstimateStore {
   async cachedSearch(key: string, nowIso: string): Promise<CachedEstimateSearch | null> {
     const hit = this.searches.get(key);
     return hit && hit.expiresAt > nowIso ? structuredClone(hit) : null;
+  }
+  async lastSearchedAt(key: string): Promise<string | null> {
+    return this.searches.get(key)?.searchedAt ?? null;
   }
   async saveSearch(entry: CachedEstimateSearch): Promise<void> {
     this.searches.set(entry.key, structuredClone(entry));
@@ -91,6 +96,14 @@ export class PgEstimateStore implements EstimateStore {
       searchedAt: new Date(r.searched_at).toISOString(),
       expiresAt: new Date(r.expires_at).toISOString(),
     };
+  }
+
+  async lastSearchedAt(key: string): Promise<string | null> {
+    const { rows } = await this.pool.query(
+      "SELECT searched_at FROM web_estimate_searches WHERE cache_key = $1",
+      [key],
+    );
+    return rows[0] ? new Date(rows[0].searched_at).toISOString() : null;
   }
 
   async saveSearch(e: CachedEstimateSearch): Promise<void> {

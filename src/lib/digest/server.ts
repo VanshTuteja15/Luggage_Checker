@@ -13,8 +13,10 @@ import { luggagePack } from "@/lib/engine/packs/luggage";
 import { pgPoolOf } from "@/lib/engine/store/pg";
 import { getMailer, type Mailer } from "@/lib/mailer";
 import { ApiError } from "@/lib/supabase/server";
+import { serverDailyJobs, serverPrepare } from "./prepare";
 import { DigestError, type DigestDeps } from "./run";
 import { PgDigestStore } from "./store";
+import type { TickDeps } from "./tick";
 
 export const NO_DATABASE =
   "The morning email needs the price database, which isn't connected yet. The person who set up LuggageTracker can connect it.";
@@ -41,6 +43,18 @@ export function digestDeps(
     mailer: opts.mailer !== undefined ? opts.mailer : getMailer(),
     appUrl: appUrlFor(opts.req),
     now: opts.now ?? (() => new Date()),
+  };
+}
+
+/** The scheduler's dependencies: the email's, plus fresh prices and the daily engine jobs. */
+export function tickDeps(req?: NextRequest): TickDeps | null {
+  const base = digestDeps({ req });
+  if (!base) return null;
+  const { rt } = getEngine();
+  return {
+    ...base,
+    prepare: serverPrepare(rt, luggagePack),
+    dailyJobs: serverDailyJobs(rt),
   };
 }
 
