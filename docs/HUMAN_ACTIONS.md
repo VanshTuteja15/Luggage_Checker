@@ -39,6 +39,26 @@ Also set `APP_URL=https://<your app address>` so the links in the email work.
 
 **Check:** Morning Email says "Email is set up. It's sent from …". Add your address, tick a product, press **Send test now**; the email arrives within a minute and the send log shows "Sent".
 
+### V2-4. Turn on the 9:00 a.m. scheduler in Supabase (10 min) → the email arrives on time
+
+The app sends the email when something calls `POST /api/cron/tick`; Supabase calls it every 15 minutes. Do this after V2-2 and after the app is deployed with `CRON_SECRET` set.
+
+1. Supabase → **Database** → **Extensions**: make sure `pg_cron` and `pg_net` can be enabled (the script enables them).
+2. Supabase → **SQL Editor**, run once (replace the placeholders; the secret is the same `CRON_SECRET` the app has):
+   ```sql
+   select vault.create_secret('https://<your-app-address>', 'luggagetracker_app_url');
+   select vault.create_secret('<CRON_SECRET>', 'luggagetracker_cron_secret');
+   ```
+3. SQL Editor → paste all of `supabase/scheduler/schedule.sql` → **Run**. It shows one row, `luggagetracker-tick`, every 15 minutes.
+4. **Check** (after the next quarter hour): `select status_code, created from net._http_response order by created desc limit 5;` shows `200`. In the app, Morning Email → Send log shows today's email after the send time.
+5. To stop it: run `supabase/scheduler/unschedule.sql`. After rotating `CRON_SECRET`, update the Vault secret: `select vault.update_secret((select id from vault.secrets where name = 'luggagetracker_cron_secret'), '<new secret>');`
+
+**What happens on the first run:** the account's old daily-report address (set at sign-up to the account email) becomes the email's first recipient and every tracked product is chosen, exactly what the old daily report sent. Change both on Morning Email.
+
+**Fallbacks** (optional; running several triggers is safe, the app sends once a day):
+- **The worker** (if one runs): set `APP_URL=https://<your-app-address>` and the same `CRON_SECRET` in `worker/.env`; it then calls the tick every 15 minutes (Calgary time).
+- **Vercel Cron** (`vercel.json`) calls the old daily-report address once a day at 16:00 UTC (10:00 a.m. in summer, 9:00 a.m. in winter). Vercel Hobby runs it at any point in that hour and is for non-commercial use, so it is a last resort only.
+
 ## 1. Publish the UCP agent profile → unlocks 6–10 Shopify stores
 
 Shopify's Catalog MCP requires every call to carry the URL of a public JSON profile describing our agent.

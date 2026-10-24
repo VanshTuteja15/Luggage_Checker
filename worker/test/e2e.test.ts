@@ -53,6 +53,13 @@ describe.skipIf(!DB)("worker end to end (Postgres + pg-boss)", () => {
     await store.close();
   });
 
+  it("stores the morning email's tick schedule in pg-boss with the Calgary time zone (R1.17a)", async () => {
+    await queue.schedule("digest.tick", "*/15 * * * *", { tz: "America/Edmonton" });
+    await queue.schedule("digest.tick", "*/15 * * * *", { tz: "America/Edmonton" }); // idempotent
+    const { rows } = await store.pool.query("SELECT name, cron, timezone FROM pgboss.schedule WHERE name = 'digest.tick'");
+    expect(rows).toEqual([{ name: "digest.tick", cron: "*/15 * * * *", timezone: "America/Edmonton" }]);
+  });
+
   it("a signed job request runs the health job and records evidence in Postgres", async () => {
     const body = JSON.stringify({ name: "sources.health", data: { sourceIds: ["delsey-ca", "canadaluggagedepot"] } });
     const res = await fetch(`${base}/v1/jobs`, {

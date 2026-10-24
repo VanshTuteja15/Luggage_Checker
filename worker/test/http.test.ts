@@ -93,3 +93,27 @@ describe("MemoryQueue", () => {
     expect(q.completed.map((c) => c.result)).toEqual(["ok"]);
   });
 });
+
+describe("morning email fallback trigger (R1.17a)", () => {
+  it("posts to the app's tick with the cron secret, and does nothing without its settings", async () => {
+    const { callTick } = await import("../src/jobs");
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fake = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await callTick({} as NodeJS.ProcessEnv, fake)).toMatchObject({ status: null });
+    expect(calls).toHaveLength(0);
+    const r = await callTick({ APP_URL: "https://app.example.test/", CRON_SECRET: "s".repeat(40), NODE_ENV: "test" } as NodeJS.ProcessEnv, fake);
+    expect(r).toEqual({ status: 200 });
+    expect(calls[0].url).toBe("https://app.example.test/api/cron/tick");
+    expect(calls[0].init.method).toBe("POST");
+    expect((calls[0].init.headers as Record<string, string>)["x-cron-secret"]).toBe("s".repeat(40));
+  });
+
+  it("schedules the tick every 15 minutes in Calgary time", async () => {
+    const q = new MemoryQueue();
+    await q.schedule("digest.tick", "*/15 * * * *", { tz: "America/Edmonton" });
+    expect(q.schedules).toEqual([{ name: "digest.tick", cron: "*/15 * * * *", tz: "America/Edmonton" }]);
+  });
+});

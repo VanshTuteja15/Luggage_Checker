@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { BookmarkCheck, Globe, Loader2, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  AlertTriangle,
+  BookmarkCheck,
+  Globe,
+  Loader2,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import {
   ChangeBadge,
@@ -21,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { usd } from "@/lib/format";
 import {
   errorMessage,
+  useEmailOverview,
   useRefreshPrices,
   useTrackedProducts,
   useUntrackProducts,
@@ -97,6 +106,8 @@ export default function DashboardPage() {
   const { data: products, isLoading, isError, error, refetch } = useTrackedProducts(30, ready && authed);
   const untrack = useUntrackProducts();
   const refresh = useRefreshPrices();
+  // R1.7: today's email problem, also shown here (the page itself may be unreachable).
+  const emailBanner = useEmailOverview(ready && authed).data?.banner ?? null;
 
   const list = products ?? [];
   const drops = list.filter((p) => p.change < 0);
@@ -139,6 +150,20 @@ export default function DashboardPage() {
       subtitle="Your luggage price monitoring overview"
       actions={refreshAction}
     >
+      {emailBanner && (
+        <div
+          role="alert"
+          className="mb-6 flex flex-col gap-2 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden />
+            <span>{emailBanner}</span>
+          </p>
+          <Link href="/email" className="shrink-0 font-medium underline underline-offset-2">
+            Open Morning Email
+          </Link>
+        </div>
+      )}
       {isLoading ? (
         <>
           <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -7,7 +7,7 @@ import { PgBoss } from "pg-boss";
 import { poolConfig } from "@/lib/engine/store/pg";
 import { log } from "./log";
 
-export const JOB_NAMES = ["sources.health", "discover.source", "discover.refresh", "verify.tracked", "research.run"] as const;
+export const JOB_NAMES = ["sources.health", "discover.source", "discover.refresh", "verify.tracked", "research.run", "digest.tick"] as const;
 export type JobName = (typeof JOB_NAMES)[number];
 
 export function isJobName(v: unknown): v is JobName {
@@ -30,6 +30,8 @@ export interface JobQueue {
   stop(): Promise<void>;
   send(name: JobName, data: Record<string, unknown>, opts?: SendOptions): Promise<string | null>;
   work(name: JobName, handler: JobHandler, opts?: { concurrency?: number }): Promise<void>;
+  /** Run a job on a cron schedule, evaluated in a time zone (one schedule per name). */
+  schedule(name: JobName, cron: string, opts: { tz: string }): Promise<void>;
   stats(): Promise<Record<string, { queued: number; active: number }>>;
 }
 
@@ -84,6 +86,12 @@ export class PgBossQueue implements JobQueue {
     );
   }
 
+  async schedule(name: JobName, cron: string, opts: { tz: string }): Promise<void> {
+    await this.ensure(name);
+    // A missed occurrence (worker down) is not replayed: the tick catches up by itself.
+    await this.boss.schedule(name, cron, {}, { tz: opts.tz, singletonKey: `${name}:schedule`, retryLimit: 0, expireInSeconds: 600 });
+  }
+
   async stats(): Promise<Record<string, { queued: number; active: number }>> {
     const out: Record<string, { queued: number; active: number }> = {};
     for (const name of this.created) {
@@ -133,6 +141,13 @@ export class MemoryQueue implements JobQueue {
   async work(name: JobName, handler: JobHandler, opts: { concurrency?: number } = {}): Promise<void> {
     this.handlers.set(name, { handler, concurrency: opts.concurrency ?? 1, running: 0 });
     queueMicrotask(() => this.pump());
+  }
+
+  /** Schedules are recorded, not run: tests call the job directly. */
+  readonly schedules: { name: JobName; cron: string; tz: string }[] = [];
+
+  async schedule(name: JobName, cron: string, opts: { tz: string }): Promise<void> {
+    this.schedules.push({ name, cron, tz: opts.tz });
   }
 
   async stats(): Promise<Record<string, { queued: number; active: number }>> {

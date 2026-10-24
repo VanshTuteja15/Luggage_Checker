@@ -76,6 +76,15 @@ async function main(): Promise<void> {
   // Warm the robots cache and record a heartbeat per source at start-up.
   void queue.send("sources.health", {}, { singletonKey: "sources.health:startup" });
 
+  // Fallback trigger for the morning email (R1.17a); Supabase pg_cron is the primary one.
+  // Idempotent on the app side, so running both is safe.
+  if (process.env.APP_URL?.trim() && process.env.CRON_SECRET?.trim())
+    await queue
+      .schedule("digest.tick", "*/15 * * * *", { tz: "America/Edmonton" })
+      .then(() => log("info", "morning email tick scheduled every 15 minutes (America/Edmonton)"))
+      .catch((err: unknown) => log("error", "could not schedule the morning email tick", { err }));
+  else log("info", "morning email tick not scheduled here: APP_URL and CRON_SECRET aren't set");
+
   let stopping = false;
   const shutdown = async (signal: string) => {
     if (stopping) return;
