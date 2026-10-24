@@ -391,7 +391,10 @@ export function useSaveEmailSettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: EmailSettingsPatch) =>
-      apiFetch<{ settings: EmailSettingsPatch }>("/api/email/settings", { method: "PUT", json: patch }),
+      apiFetch<{ settings: EmailSettingsPatch }>("/api/email/settings", {
+        method: "PUT",
+        json: patch,
+      }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: emailKey }),
   });
 }
@@ -453,27 +456,33 @@ export function useAddToEmail() {
     onSuccess: ({ productId, newlyTracked }) => {
       invalidateProducts(qc);
       void qc.invalidateQueries({ queryKey: emailKey });
-      toast.success(newlyTracked ? "Tracked and added to the morning email" : "Added to the morning email", {
-        action: {
-          label: "Undo",
-          onClick: () => {
-            void (async () => {
-              try {
-                await apiFetch(`/api/email/products?productId=${encodeURIComponent(productId)}`, {
-                  method: "DELETE",
-                });
-                if (newlyTracked)
-                  await apiFetch("/api/track", { method: "DELETE", json: { productIds: [productId] } });
-                invalidateProducts(qc);
-                void qc.invalidateQueries({ queryKey: emailKey });
-                toast.info("Taken out of the morning email");
-              } catch (err) {
-                toast.error(errorMessage(err, "Couldn't undo that. Untick it on Morning Email."));
-              }
-            })();
+      toast.success(
+        newlyTracked ? "Tracked and added to the morning email" : "Added to the morning email",
+        {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              void (async () => {
+                try {
+                  await apiFetch(`/api/email/products?productId=${encodeURIComponent(productId)}`, {
+                    method: "DELETE",
+                  });
+                  if (newlyTracked)
+                    await apiFetch("/api/track", {
+                      method: "DELETE",
+                      json: { productIds: [productId] },
+                    });
+                  invalidateProducts(qc);
+                  void qc.invalidateQueries({ queryKey: emailKey });
+                  toast.info("Taken out of the morning email");
+                } catch (err) {
+                  toast.error(errorMessage(err, "Couldn't undo that. Untick it on Morning Email."));
+                }
+              })();
+            },
           },
         },
-      });
+      );
     },
     onError: (err) => toast.error(errorMessage(err, "Couldn't add that to the morning email")),
   });

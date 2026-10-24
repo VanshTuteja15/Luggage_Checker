@@ -120,7 +120,8 @@ export async function pricesFor(
     const freshness = freshnessOf(o);
     if (!l || !s || !freshness || o.price <= 0 || o.currency !== "CAD") continue;
     const at = Date.parse(o.asOf ?? o.fetchedAt);
-    const maxDays = freshness.kind === "feed" || freshness.kind === "manual" ? DATED_DAYS : LIVE_DAYS;
+    const maxDays =
+      freshness.kind === "feed" || freshness.kind === "manual" ? DATED_DAYS : LIVE_DAYS;
     if (!Number.isFinite(at) || nowMs - at > maxDays * 86_400_000) continue;
     offers.push({
       sourceId: s.id,

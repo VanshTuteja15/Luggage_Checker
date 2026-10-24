@@ -220,7 +220,9 @@ describe("product order and junk (R2.2, A2.2)", () => {
 });
 
 describe("web estimates join the verified product (A2.1)", () => {
-  const estimate = (o: Partial<AnswerOffer> & Pick<AnswerOffer, "sourceId" | "retailer" | "price">) =>
+  const estimate = (
+    o: Partial<AnswerOffer> & Pick<AnswerOffer, "sourceId" | "retailer" | "price">,
+  ) =>
     offer({
       method: "web_estimate",
       freshness: { kind: "estimate", foundAt: "2026-10-10T15:01:00Z" },
@@ -257,7 +259,11 @@ describe("web estimates join the verified product (A2.1)", () => {
     expect(products).toHaveLength(1);
     expect(products[0].lowestPrice).toBe(374.95);
     const rows = storeRows(products[0].offers);
-    expect(rows.map((r) => r.retailer)).toEqual(["Luggage City", "Canada Luggage Depot", "Amazon.ca"]);
+    expect(rows.map((r) => r.retailer)).toEqual([
+      "Luggage City",
+      "Canada Luggage Depot",
+      "Amazon.ca",
+    ]);
     const h = headlineFor(rows)!;
     expect(h.row.retailer).toBe("Luggage City");
     expect(h.confirmed?.retailer).toBe("Canada Luggage Depot");
@@ -293,7 +299,11 @@ describe("web estimates join the verified product (A2.1)", () => {
           title: "TUMI Alpha Carry-On",
           url: "https://www.amazon.ca/dp/B0ALPHA",
         }),
-        offer({ ...CLD, price: 434.95, title: "Samsonite Paralux Hardside Expandable Spinner Medium" }),
+        offer({
+          ...CLD,
+          price: 434.95,
+          title: "Samsonite Paralux Hardside Expandable Spinner Medium",
+        }),
         estimate({
           sourceId: "samsonite-ca",
           retailer: "Samsonite.ca",
@@ -305,7 +315,8 @@ describe("web estimates join the verified product (A2.1)", () => {
       ],
       luggagePack,
     );
-    const byPrice = (price: number) => products.find((p) => p.offers.some((o) => o.price === price))!;
+    const byPrice = (price: number) =>
+      products.find((p) => p.offers.some((o) => o.price === price))!;
     // TUMI's two verified pages stay two products; the estimate fits both, so joins neither.
     expect(byPrice(1095)).not.toBe(byPrice(1195));
     expect(byPrice(1050).offers).toHaveLength(1);

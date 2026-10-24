@@ -489,7 +489,11 @@ async function main(): Promise<void> {
       await c.query(
         "INSERT INTO web_estimate_spend (local_date, purpose, credits) VALUES ('2026-10-10', 'email', 3)",
       );
-      const estimateTables = ["web_estimate_searches", "web_estimate_spend", "web_estimate_rejections"];
+      const estimateTables = [
+        "web_estimate_searches",
+        "web_estimate_spend",
+        "web_estimate_rejections",
+      ];
       await asRole(c, "authenticated", userA, async () => {
         for (const t of estimateTables) {
           const { rows } = await c.query(`SELECT 1 FROM ${t}`);
@@ -511,7 +515,10 @@ async function main(): Promise<void> {
       });
       await asRole(c, "anon", null, async () => {
         for (const t of estimateTables)
-          check(`the anon key can't read ${t}`, (await expectError(c, `SELECT 1 FROM ${t}`)) !== null);
+          check(
+            `the anon key can't read ${t}`,
+            (await expectError(c, `SELECT 1 FROM ${t}`)) !== null,
+          );
       });
 
       /* ── Morning email (R1.3, R1.6) and groups (R7.2) ───────────── */
@@ -529,7 +536,12 @@ async function main(): Promise<void> {
             [userA],
           );
           const r = rows[0];
-          return r.enabled === true && r.t === "09:00:00" && r.timezone === "America/Edmonton" && r.recipients.length === 0;
+          return (
+            r.enabled === true &&
+            r.t === "09:00:00" &&
+            r.timezone === "America/Edmonton" &&
+            r.recipients.length === 0
+          );
         })(),
       );
       check(
@@ -580,9 +592,11 @@ async function main(): Promise<void> {
       );
       check(
         "group names are unique per account, ignoring case",
-        (await expectError(c, "INSERT INTO product_groups (user_id, name) VALUES ($1, 'CARRY-ONS')", [
-          userA,
-        ])) !== null,
+        (await expectError(
+          c,
+          "INSERT INTO product_groups (user_id, name) VALUES ($1, 'CARRY-ONS')",
+          [userA],
+        )) !== null,
       );
 
       await asRole(c, "authenticated", userA, async () => {
@@ -614,7 +628,8 @@ async function main(): Promise<void> {
         );
         check(
           "the owner can't change a daily run",
-          (await c.query("UPDATE email_digest_runs SET status = 'sent' WHERE kind = 'daily'")).rowCount === 0,
+          (await c.query("UPDATE email_digest_runs SET status = 'sent' WHERE kind = 'daily'"))
+            .rowCount === 0,
         );
         check(
           "the owner can't add someone else's product to a group",
@@ -626,13 +641,20 @@ async function main(): Promise<void> {
         );
       });
       await asRole(c, "authenticated", userB, async () => {
-        for (const t of ["email_digest_settings", "email_digest_products", "email_digest_runs", "product_groups", "product_group_members"]) {
+        for (const t of [
+          "email_digest_settings",
+          "email_digest_products",
+          "email_digest_runs",
+          "product_groups",
+          "product_group_members",
+        ]) {
           const { rows } = await c.query(`SELECT 1 FROM ${t}`);
           check(`another user can't see ${t}`, rows.length === 0);
         }
         check(
           "another user can't change the owner's recipients",
-          (await c.query("UPDATE email_digest_settings SET recipients = '{x@example.test}'")).rowCount === 0,
+          (await c.query("UPDATE email_digest_settings SET recipients = '{x@example.test}'"))
+            .rowCount === 0,
         );
       });
       await asRole(c, "anon", null, async () => {
@@ -663,7 +685,9 @@ async function main(): Promise<void> {
       );
       check(
         "a link status is ok or broken",
-        (await expectError(c, "UPDATE listings SET link_status = 'gone' WHERE id = $1", [listingId])) !== null,
+        (await expectError(c, "UPDATE listings SET link_status = 'gone' WHERE id = $1", [
+          listingId,
+        ])) !== null,
       );
     }
 
@@ -704,11 +728,15 @@ async function main(): Promise<void> {
 
     /* ── EngineStore contract against real Postgres ────────────────── */
     console.log(`\n${B}EngineStore contract (PgEngineStore)${X}`);
-    const vitest = spawnSync("npx", ["vitest", "run", "tests/engine/store.test.ts", "tests/app/digest-store.test.ts"], {
-      stdio: "inherit",
-      shell: process.platform === "win32",
-      env: { ...process.env, ENGINE_TEST_DATABASE_URL: url("fresh") },
-    });
+    const vitest = spawnSync(
+      "npx",
+      ["vitest", "run", "tests/engine/store.test.ts", "tests/app/digest-store.test.ts"],
+      {
+        stdio: "inherit",
+        shell: process.platform === "win32",
+        env: { ...process.env, ENGINE_TEST_DATABASE_URL: url("fresh") },
+      },
+    );
     check("store contract tests pass on Postgres", vitest.status === 0);
   } finally {
     if (KEEP) console.log(`\nContainer left running: ${url("fresh")}`);

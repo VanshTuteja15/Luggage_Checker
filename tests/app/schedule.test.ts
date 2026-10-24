@@ -72,7 +72,15 @@ function world(opts: { mailer?: CaptureMailer | null; recipients?: string[] } = 
   const setNow = (d: Date) => {
     now = d;
   };
-  return { deps, store, mailer, prepares, daily, setNow, recipients: opts.recipients ?? ["a@example.test"] };
+  return {
+    deps,
+    store,
+    mailer,
+    prepares,
+    daily,
+    setNow,
+    recipients: opts.recipients ?? ["a@example.test"],
+  };
 }
 
 async function setup(w: ReturnType<typeof world>) {

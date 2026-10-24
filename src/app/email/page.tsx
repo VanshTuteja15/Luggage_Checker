@@ -90,7 +90,11 @@ function ScheduleSection({ data }: { data: EmailOverview }) {
     timeZone !== data.settings.timeZone;
 
   return (
-    <Section id="email-schedule" title="Schedule" description="One email a day, at the time you pick">
+    <Section
+      id="email-schedule"
+      title="Schedule"
+      description="One email a day, at the time you pick"
+    >
       <div className="flex items-center justify-between gap-4">
         <div>
           <Label htmlFor="email-enabled" className="text-sm font-medium">
@@ -143,7 +147,11 @@ function ScheduleSection({ data }: { data: EmailOverview }) {
           disabled={!dirty || save.isPending || !/^\d{2}:\d{2}$/.test(sendTime)}
           className="gap-2"
         >
-          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+          {save.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Save className="h-4 w-4" aria-hidden />
+          )}
           {dirty ? "Save schedule" : "Saved"}
         </Button>
       </div>
@@ -207,13 +215,17 @@ function RecipientsSection({ data }: { data: EmailOverview }) {
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {recipients.map((r) => (
-            <li key={r.address} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <li
+              key={r.address}
+              className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{r.address}</p>
                 <p className="text-xs text-muted-foreground">
                   {r.lastError ? (
                     <span className="text-danger">
-                      Last error {r.lastErrorAt ? formatWeekdayDate(r.lastErrorAt, tz) : ""}: {r.lastError}
+                      Last error {r.lastErrorAt ? formatWeekdayDate(r.lastErrorAt, tz) : ""}:{" "}
+                      {r.lastError}
                     </span>
                   ) : r.lastDeliveredAt ? (
                     `Last delivered ${formatWeekdayDate(r.lastDeliveredAt, tz)} at ${formatTime(r.lastDeliveredAt, tz)}`
@@ -260,7 +272,11 @@ function RecipientsSection({ data }: { data: EmailOverview }) {
             aria-describedby={problem ? "email-add-problem" : undefined}
           />
         </div>
-        <Button type="submit" disabled={!draft.trim() || save.isPending || recipients.length >= 10} className="gap-2">
+        <Button
+          type="submit"
+          disabled={!draft.trim() || save.isPending || recipients.length >= 10}
+          className="gap-2"
+        >
           <Plus className="h-4 w-4" aria-hidden /> Add address
         </Button>
       </form>
@@ -273,7 +289,8 @@ function RecipientsSection({ data }: { data: EmailOverview }) {
       <div className="border-t border-border pt-4">
         <p className="mb-2 text-sm font-medium">Send a test now</p>
         <p className="mb-3 text-sm text-muted-foreground">
-          A real email with today&rsquo;s prices. It doesn&rsquo;t count as the daily email. Up to 5 an hour.
+          A real email with today&rsquo;s prices. It doesn&rsquo;t count as the daily email. Up to 5
+          an hour.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="flex-1">
@@ -304,7 +321,11 @@ function RecipientsSection({ data }: { data: EmailOverview }) {
               })
             }
           >
-            {test.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
+            {test.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Send className="h-4 w-4" aria-hidden />
+            )}
             Send test now
           </Button>
         </div>
@@ -360,23 +381,33 @@ function ProductsSection({ data }: { data: EmailOverview }) {
     );
 
   return (
-    <Section id="email-products" title="Products" description="Which products the email shows, in this order">
+    <Section
+      id="email-products"
+      title="Products"
+      description="Which products the email shows, in this order"
+    >
       <p className="text-sm font-medium" aria-live="polite">
         {order.length === 1 ? "1 product chosen" : `${order.length} products chosen`}
       </p>
 
       {order.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No products chosen yet. Tick products below or use &lsquo;Add to morning email&rsquo; on search results.
+          No products chosen yet. Tick products below or use &lsquo;Add to morning email&rsquo; on
+          search results.
         </p>
       ) : (
-        <ol className="divide-y divide-border rounded-lg border border-border" aria-label="Email order">
+        <ol
+          className="divide-y divide-border rounded-lg border border-border"
+          aria-label="Email order"
+        >
           {order.map((id, i) => {
             const p = byId.get(id);
             if (!p) return null;
             return (
               <li key={id} className="flex items-center gap-2 px-3 py-2">
-                <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{i + 1}.</span>
+                <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {i + 1}.
+                </span>
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {p.brand ? `${p.brand} · ` : ""}
                   {p.name}
@@ -423,11 +454,22 @@ function ProductsSection({ data }: { data: EmailOverview }) {
             variant="outline"
             size="sm"
             className="h-9"
-            onClick={() => setOrder((o) => [...o, ...shown.map((p) => p.productId).filter((id) => !o.includes(id))])}
+            onClick={() =>
+              setOrder((o) => [
+                ...o,
+                ...shown.map((p) => p.productId).filter((id) => !o.includes(id)),
+              ])
+            }
           >
             Select all{words.length ? " shown" : ""}
           </Button>
-          <Button variant="outline" size="sm" className="h-9" onClick={() => setOrder([])} disabled={order.length === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => setOrder([])}
+            disabled={order.length === 0}
+          >
             Clear
           </Button>
         </div>
@@ -454,7 +496,9 @@ function ProductsSection({ data }: { data: EmailOverview }) {
           );
         })}
         {shown.length === 0 && (
-          <li className="px-3 py-4 text-sm text-muted-foreground">No tracked product matches &ldquo;{filter}&rdquo;.</li>
+          <li className="px-3 py-4 text-sm text-muted-foreground">
+            No tracked product matches &ldquo;{filter}&rdquo;.
+          </li>
         )}
       </ul>
 
@@ -469,7 +513,11 @@ function ProductsSection({ data }: { data: EmailOverview }) {
           disabled={!dirty || save.isPending}
           className="gap-2"
         >
-          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
+          {save.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Save className="h-4 w-4" aria-hidden />
+          )}
           {dirty ? "Save products" : "Saved"}
         </Button>
       </div>
@@ -490,7 +538,11 @@ function PreviewSection() {
     >
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => preview.mutate()} disabled={preview.isPending} className="gap-2">
-          {preview.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+          {preview.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Eye className="h-4 w-4" aria-hidden />
+          )}
           {preview.data ? "Refresh preview" : "Show preview"}
         </Button>
         {preview.data && (
@@ -500,7 +552,10 @@ function PreviewSection() {
         )}
       </div>
       {preview.isError && (
-        <ErrorState message={errorMessage(preview.error, "The preview couldn't be made.")} onRetry={() => preview.mutate()} />
+        <ErrorState
+          message={errorMessage(preview.error, "The preview couldn't be made.")}
+          onRetry={() => preview.mutate()}
+        />
       )}
       {preview.data && (
         <div className="space-y-2">
@@ -532,7 +587,9 @@ function LogSection({ data }: { data: EmailOverview }) {
   return (
     <Section id="email-log" title="Send log" description="The last 30 days">
       {data.log.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing sent yet. The first email goes out at the next send time.</p>
+        <p className="text-sm text-muted-foreground">
+          Nothing sent yet. The first email goes out at the next send time.
+        </p>
       ) : (
         <>
           <table className="hidden w-full text-sm sm:table">
@@ -551,14 +608,20 @@ function LogSection({ data }: { data: EmailOverview }) {
                 <tr key={r.id} className="border-b border-border align-top last:border-0">
                   <td className="py-2 pr-3 whitespace-nowrap">{formatYmdWeekday(r.localDate)}</td>
                   <td className="py-2 pr-3">{r.kind === "test" ? "Test" : "Daily"}</td>
-                  <td className="py-2 pr-3 whitespace-nowrap">{r.sentAt ? formatTime(r.sentAt, tz) : "—"}</td>
+                  <td className="py-2 pr-3 whitespace-nowrap">
+                    {r.sentAt ? formatTime(r.sentAt, tz) : "—"}
+                  </td>
                   <td className="py-2 pr-3 text-right tabular-nums">{r.products}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">
                     {r.delivered}
                     {r.failed ? ` of ${r.delivered + r.failed}` : ""}
                   </td>
                   <td className="py-2">
-                    <span className={r.failed || r.status === "missed" ? "font-medium text-danger" : ""}>{r.statusText}</span>
+                    <span
+                      className={r.failed || r.status === "missed" ? "font-medium text-danger" : ""}
+                    >
+                      {r.statusText}
+                    </span>
                     {r.details.map((d) => (
                       <span key={d} className="block text-xs text-muted-foreground">
                         {d}
@@ -575,9 +638,14 @@ function LogSection({ data }: { data: EmailOverview }) {
                 <p className="font-medium">
                   {formatYmdWeekday(r.localDate)} · {r.kind === "test" ? "Test" : "Daily"}
                 </p>
-                <p className={r.failed || r.status === "missed" ? "text-danger" : "text-muted-foreground"}>
+                <p
+                  className={
+                    r.failed || r.status === "missed" ? "text-danger" : "text-muted-foreground"
+                  }
+                >
                   {r.statusText}
-                  {r.sentAt ? ` at ${formatTime(r.sentAt, tz)}` : ""} · {r.products} products · {r.delivered} delivered
+                  {r.sentAt ? ` at ${formatTime(r.sentAt, tz)}` : ""} · {r.products} products ·{" "}
+                  {r.delivered} delivered
                   {r.failed ? `, ${r.failed} failed` : ""}
                 </p>
                 {r.details.map((d) => (
@@ -602,7 +670,10 @@ export default function EmailPage() {
   const data = overview.data;
 
   return (
-    <AppLayout title="Morning Email" subtitle="Today's prices for the products you choose, every morning">
+    <AppLayout
+      title="Morning Email"
+      subtitle="Today's prices for the products you choose, every morning"
+    >
       {overview.isLoading || !ready ? (
         <div className="space-y-4" aria-busy="true">
           {[0, 1, 2].map((i) => (
@@ -617,7 +688,10 @@ export default function EmailPage() {
       ) : (
         <>
           {data.banner && (
-            <div role="alert" className="mb-6 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm">
+            <div
+              role="alert"
+              className="mb-6 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm"
+            >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden />
               <span>{data.banner}</span>
             </div>
@@ -637,13 +711,17 @@ export default function EmailPage() {
               </p>
               {!data.provider.configured && (
                 <p className="text-muted-foreground">
-                  {data.provider.missing ?? "The email service isn't connected."} You can still choose products and
-                  preview the email. The person who set up LuggageTracker can connect it.
+                  {data.provider.missing ?? "The email service isn't connected."} You can still
+                  choose products and preview the email. The person who set up LuggageTracker can
+                  connect it.
                 </p>
               )}
-              {data.provider.warning && <p className="font-medium text-warning">{data.provider.warning}</p>}
+              {data.provider.warning && (
+                <p className="font-medium text-warning">{data.provider.warning}</p>
+              )}
               <p className="text-muted-foreground">
-                {data.provider.sentLast24h} of {data.provider.dailyLimit} emails used in the last 24 hours.
+                {data.provider.sentLast24h} of {data.provider.dailyLimit} emails used in the last 24
+                hours.
               </p>
             </div>
           </div>

@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
       );
     return NextResponse.json({ status: run.status, providerId: r?.providerId ?? null });
   } catch (err) {
-    return emailRouteError(err, "POST /api/email/test", "The test email couldn't be sent. Try again.");
+    return emailRouteError(
+      err,
+      "POST /api/email/test",
+      "The test email couldn't be sent. Try again.",
+    );
   }
 }

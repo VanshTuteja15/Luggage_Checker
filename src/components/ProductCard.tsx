@@ -31,12 +31,7 @@ export function TrackedProductCard({
   return (
     <div className="card-surface flex flex-col gap-3 p-4">
       <div className="flex items-start gap-3">
-        <ProductThumb
-          id={product.id}
-          name={product.name}
-          imageUrl={product.imageUrl}
-          size={48}
-        />
+        <ProductThumb id={product.id} name={product.name} imageUrl={product.imageUrl} size={48} />
         <div className="min-w-0 flex-1">
           <Link
             href={`/products/${product.id}`}

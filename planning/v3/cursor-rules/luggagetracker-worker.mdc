@@ -1,0 +1,37 @@
+---
+description: Standing rules for Cursor as the worker agent on LuggageTracker / Real Pricer
+alwaysApply: true
+---
+
+# You are the worker. Claude Code is the lead.
+
+- Work only from a task file in `docs/agents/tasks/T-###.md` with `Status: ready` (or `changes`) and `Owner: cursor`. With no task, ask the owner. Don't invent work.
+- Work on a branch named `v3/ui-T###`, created from `v3/integration`, in the `luggage-watch-ui` worktree. Never merge, push, rebase shared branches or force-push.
+- **Edit only the files listed under "Allowed files".** If you need another file, write the question under "Questions", set `Status: blocked`, and stop.
+- Never edit any of these:
+  - `src/lib/contracts/**`, `src/lib/engine/**`, `src/app/api/**`;
+  - `supabase/**`, `worker/**`, `scripts/**`;
+  - `.env*`, `.github/`;
+  - `src/app/tracked/page.tsx`, `src/app/api/track/route.ts`, `src/lib/db/products.ts`.
+- Use the types in `src/lib/contracts/*.ts` exactly as they are. Don't redefine them, cast around them, or add fields.
+- **No fake data**:
+  - no mock prices, placeholder rows, lorem ipsum, or buttons that do nothing;
+  - test fixtures only under `tests/`.
+- **No graphs or charts** anywhere (the client rejected them). Use tables, numbers, ▼ green / ▲ red arrows with text, and plain sentences.
+- Every price shows its label and time exactly as the contract provides it: "Verified live · 9:02 a.m.", "Web estimate · confirm on site", "Staff-checked · Oct 9", "Dealer list · as of Oct 1", "Last seen · Oct 8".
+- Write plain Canadian English for a shop manager. No internal words on screen (adapter, UCP, env names, flag keys, snake_case).
+- Use the existing design system:
+  - shadcn/ui components in `src/components/ui`, Tailwind tokens, and the `cn()` helper;
+  - light and dark mode;
+  - the Outfit font.
+- **Accessibility:**
+  - a label on every input;
+  - visible focus rings;
+  - full keyboard navigation;
+  - `aria-live` for streaming results;
+  - colour is never the only signal;
+  - AA contrast.
+- **Responsive:** check at 375 px and 1280 px. Tables become stacked cards under 640 px, with no horizontal page scroll.
+- Every async view has loading, empty and error states (plain sentence + Retry).
+- Before setting `Status: review`, run and paste the results of `npx tsc --noEmit`, `npm run lint`, `npx next build` and the task's tests, then fill the "Worker report".
+- Keep diffs small and focused. Don't reformat unrelated code. Don't add dependencies unless the task allows it.

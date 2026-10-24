@@ -103,7 +103,13 @@ export default function DashboardPage() {
   const { authed, ready } = useStore();
   const [selected, setSelected] = useState<string[]>([]);
 
-  const { data: products, isLoading, isError, error, refetch } = useTrackedProducts(30, ready && authed);
+  const {
+    data: products,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useTrackedProducts(30, ready && authed);
   const untrack = useUntrackProducts();
   const refresh = useRefreshPrices();
   // R1.7: today's email problem, also shown here (the page itself may be unreachable).
@@ -118,10 +124,11 @@ export default function DashboardPage() {
   const activeRetailers = new Set(list.flatMap((p) => p.offers.map((o) => o.retailer)));
   const bestDrop = drops.slice().sort((a, b) => a.change - b.change)[0];
 
-  const staleest = list
-    .map((p) => p.lastCheckedAt)
-    .filter((d): d is string => !!d)
-    .sort()[0] ?? null;
+  const staleest =
+    list
+      .map((p) => p.lastCheckedAt)
+      .filter((d): d is string => !!d)
+      .sort()[0] ?? null;
 
   const refreshAction = (
     <div className="flex items-center gap-2">
@@ -174,7 +181,10 @@ export default function DashboardPage() {
           <TableSkeleton rows={6} />
         </>
       ) : isError ? (
-        <ErrorState message={errorMessage(error, "Couldn't load your products.")} onRetry={refetch} />
+        <ErrorState
+          message={errorMessage(error, "Couldn't load your products.")}
+          onRetry={refetch}
+        />
       ) : list.length === 0 ? (
         <EmptyState
           title="Nothing tracked yet"

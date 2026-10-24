@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const ref = crypto.randomUUID().slice(0, 8);
     console.error(`tick [${ref}]:`, err);
-    return NextResponse.json({ error: `The scheduled run didn't finish (ref ${ref}).` }, { status: 500 });
+    return NextResponse.json(
+      { error: `The scheduled run didn't finish (ref ${ref}).` },
+      { status: 500 },
+    );
   }
 }

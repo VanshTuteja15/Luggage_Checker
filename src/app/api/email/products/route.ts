@@ -16,13 +16,20 @@ export async function PUT(req: NextRequest) {
     const { userId } = await requireUser(req);
     const parsed = Replace.safeParse(await req.json().catch(() => null));
     if (!parsed.success)
-      return NextResponse.json({ error: "That list of products couldn't be read." }, { status: 400 });
+      return NextResponse.json(
+        { error: "That list of products couldn't be read." },
+        { status: 400 },
+      );
     const deps = digestDeps({ req, mailer: null });
     if (!deps) return NextResponse.json({ error: NO_DATABASE }, { status: 503 });
     const chosen = await deps.store.setChosen(userId, parsed.data.productIds);
     return NextResponse.json({ chosen });
   } catch (err) {
-    return emailRouteError(err, "PUT /api/email/products", "The products couldn't be saved. Try again.");
+    return emailRouteError(
+      err,
+      "PUT /api/email/products",
+      "The products couldn't be saved. Try again.",
+    );
   }
 }
 
@@ -39,7 +46,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: NOT_TRACKED }, { status: 404 });
     return NextResponse.json({ added: true });
   } catch (err) {
-    return emailRouteError(err, "POST /api/email/products", "The product couldn't be added. Try again.");
+    return emailRouteError(
+      err,
+      "POST /api/email/products",
+      "The product couldn't be added. Try again.",
+    );
   }
 }
 
@@ -55,6 +66,10 @@ export async function DELETE(req: NextRequest) {
     await deps.store.removeChosen(userId, parsed.data.productId);
     return NextResponse.json({ removed: true });
   } catch (err) {
-    return emailRouteError(err, "DELETE /api/email/products", "The product couldn't be removed. Try again.");
+    return emailRouteError(
+      err,
+      "DELETE /api/email/products",
+      "The product couldn't be removed. Try again.",
+    );
   }
 }

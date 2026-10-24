@@ -26,7 +26,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const ref = crypto.randomUUID().slice(0, 8);
     console.error(`daily-report [${ref}]:`, err);
-    return NextResponse.json({ error: `The morning email run didn't finish (ref ${ref}).` }, { status: 500 });
+    return NextResponse.json(
+      { error: `The morning email run didn't finish (ref ${ref}).` },
+      { status: 500 },
+    );
   }
 }
 

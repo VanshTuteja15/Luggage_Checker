@@ -151,8 +151,7 @@ export async function composeDigest(
     });
   }
 
-  const note =
-    opts.note !== undefined ? opts.note : await previousNote(deps.store, userId, today);
+  const note = opts.note !== undefined ? opts.note : await previousNote(deps.store, userId, today);
   const view = buildDigest({
     now,
     timeZone: settings.timeZone,
@@ -206,8 +205,11 @@ export async function deliver(
         sent = true;
         error = null;
       } catch (err) {
-        error = err instanceof Error ? err.message : "The email service couldn't send this message.";
-        console.error(`digest: send to ${maskEmail(address)} failed (attempt ${attempts}): ${error}`);
+        error =
+          err instanceof Error ? err.message : "The email service couldn't send this message.";
+        console.error(
+          `digest: send to ${maskEmail(address)} failed (attempt ${attempts}): ${error}`,
+        );
         if (isPermanent(error)) break;
       }
     }
@@ -297,7 +299,7 @@ export async function sendTest(
     status,
     sentAt: status === "failed" ? null : deps.now().toISOString(),
     recipients,
-    error: status === "failed" ? recipients[0]?.error ?? "The email couldn't be sent." : null,
+    error: status === "failed" ? (recipients[0]?.error ?? "The email couldn't be sent.") : null,
   };
   await deps.store.updateRun(run.id, patch);
   return { run: { ...run, ...patch }, composed };

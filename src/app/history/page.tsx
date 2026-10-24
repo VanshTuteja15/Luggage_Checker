@@ -54,7 +54,10 @@ export default function HistoryPage() {
   const [retailer, setRetailer] = useState(ALL);
 
   // A week more than the range, so the first change in range has the price before it.
-  const { data, isLoading, isError, error, refetch } = useTrackedProducts(range + 8, ready && authed);
+  const { data, isLoading, isError, error, refetch } = useTrackedProducts(
+    range + 8,
+    ready && authed,
+  );
   const tracked = useMemo(() => data ?? [], [data]);
   const today = localDate(new Date());
   const from = addDays(today, -(range - 1));
@@ -95,7 +98,10 @@ export default function HistoryPage() {
       {isLoading ? (
         <TableSkeleton rows={6} />
       ) : isError ? (
-        <ErrorState message={errorMessage(error, "Couldn't load price history.")} onRetry={refetch} />
+        <ErrorState
+          message={errorMessage(error, "Couldn't load price history.")}
+          onRetry={refetch}
+        />
       ) : tracked.length === 0 ? (
         <EmptyState
           title="No history yet"
@@ -114,7 +120,11 @@ export default function HistoryPage() {
               <span className="block text-xs font-medium text-muted-foreground" id="range-label">
                 Period
               </span>
-              <div className="flex rounded-md border border-border text-sm" role="group" aria-labelledby="range-label">
+              <div
+                className="flex rounded-md border border-border text-sm"
+                role="group"
+                aria-labelledby="range-label"
+              >
                 {([7, 30, 90] as const).map((d) => (
                   <button
                     key={d}
@@ -122,7 +132,9 @@ export default function HistoryPage() {
                     onClick={() => setRange(d)}
                     aria-pressed={range === d}
                     className={`flex-1 px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                      range === d ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
+                      range === d
+                        ? "bg-muted font-medium"
+                        : "text-muted-foreground hover:bg-muted/50"
                     }`}
                   >
                     {d} days
@@ -171,7 +183,10 @@ export default function HistoryPage() {
           {/* Biggest drops this week */}
           <section className="mb-8" aria-labelledby="drops-title">
             <div id="drops-title">
-              <SectionTitle title="Biggest drops this week" description="The last 7 days, largest first" />
+              <SectionTitle
+                title="Biggest drops this week"
+                description="The last 7 days, largest first"
+              />
             </div>
             <div className="card-surface p-4">
               {drops.length === 0 ? (
@@ -179,13 +194,22 @@ export default function HistoryPage() {
               ) : (
                 <ol className="space-y-2">
                   {drops.map((c, i) => (
-                    <li key={`${c.productId}-${c.retailer}-${c.date}`} className="flex gap-3 text-sm">
-                      <span className="w-5 shrink-0 text-right tabular-nums text-muted-foreground">{i + 1}.</span>
+                    <li
+                      key={`${c.productId}-${c.retailer}-${c.date}`}
+                      className="flex gap-3 text-sm"
+                    >
+                      <span className="w-5 shrink-0 text-right tabular-nums text-muted-foreground">
+                        {i + 1}.
+                      </span>
                       <span className="min-w-0">
-                        <Link href={`/products/${c.productId}`} className="font-medium hover:text-primary">
+                        <Link
+                          href={`/products/${c.productId}`}
+                          className="font-medium hover:text-primary"
+                        >
                           {c.productName}
                         </Link>{" "}
-                        at {c.retailer}: {usd(c.oldPrice)} → <strong className="tabular-nums">{usd(c.newPrice)}</strong>{" "}
+                        at {c.retailer}: {usd(c.oldPrice)} →{" "}
+                        <strong className="tabular-nums">{usd(c.newPrice)}</strong>{" "}
                         <ChangeCell c={c} />{" "}
                         <span className="text-muted-foreground">· {formatYmdWeekday(c.date)}</span>
                       </span>
@@ -225,7 +249,10 @@ export default function HistoryPage() {
                       <tr key={`${c.productId}-${c.retailer}-${c.date}`}>
                         <td className="whitespace-nowrap px-4 py-3">{formatYmdWeekday(c.date)}</td>
                         <td className="px-4 py-3">
-                          <Link href={`/products/${c.productId}`} className="font-medium hover:text-primary">
+                          <Link
+                            href={`/products/${c.productId}`}
+                            className="font-medium hover:text-primary"
+                          >
                             {c.productName}
                           </Link>
                           <p className="text-xs text-muted-foreground">{c.brand}</p>
@@ -243,7 +270,10 @@ export default function HistoryPage() {
                 </table>
                 <ul className="divide-y divide-border sm:hidden">
                   {changes.map((c) => (
-                    <li key={`${c.productId}-${c.retailer}-${c.date}`} className="space-y-0.5 p-3 text-sm">
+                    <li
+                      key={`${c.productId}-${c.retailer}-${c.date}`}
+                      className="space-y-0.5 p-3 text-sm"
+                    >
                       <Link href={`/products/${c.productId}`} className="block font-medium">
                         {c.productName}
                       </Link>
@@ -263,7 +293,10 @@ export default function HistoryPage() {
           {/* Comparison */}
           <section aria-labelledby="compare-title">
             <div id="compare-title">
-              <SectionTitle title="Lowest price by product" description="Today, a week ago and a month ago" />
+              <SectionTitle
+                title="Lowest price by product"
+                description="Today, a week ago and a month ago"
+              />
             </div>
             <div className="card-surface">
               <table className="hidden w-full text-sm sm:table">
@@ -280,7 +313,10 @@ export default function HistoryPage() {
                   {comparison.map((row) => (
                     <tr key={row.product.id}>
                       <td className="px-4 py-3">
-                        <Link href={`/products/${row.product.id}`} className="font-medium hover:text-primary">
+                        <Link
+                          href={`/products/${row.product.id}`}
+                          className="font-medium hover:text-primary"
+                        >
                           {row.product.name}
                         </Link>
                         <p className="text-xs text-muted-foreground">{row.product.brand}</p>
@@ -309,7 +345,9 @@ export default function HistoryPage() {
                     </Link>
                     <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
                       <dt className="text-muted-foreground">Now</dt>
-                      <dd className="text-right font-semibold">{row.current === null ? "—" : usd(row.current)}</dd>
+                      <dd className="text-right font-semibold">
+                        {row.current === null ? "—" : usd(row.current)}
+                      </dd>
                       <dt className="text-muted-foreground">7 days ago</dt>
                       <dd className="text-right">{row.ago7 === null ? "—" : usd(row.ago7)}</dd>
                       <dt className="text-muted-foreground">30 days ago</dt>

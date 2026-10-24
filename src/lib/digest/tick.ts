@@ -39,7 +39,13 @@ export type PrepareResult = {
 export type PrepareFn = (
   userId: string,
   chosen: TrackedChoice[],
-  ctx: { now: Date; since: Date; deadlineAt: number; storeIds: ReadonlySet<string> | null; timeZone: string },
+  ctx: {
+    now: Date;
+    since: Date;
+    deadlineAt: number;
+    storeIds: ReadonlySet<string> | null;
+    timeZone: string;
+  },
 ) => Promise<PrepareResult>;
 
 export type TickDeps = DigestDeps & {
@@ -65,7 +71,13 @@ export type TickResult = {
   accounts: AccountTick[];
 };
 
-const TERMINAL: ReadonlySet<RunStatus> = new Set(["sent", "partial", "failed", "missed", "skipped"]);
+const TERMINAL: ReadonlySet<RunStatus> = new Set([
+  "sent",
+  "partial",
+  "failed",
+  "missed",
+  "skipped",
+]);
 
 /** The send lock was taken but nothing finished after this long: the send was cut off. */
 const STALE_SENDING_MS = 30 * 60_000;
@@ -112,7 +124,12 @@ async function runPrepare(
   });
 }
 
-async function send(deps: TickDeps, s: DigestSettings, run: DigestRun, notes: string[]): Promise<RunStatus> {
+async function send(
+  deps: TickDeps,
+  s: DigestSettings,
+  run: DigestRun,
+  notes: string[],
+): Promise<RunStatus> {
   const finish = async (patch: RunPatch & { status: RunStatus }) => {
     await deps.store.updateRun(run.id, { ...patch, notes });
     return patch.status;
@@ -156,7 +173,11 @@ async function send(deps: TickDeps, s: DigestSettings, run: DigestRun, notes: st
   });
 }
 
-async function tickAccount(deps: TickDeps, s: DigestSettings, budgetMs: number): Promise<AccountTick> {
+async function tickAccount(
+  deps: TickDeps,
+  s: DigestSettings,
+  budgetMs: number,
+): Promise<AccountTick> {
   const now = deps.now();
   const plan = planFor(now, s.sendTime, s.timeZone);
   const out: AccountTick = {
@@ -200,8 +221,11 @@ async function tickAccount(deps: TickDeps, s: DigestSettings, budgetMs: number):
     if (!run || run.preparedAt || run.status === "sending") return out;
     if (run.status === "claimed") await deps.store.updateRun(run.id, { status: "preparing" });
     const res = await runPrepare(deps, s, plan, budgetMs);
-    out.actions.push(res ? `prepare: ${res.verified} re-checked, ${res.estimated} estimated` : "prepare skipped");
-    if (!res || res.done) await deps.store.updateRun(run.id, { preparedAt: now.toISOString(), status: "claimed" });
+    out.actions.push(
+      res ? `prepare: ${res.verified} re-checked, ${res.estimated} estimated` : "prepare skipped",
+    );
+    if (!res || res.done)
+      await deps.store.updateRun(run.id, { preparedAt: now.toISOString(), status: "claimed" });
     out.status = "claimed";
     return out;
   }
@@ -218,7 +242,8 @@ async function tickAccount(deps: TickDeps, s: DigestSettings, budgetMs: number):
     if (!run.preparedAt) {
       // The prepare window was missed (app down at send − 60): a short re-check first.
       const res = await runPrepare(deps, s, plan, Math.min(budgetMs, 40_000)).catch(() => null);
-      if (res) out.actions.push(`quick prepare: ${res.verified} re-checked, ${res.estimated} estimated`);
+      if (res)
+        out.actions.push(`quick prepare: ${res.verified} re-checked, ${res.estimated} estimated`);
       await deps.store.updateRun(run.id, { preparedAt: deps.now().toISOString() });
     }
     try {
@@ -238,7 +263,10 @@ async function tickAccount(deps: TickDeps, s: DigestSettings, budgetMs: number):
 }
 
 /** One tick for every account with the email switched on. Never throws for one account's problem. */
-export async function runTick(deps: TickDeps, opts: { emailOnly?: boolean } = {}): Promise<TickResult> {
+export async function runTick(
+  deps: TickDeps,
+  opts: { emailOnly?: boolean } = {},
+): Promise<TickResult> {
   const now = deps.now();
   const budgetMs = deps.budgetMs ?? 150_000;
   let daily: Record<string, unknown> | null = null;
@@ -258,7 +286,13 @@ export async function runTick(deps: TickDeps, opts: { emailOnly?: boolean } = {}
       accounts.push(await tickAccount(deps, s, budgetMs));
     } catch (err) {
       console.error(`tick: account ${s.userId.slice(0, 8)} failed`, err);
-      accounts.push({ account: s.userId.slice(0, 8), localDate: "", phase: "early", actions: ["error"], status: null });
+      accounts.push({
+        account: s.userId.slice(0, 8),
+        localDate: "",
+        phase: "early",
+        actions: ["error"],
+        status: null,
+      });
     }
   }
   return { at: now.toISOString(), daily, accounts };

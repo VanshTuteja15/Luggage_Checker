@@ -33,7 +33,10 @@ const b64url = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64ur
 function token(): { access_token: string; expires_at: number } {
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const payload = { sub: USER_ID, email: EMAIL, role: "authenticated", aud: "authenticated", exp };
-  return { access_token: `${b64url({ alg: "HS256", typ: "JWT" })}.${b64url(payload)}.local`, expires_at: exp };
+  return {
+    access_token: `${b64url({ alg: "HS256", typ: "JWT" })}.${b64url(payload)}.local`,
+    expires_at: exp,
+  };
 }
 
 const user = {
@@ -85,10 +88,33 @@ async function seed(url: string): Promise<void> {
     );
     // Products the local engine has real readings for (from engine:research runs).
     const bags = [
-      ["e2e-paralux-medium", "Samsonite Paralux Hardside Spinner Medium", "Samsonite", "Paralux", "Black", 440,
-        "https://www.canadaluggagedepot.ca/products/samsonite-paralux-hardside-expandable-spinner-medium-luggage"],
-      ["e2e-alur-carry-on", "Delsey ALU'R 19-Inch Aluminum Carry-On", "Delsey", "ALU'R", "", null, null],
-      ["e2e-tumi-19-degree", "TUMI 19 Degree Aluminum International Carry-On", "TUMI", "19 Degree Aluminum", "", null, null],
+      [
+        "e2e-paralux-medium",
+        "Samsonite Paralux Hardside Spinner Medium",
+        "Samsonite",
+        "Paralux",
+        "Black",
+        440,
+        "https://www.canadaluggagedepot.ca/products/samsonite-paralux-hardside-expandable-spinner-medium-luggage",
+      ],
+      [
+        "e2e-alur-carry-on",
+        "Delsey ALU'R 19-Inch Aluminum Carry-On",
+        "Delsey",
+        "ALU'R",
+        "",
+        null,
+        null,
+      ],
+      [
+        "e2e-tumi-19-degree",
+        "TUMI 19 Degree Aluminum International Carry-On",
+        "TUMI",
+        "19 Degree Aluminum",
+        "",
+        null,
+        null,
+      ],
     ] as const;
     for (const [slug, name, brand, model, color, target, url] of bags) {
       const { rows } = await pool.query(
@@ -138,7 +164,8 @@ async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string)
   const table = u.pathname.slice("/rest/v1/".length);
   if (!IDENT.test(table)) return send(res, 400, { message: "bad table" });
   const select = (u.searchParams.get("select") ?? "*").split(",").map((c) => c.trim());
-  if (!select.every((c) => c === "*" || IDENT.test(c))) return send(res, 400, { message: "unsupported select" });
+  if (!select.every((c) => c === "*" || IDENT.test(c)))
+    return send(res, 400, { message: "unsupported select" });
   const where: string[] = [];
   const params: unknown[] = [];
   let order = "";
@@ -161,7 +188,10 @@ async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string)
     const op = raw.slice(0, dot);
     const value = raw.slice(dot + 1);
     if (op === "in") {
-      const list = value.replace(/^\(|\)$/g, "").split(",").map((v) => v.replace(/^"|"$/g, ""));
+      const list = value
+        .replace(/^\(|\)$/g, "")
+        .split(",")
+        .map((v) => v.replace(/^"|"$/g, ""));
       params.push(list);
       where.push(`${key}::text = ANY($${params.length}::text[])`);
     } else if (op === "is") {
@@ -176,7 +206,15 @@ async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string)
     connectionString: dbUrl,
     max: 2,
     // PostgREST returns dates as YYYY-MM-DD; the app compares them as strings.
-    types: { getTypeParser: (oid: number, format?: string) => (oid === 1082 ? (v: string) => v : (pgTypes.getTypeParser as (o: number, f?: string) => (v: string) => unknown)(oid, format)) },
+    types: {
+      getTypeParser: (oid: number, format?: string) =>
+        oid === 1082
+          ? (v: string) => v
+          : (pgTypes.getTypeParser as (o: number, f?: string) => (v: string) => unknown)(
+              oid,
+              format,
+            ),
+    },
   });
   const client = await restPool.connect();
   try {
@@ -190,11 +228,20 @@ async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string)
     const { rows } = await client.query(sql, params);
     await client.query("COMMIT");
     const numeric = rows.map((r) =>
-      Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === "string" && /^-?\d+\.\d+$/.test(v) ? Number(v) : v])),
+      Object.fromEntries(
+        Object.entries(r).map(([k, v]) => [
+          k,
+          typeof v === "string" && /^-?\d+\.\d+$/.test(v) ? Number(v) : v,
+        ]),
+      ),
     );
     if ((req.headers.accept ?? "").includes("vnd.pgrst.object")) {
       if (numeric.length !== 1)
-        return send(res, 406, { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned", details: `The result contains ${numeric.length} rows` });
+        return send(res, 406, {
+          code: "PGRST116",
+          message: "JSON object requested, multiple (or no) rows returned",
+          details: `The result contains ${numeric.length} rows`,
+        });
       return send(res, 200, numeric[0]);
     }
     return send(res, 200, numeric);
@@ -221,7 +268,10 @@ async function main(): Promise<void> {
         const body = await readJson(req);
         if (grant === "refresh_token") return send(res, 200, session());
         if (body.email === EMAIL && body.password === PASSWORD) return send(res, 200, session());
-        return send(res, 400, { error: "invalid_grant", error_description: "Invalid login credentials" });
+        return send(res, 400, {
+          error: "invalid_grant",
+          error_description: "Invalid login credentials",
+        });
       }
       if (path === "/auth/v1/user" && req.method === "GET") {
         const auth = req.headers.authorization ?? "";
@@ -239,7 +289,9 @@ async function main(): Promise<void> {
       return send(res, 501, { message: "not part of the local stand-in" });
     })();
   }).listen(PORT, "127.0.0.1", () => {
-    console.log(`local auth stand-in on http://127.0.0.1:${PORT} · sign in as ${EMAIL} / ${PASSWORD}`);
+    console.log(
+      `local auth stand-in on http://127.0.0.1:${PORT} · sign in as ${EMAIL} / ${PASSWORD}`,
+    );
   });
 }
 

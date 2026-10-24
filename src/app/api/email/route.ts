@@ -58,10 +58,17 @@ export async function GET(req: NextRequest) {
         position: t.position,
       })),
       log: logRows(runs),
-      banner: bannerFor(runs.find((r) => r.kind === "daily" && r.localDate === today) ?? null, settings),
+      banner: bannerFor(
+        runs.find((r) => r.kind === "daily" && r.localDate === today) ?? null,
+        settings,
+      ),
       timeZones: CANADIAN_TIME_ZONES,
     });
   } catch (err) {
-    return emailRouteError(err, "GET /api/email", "The morning email settings couldn't be loaded. Try again.");
+    return emailRouteError(
+      err,
+      "GET /api/email",
+      "The morning email settings couldn't be loaded. Try again.",
+    );
   }
 }

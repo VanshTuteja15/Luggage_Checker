@@ -38,7 +38,9 @@ const PARALUX = "11111111-1111-4111-8111-111111111111";
 const CHATELET = "22222222-2222-4222-8222-222222222222";
 const ALPHA = "33333333-3333-4333-8333-333333333333";
 
-function tracked(over: Partial<MemoryTracked> & Pick<MemoryTracked, "productId" | "name" | "brand">): MemoryTracked {
+function tracked(
+  over: Partial<MemoryTracked> & Pick<MemoryTracked, "productId" | "name" | "brand">,
+): MemoryTracked {
   return {
     userId: USER,
     trackedProductId: `t-${over.productId}`,
@@ -60,7 +62,13 @@ async function seedEngine(): Promise<MemoryEngineStore> {
     url: string,
     title: string,
     brand: string,
-    readings: { price: number; at: string; adapter?: PriceMethod; availability?: Availability; asOf?: string }[],
+    readings: {
+      price: number;
+      at: string;
+      adapter?: PriceMethod;
+      availability?: Availability;
+      asOf?: string;
+    }[],
     colour: string | null = null,
   ) => {
     const l = await engine.upsertListing({
@@ -115,7 +123,14 @@ async function seedEngine(): Promise<MemoryEngineStore> {
     "https://www.amazon.ca/Samsonite-Paralux-Hardside-Spinner-Medium/dp/B0FQ7BKSXH",
     "Samsonite Paralux Hardside Spinner Medium",
     "Samsonite",
-    [{ price: 419.99, at: "2026-10-10T15:01:00.000Z", adapter: "web_estimate", availability: "unknown" }],
+    [
+      {
+        price: 419.99,
+        at: "2026-10-10T15:01:00.000Z",
+        adapter: "web_estimate",
+        availability: "unknown",
+      },
+    ],
   );
   await add(
     "bentley",
@@ -184,7 +199,12 @@ async function setup(opts: { mailer?: CaptureMailer | null; dailyLimit?: number 
         brand: "Delsey",
         model: "Chatelet Air 2.0",
       }),
-      tracked({ productId: ALPHA, name: "TUMI Alpha International Carry-On", brand: "TUMI", model: "Alpha" }),
+      tracked({
+        productId: ALPHA,
+        name: "TUMI Alpha International Carry-On",
+        brand: "TUMI",
+        model: "Alpha",
+      }),
       tracked({ userId: OTHER, productId: ALPHA, name: "TUMI Alpha", brand: "TUMI" }),
     ],
     () => NOW,
@@ -263,7 +283,9 @@ describe("morning email content (A1.2)", () => {
       "1 target hit. Couldn't check today: U.N. Luggage.",
     ]);
     expect(view.footer.emailUrl).toBe("https://luggage.example.test/email");
-    expect(view.footer.schedule).toBe("Sent every day at 9:00 a.m., Mountain (Calgary, Edmonton) time.");
+    expect(view.footer.schedule).toBe(
+      "Sent every day at 9:00 a.m., Mountain (Calgary, Edmonton) time.",
+    );
   });
 
   it("sends HTML and plain text, with no script, image, pixel or chart", async () => {
@@ -274,7 +296,9 @@ describe("morning email content (A1.2)", () => {
     expect(m.to).toBe("owner@example.test");
     expect(m.subject).toBe("[Test] Luggage prices · Sat Oct 10 · 1 drop · 1 target hit");
     expect(m.text).toContain("SAMSONITE PARALUX HARDSIDE SPINNER MEDIUM");
-    expect(m.text).toContain("Prices are each store's listed price in CAD before GST/HST and shipping");
+    expect(m.text).toContain(
+      "Prices are each store's listed price in CAD before GST/HST and shipping",
+    );
     expect(m.html).toContain("Out of stock everywhere we checked");
     expect(m.html).toContain("Change products or recipients");
     for (const bad of [/<script/i, /<img/i, /<svg/i, /<canvas/i, /recharts/i, /sparkline/i])
@@ -327,7 +351,9 @@ describe("morning email content (A1.2)", () => {
 describe("test send guards (R1.1, §6, R1.13)", () => {
   it("refuses an address that isn't on the list (no open relay)", async () => {
     const { deps, mailer } = await setup();
-    await expect(sendTest(deps, USER, "stranger@example.test")).rejects.toMatchObject({ status: 400 });
+    await expect(sendTest(deps, USER, "stranger@example.test")).rejects.toMatchObject({
+      status: 400,
+    });
     expect(mailer!.sent).toHaveLength(0);
   });
 
@@ -369,13 +395,16 @@ describe("test send guards (R1.1, §6, R1.13)", () => {
       provider: "capture" as const,
       send: async () => {
         calls++;
-        if (calls < 3) throw new Error("The email service couldn't be reached. It will be tried again.");
+        if (calls < 3)
+          throw new Error("The email service couldn't be reached. It will be tried again.");
         return { id: "ok-3" };
       },
     };
-    const out = await deliver({ mailer: flaky, now: () => NOW, sleep: async () => undefined }, { subject: "s", html: "h", text: "t" }, [
-      "a@example.test",
-    ]);
+    const out = await deliver(
+      { mailer: flaky, now: () => NOW, sleep: async () => undefined },
+      { subject: "s", html: "h", text: "t" },
+      ["a@example.test"],
+    );
     expect(out[0]).toMatchObject({ status: "sent", attempts: 3, providerId: "ok-3" });
   });
 });
@@ -393,7 +422,11 @@ describe("settings, note and banner (R1.14, R1.7)", () => {
 
   it("starts the next email with a note and shows a banner when yesterday's partly failed", async () => {
     const store = new MemoryDigestStore([], () => NOW);
-    const settings = await store.ensureSettings(USER, ["a@example.test", "b@example.test", "c@example.test"]);
+    const settings = await store.ensureSettings(USER, [
+      "a@example.test",
+      "b@example.test",
+      "c@example.test",
+    ]);
     const run = await store.insertRun({
       userId: USER,
       localDate: "2026-10-09",
@@ -403,8 +436,22 @@ describe("settings, note and banner (R1.14, R1.7)", () => {
       preparedAt: "2026-10-09T14:00:00.000Z",
       sentAt: "2026-10-09T15:01:00.000Z",
       recipients: [
-        { address: "a@example.test", status: "sent", providerId: "1", error: null, attempts: 1, at: "2026-10-09T15:01:00.000Z" },
-        { address: "b@example.test", status: "sent", providerId: "2", error: null, attempts: 1, at: "2026-10-09T15:01:00.000Z" },
+        {
+          address: "a@example.test",
+          status: "sent",
+          providerId: "1",
+          error: null,
+          attempts: 1,
+          at: "2026-10-09T15:01:00.000Z",
+        },
+        {
+          address: "b@example.test",
+          status: "sent",
+          providerId: "2",
+          error: null,
+          attempts: 1,
+          at: "2026-10-09T15:01:00.000Z",
+        },
         {
           address: "c@example.test",
           status: "failed",
@@ -464,23 +511,31 @@ describe("mailer (R1.13)", () => {
 
   it("says SMTP isn't set up until every field is there, without naming variables", async () => {
     const { getMailer, mailerStatus } = await import("@/lib/mailer");
-    const env = { EMAIL_PROVIDER: "smtp", SMTP_HOST: "smtp.gmail.com", NODE_ENV: "test" } as NodeJS.ProcessEnv;
+    const env = {
+      EMAIL_PROVIDER: "smtp",
+      SMTP_HOST: "smtp.gmail.com",
+      NODE_ENV: "test",
+    } as NodeJS.ProcessEnv;
     const s = mailerStatus(env);
     expect(s).toMatchObject({ provider: "smtp", configured: false });
     expect(s.missing).not.toMatch(/SMTP_|_PASS|_USER/);
     expect(getMailer(env)).toBeNull();
     expect(
-      mailerStatus({ ...env, SMTP_USER: "u", SMTP_PASS: "p", SMTP_FROM: "a@b.ca" } as NodeJS.ProcessEnv)
-        .configured,
+      mailerStatus({
+        ...env,
+        SMTP_USER: "u",
+        SMTP_PASS: "p",
+        SMTP_FROM: "a@b.ca",
+      } as NodeJS.ProcessEnv).configured,
     ).toBe(true);
   });
 
   it("masks addresses for logs and turns provider errors into plain sentences", async () => {
     const { maskEmail, plainProviderError } = await import("@/lib/mailer");
     expect(maskEmail("vansh@gmail.com")).toBe("v***@gmail.com");
-    expect(plainProviderError("You can only send testing emails to your own email address")).toMatch(
-      /domain isn't verified/,
-    );
+    expect(
+      plainProviderError("You can only send testing emails to your own email address"),
+    ).toMatch(/domain isn't verified/);
     expect(plainProviderError("535 5.7.8 Username and Password not accepted")).toMatch(/sign-in/);
     expect(plainProviderError("getaddrinfo ENOTFOUND smtp.example")).toMatch(/couldn't be reached/);
   });
@@ -511,9 +566,17 @@ describe("summary wording (R1.9)", () => {
       history: [],
     });
     const view = (products: DigestProductInput[]) =>
-      buildDigest({ now: NOW, timeZone: "America/Edmonton", sendTime: "09:00", appUrl: "", products, note: null });
+      buildDigest({
+        now: NOW,
+        timeZone: "America/Edmonton",
+        sendTime: "09:00",
+        appUrl: "",
+        products,
+        note: null,
+      });
     expect(
-      view([product("A", "2026-10-10T15:02:00.000Z"), product("B", "2026-10-08T15:02:00.000Z")]).counts.unchecked,
+      view([product("A", "2026-10-10T15:02:00.000Z"), product("B", "2026-10-08T15:02:00.000Z")])
+        .counts.unchecked,
     ).toEqual([]);
     expect(view([product("B", "2026-10-08T15:02:00.000Z")]).summary[2]).toBe(
       "No targets hit. Couldn't check today: Canada Luggage Depot.",

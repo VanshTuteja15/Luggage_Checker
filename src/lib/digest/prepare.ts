@@ -144,7 +144,9 @@ export function serverPrepare(rt: EngineRuntime, pack: CategoryPack): PrepareFn 
  * per local day from 05:00 Calgary time, whichever trigger comes first.
  * An advisory lock makes parallel ticks agree on who runs them.
  */
-export function serverDailyJobs(rt: EngineRuntime): (now: Date) => Promise<Record<string, unknown> | null> {
+export function serverDailyJobs(
+  rt: EngineRuntime,
+): (now: Date) => Promise<Record<string, unknown> | null> {
   return async (now) => {
     const pool = pgPoolOf(rt.store);
     if (!pool) return null;

@@ -23,7 +23,9 @@ export type DigestSettings = {
   updatedAt: string;
 };
 
-export type SettingsPatch = Partial<Pick<DigestSettings, "enabled" | "sendTime" | "timeZone" | "recipients">>;
+export type SettingsPatch = Partial<
+  Pick<DigestSettings, "enabled" | "sendTime" | "timeZone" | "recipients">
+>;
 
 /** A tracked product as the email page lists it. */
 export type TrackedChoice = {
@@ -56,14 +58,7 @@ export type RunRecipient = {
 };
 
 export type RunStatus =
-  | "claimed"
-  | "preparing"
-  | "sending"
-  | "sent"
-  | "partial"
-  | "failed"
-  | "missed"
-  | "skipped";
+  "claimed" | "preparing" | "sending" | "sent" | "partial" | "failed" | "missed" | "skipped";
 
 export type RunSnapshot = { subject: string; summary: string[]; products: string[] };
 
@@ -86,7 +81,14 @@ export type DigestRun = {
 export type RunPatch = Partial<
   Pick<
     DigestRun,
-    "status" | "preparedAt" | "sentAt" | "recipients" | "productCount" | "snapshot" | "error" | "notes"
+    | "status"
+    | "preparedAt"
+    | "sentAt"
+    | "recipients"
+    | "productCount"
+    | "snapshot"
+    | "error"
+    | "notes"
   >
 >;
 
@@ -109,7 +111,12 @@ export interface DigestStore {
 
   insertRun(run: Omit<DigestRun, "id">): Promise<DigestRun>;
   /** Claim today's daily run (INSERT … ON CONFLICT DO NOTHING). null = already claimed. */
-  claimDaily(userId: string, localDate: string, claimedAt: string, notes: string[]): Promise<DigestRun | null>;
+  claimDaily(
+    userId: string,
+    localDate: string,
+    claimedAt: string,
+    notes: string[],
+  ): Promise<DigestRun | null>;
   updateRun(id: string, patch: RunPatch): Promise<void>;
   /** Move a claimed run to "sending". True for exactly one caller (the second lock after the claim). */
   lockForSending(id: string): Promise<boolean>;
@@ -344,7 +351,8 @@ export class PgDigestStore implements DigestStore {
     if (patch.status !== undefined) add("status", patch.status);
     if (patch.preparedAt !== undefined) add("prepared_at", patch.preparedAt);
     if (patch.sentAt !== undefined) add("sent_at", patch.sentAt);
-    if (patch.recipients !== undefined) add("recipients", JSON.stringify(patch.recipients), "::jsonb");
+    if (patch.recipients !== undefined)
+      add("recipients", JSON.stringify(patch.recipients), "::jsonb");
     if (patch.productCount !== undefined) add("product_count", patch.productCount);
     if (patch.snapshot !== undefined)
       add("snapshot", patch.snapshot ? JSON.stringify(patch.snapshot) : null, "::jsonb");
@@ -533,7 +541,9 @@ export class MemoryDigestStore implements DigestStore {
     claimedAt: string,
     notes: string[],
   ): Promise<DigestRun | null> {
-    if (this.runs.some((r) => r.userId === userId && r.localDate === localDate && r.kind === "daily"))
+    if (
+      this.runs.some((r) => r.userId === userId && r.localDate === localDate && r.kind === "daily")
+    )
       return null;
     return this.insertRun({
       userId,
@@ -587,8 +597,9 @@ export class MemoryDigestStore implements DigestStore {
   }
 
   async testSendsSince(userId: string, sinceIso: string): Promise<number> {
-    return this.runs.filter((r) => r.userId === userId && r.kind === "test" && r.claimedAt >= sinceIso)
-      .length;
+    return this.runs.filter(
+      (r) => r.userId === userId && r.kind === "test" && r.claimedAt >= sinceIso,
+    ).length;
   }
 
   async enabledAccounts(): Promise<DigestSettings[]> {

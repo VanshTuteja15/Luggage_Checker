@@ -79,9 +79,7 @@ export function priceChanges(
       }
     }
   }
-  return out.sort(
-    (a, b) => b.date.localeCompare(a.date) || Math.abs(b.diff) - Math.abs(a.diff),
-  );
+  return out.sort((a, b) => b.date.localeCompare(a.date) || Math.abs(b.diff) - Math.abs(a.diff));
 }
 
 /** The largest drops on or after `from`, biggest dollar drop first. */
@@ -112,7 +110,8 @@ export function dailyLowest(product: Product, today: string, days = 30): DailyLo
     for (const pt of series) {
       if (pt.date < from || pt.date > today) continue;
       const cur = byDate.get(pt.date);
-      if (!cur || pt.price < cur.price - 0.005) byDate.set(pt.date, { price: pt.price, retailers: [retailer] });
+      if (!cur || pt.price < cur.price - 0.005)
+        byDate.set(pt.date, { price: pt.price, retailers: [retailer] });
       else if (Math.abs(pt.price - cur.price) < 0.005 && !cur.retailers.includes(retailer))
         cur.retailers.push(retailer);
     }
@@ -126,8 +125,7 @@ export function dailyLowest(product: Product, today: string, days = 30): DailyLo
       price,
       retailers: retailers.sort((a, b) => a.localeCompare(b)),
       change: prev === null ? null : changeText(prev, price),
-      kind:
-        diff === null ? null : Math.abs(diff) < 0.005 ? "same" : diff < 0 ? "down" : "up",
+      kind: diff === null ? null : Math.abs(diff) < 0.005 ? "same" : diff < 0 ? "down" : "up",
     } satisfies DailyLowestRow;
   });
   return rows.reverse();

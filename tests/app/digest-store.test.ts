@@ -21,7 +21,10 @@ const PG_URL = process.env.ENGINE_TEST_DATABASE_URL;
 type World = {
   store: DigestStore;
   /** A user tracking these product names; returns { userId, productIds by name }. */
-  user: (names: string[], opts?: { reportEmail?: string }) => Promise<{ userId: string; ids: string[] }>;
+  user: (
+    names: string[],
+    opts?: { reportEmail?: string },
+  ) => Promise<{ userId: string; ids: string[] }>;
   untrack: (userId: string, productId: string) => Promise<void>;
 };
 
@@ -73,9 +76,10 @@ if (PG_URL)
       return {
         store: new PgDigestStore(pool),
         user: async (names, opts) => {
-          const { rows } = await pool.query("INSERT INTO auth.users (email) VALUES ($1) RETURNING id", [
-            `${randomUUID()}@example.test`,
-          ]);
+          const { rows } = await pool.query(
+            "INSERT INTO auth.users (email) VALUES ($1) RETURNING id",
+            [`${randomUUID()}@example.test`],
+          );
           const userId = rows[0].id as string;
           const ids: string[] = [];
           for (const name of names) {
@@ -128,7 +132,10 @@ for (const w of worlds) {
       expect((await store.ensureSettings(userId, ["other@example.test"])).recipients).toEqual([
         "old@example.test",
       ]);
-      const u = await store.updateSettings(userId, { sendTime: "08:30", timeZone: "America/Toronto" });
+      const u = await store.updateSettings(userId, {
+        sendTime: "08:30",
+        timeZone: "America/Toronto",
+      });
       expect(u).toMatchObject({ sendTime: "08:30", timeZone: "America/Toronto", enabled: true });
       expect((await store.updateSettings(userId, { enabled: false })).sendTime).toBe("08:30");
       expect((await store.enabledAccounts()).some((a) => a.userId === userId)).toBe(false);
@@ -140,7 +147,10 @@ for (const w of worlds) {
       const b = await user(["Delta Medium"]);
       expect(await store.setChosen(a.userId, [a.ids[2], a.ids[0], b.ids[0]])).toBe(2);
       let list = await store.listTracked(a.userId);
-      expect(list.filter((t) => t.chosen).map((t) => t.name)).toEqual(["Charlie Medium", "Alpha Medium"]);
+      expect(list.filter((t) => t.chosen).map((t) => t.name)).toEqual([
+        "Charlie Medium",
+        "Alpha Medium",
+      ]);
       expect(list).toHaveLength(3);
       expect(await store.addChosen(a.userId, a.ids[1])).toBe(true);
       expect(await store.addChosen(a.userId, a.ids[1])).toBe(true); // already there: no duplicate
@@ -163,14 +173,32 @@ for (const w of worlds) {
       const { userId } = await user([]);
       const claimed = await store.claimDaily(userId, "2026-10-10", "2026-10-10T15:00:00.000Z", []);
       expect(claimed?.status).toBe("claimed");
-      expect(await store.claimDaily(userId, "2026-10-10", "2026-10-10T15:01:00.000Z", [])).toBeNull();
-      expect(await store.claimDaily(userId, "2026-10-11", "2026-10-11T15:00:00.000Z", ["late"])).not.toBeNull();
+      expect(
+        await store.claimDaily(userId, "2026-10-10", "2026-10-10T15:01:00.000Z", []),
+      ).toBeNull();
+      expect(
+        await store.claimDaily(userId, "2026-10-11", "2026-10-11T15:00:00.000Z", ["late"]),
+      ).not.toBeNull();
       await store.updateRun(claimed!.id, {
         status: "partial",
         sentAt: "2026-10-10T15:02:00.000Z",
         recipients: [
-          { address: "a@x.test", status: "sent", providerId: "1", error: null, attempts: 1, at: "2026-10-10T15:02:00.000Z" },
-          { address: "b@x.test", status: "failed", providerId: null, error: "Refused.", attempts: 3, at: "2026-10-10T15:02:00.000Z" },
+          {
+            address: "a@x.test",
+            status: "sent",
+            providerId: "1",
+            error: null,
+            attempts: 1,
+            at: "2026-10-10T15:02:00.000Z",
+          },
+          {
+            address: "b@x.test",
+            status: "failed",
+            providerId: null,
+            error: "Refused.",
+            attempts: 3,
+            at: "2026-10-10T15:02:00.000Z",
+          },
         ],
         productCount: 4,
         snapshot: { subject: "s", summary: ["a", "b", "c"], products: ["p"] },
@@ -184,7 +212,14 @@ for (const w of worlds) {
         preparedAt: null,
         sentAt: "2026-10-10T16:00:01.000Z",
         recipients: [
-          { address: "a@x.test", status: "sent", providerId: "2", error: null, attempts: 1, at: "2026-10-10T16:00:01.000Z" },
+          {
+            address: "a@x.test",
+            status: "sent",
+            providerId: "2",
+            error: null,
+            attempts: 1,
+            at: "2026-10-10T16:00:01.000Z",
+          },
         ],
         productCount: 4,
         snapshot: null,
@@ -218,7 +253,9 @@ for (const w of worlds) {
       for (const id of await store.accountsToMigrate()) await store.ensureSettings(id, []);
       for (const other of await store.enabledAccounts())
         if (other.userId !== a.userId) await store.updateSettings(other.userId, { enabled: false });
-      const mailer = new CaptureMailer({ "bad@example.test": "That address was refused by the email service. Check it for typos." });
+      const mailer = new CaptureMailer({
+        "bad@example.test": "That address was refused by the email service. Check it for typos.",
+      });
       let now = zonedTimeToUtc("2026-10-10", "08:00", "America/Edmonton");
       let prepares = 0;
       const deps: TickDeps = {

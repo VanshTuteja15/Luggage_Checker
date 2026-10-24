@@ -3,15 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Bell,
-  BellOff,
-  ExternalLink,
-  Loader2,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Bell, BellOff, ExternalLink, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import {
   ChangeBadge,
@@ -47,11 +39,13 @@ export default function ProductDetailPage() {
   const { authed, ready } = useStore();
 
   // A week more than the tables show, so "7 days ago" and the first day's change have data.
-  const { data: product, isLoading, isError, error, refetch } = useTrackedProduct(
-    productId,
-    DAYS + 8,
-    ready && authed,
-  );
+  const {
+    data: product,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useTrackedProduct(productId, DAYS + 8, ready && authed);
   const today = localDate(new Date());
 
   const refresh = useRefreshPrices();
@@ -62,13 +56,15 @@ export default function ProductDetailPage() {
   const [editingAlert, setEditingAlert] = useState(false);
 
   const stats = useMemo(
-    () =>
-      priceStats((product?.history ?? []).filter((h) => h.date >= addDays(today, -(DAYS - 1)))),
+    () => priceStats((product?.history ?? []).filter((h) => h.date >= addDays(today, -(DAYS - 1)))),
     [product?.history, today],
   );
   const daily = useMemo(() => (product ? dailyLowest(product, today, DAYS) : []), [product, today]);
   const stores = useMemo(() => (product ? byStore(product, today) : []), [product, today]);
-  const summary = useMemo(() => (product ? productSummary(product, today) : null), [product, today]);
+  const summary = useMemo(
+    () => (product ? productSummary(product, today) : null),
+    [product, today],
+  );
 
   if (isLoading) {
     return (
@@ -173,7 +169,8 @@ export default function ProductDetailPage() {
               {product.previousLowest !== null && product.change !== 0 && (
                 <>
                   {" · was "}
-                  {usd(product.previousLowest)} ({percentChange(product.previousLowest, product.lowestPrice ?? 0)})
+                  {usd(product.previousLowest)} (
+                  {percentChange(product.previousLowest, product.lowestPrice ?? 0)})
                 </>
               )}
             </p>
@@ -369,7 +366,10 @@ export default function ProductDetailPage() {
       </div>
 
       {/* ── History: tables, no charts (R4.3) ──────────────── */}
-      <SectionTitle title="Daily lowest price" description={`The last ${DAYS} days, newest first`} />
+      <SectionTitle
+        title="Daily lowest price"
+        description={`The last ${DAYS} days, newest first`}
+      />
       <div className="card-surface mb-8">
         {daily.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">
@@ -390,7 +390,9 @@ export default function ProductDetailPage() {
                 {daily.map((d) => (
                   <tr key={d.date}>
                     <td className="whitespace-nowrap px-4 py-3">{formatYmdWeekday(d.date)}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{usd(d.price)}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                      {usd(d.price)}
+                    </td>
                     <td className="px-4 py-3">{d.retailers.join(", ")}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
                       <DayChange kind={d.kind} text={d.change} />
@@ -481,7 +483,10 @@ export default function ProductDetailPage() {
       </div>
 
       {/* ── Stats ───────────────────────────────────────────── */}
-      <SectionTitle title="Last 30 days" description={`Based on ${stats.days} day(s) of recorded prices`} />
+      <SectionTitle
+        title="Last 30 days"
+        description={`Based on ${stats.days} day(s) of recorded prices`}
+      />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatBox
           label="Lowest"

@@ -23,6 +23,10 @@ export async function GET(req: NextRequest) {
       productCount: c.productCount,
     });
   } catch (err) {
-    return emailRouteError(err, "GET /api/email/preview", "The preview couldn't be made. Try again.");
+    return emailRouteError(
+      err,
+      "GET /api/email/preview",
+      "The preview couldn't be made. Try again.",
+    );
   }
 }
