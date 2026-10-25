@@ -5,6 +5,8 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
+  // Pages are rendered in the plain-text scan (A5.2): the same JSX runtime as Next.
+  esbuild: { jsx: "automatic" },
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",

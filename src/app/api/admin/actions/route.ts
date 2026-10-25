@@ -45,7 +45,10 @@ export async function POST(req: NextRequest) {
   try {
     const { userId } = await requireAdmin(req);
     const parsed = action.safeParse(await req.json().catch(() => null));
-    if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? "invalid action");
+    if (!parsed.success) {
+      console.warn("POST /api/admin/actions: invalid body", parsed.error.issues.slice(0, 3));
+      return badRequest("Some fields are missing or not valid. Check the form and try again.");
+    }
     const a = parsed.data;
     const { rt } = getEngine();
 

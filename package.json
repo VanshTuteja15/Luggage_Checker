@@ -92,6 +92,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.27",
+    "jsdom": "26.1.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.7"
   }

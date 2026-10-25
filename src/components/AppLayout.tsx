@@ -30,8 +30,8 @@ const NAV = [
   { href: "/email", label: "Morning Email", icon: Mail },
   { href: "/history", label: "Price History", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
-  // Admin-only content: the page and its API refuse anyone not in app_admins.
-  { href: "/admin", label: "Admin", icon: ShieldCheck },
+  // The shop's account only: the page and its API refuse anyone not in app_admins.
+  { href: "/admin", label: "Store status", icon: ShieldCheck },
 ] as const;
 
 /** Initials from an email local-part, e.g. "vansh.tuteja@x.com" -> "VT". */

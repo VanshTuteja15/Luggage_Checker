@@ -78,9 +78,13 @@ function bearerToken(req: NextRequest): string | null {
  */
 export async function requireUser(req: NextRequest): Promise<AuthedContext> {
   if (!supabaseConfigured()) {
+    // The env names are for the operator's log, not the screen (R5.5).
+    console.error(
+      "requireUser: Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY).",
+    );
     throw new ApiError(
       503,
-      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
+      "Sign-in isn't set up yet. The person who set up LuggageTracker can connect it.",
     );
   }
 

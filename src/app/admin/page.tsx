@@ -1,25 +1,33 @@
 "use client";
 
 /* ------------------------------------------------------------------ */
-/*  /admin — source health, block rates, failures, extraction           */
-/*  rejections, the identity review queue, research session timings,   */
-/*  feature flags, and dealer-feed / manual price entry.                */
-/*  Admins only (app_admins); every action goes through /api/admin.     */
+/*  /admin — Store status (R5.2). In plain words by default: what each */
+/*  store gives us, products to review, data entry (staff-checked      */
+/*  prices, dealer lists) and how much of the free allowances is left. */
+/*  Route names, flags, failures and timings sit under a collapsed     */
+/*  "Technical details". The shop's account only (app_admins); every   */
+/*  action goes through /api/admin.                                    */
 /* ------------------------------------------------------------------ */
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
+import { ErrorState } from "@/components/Bits";
 import { Button } from "@/components/ui/button";
 import { apiFetch, ApiRequestError } from "@/lib/api-client";
+import { usageLines, type StoreStatusRow, type UsageSummary } from "@/lib/store-status-view";
+import { errorMessage } from "@/lib/queries";
 import { useStore } from "@/lib/store";
+import { formatTime, formatWeekdayDate } from "@/lib/time/local";
 import { cn } from "@/lib/utils";
 
 type Overview = {
   config: Record<string, string>;
   store: string;
+  stores: StoreStatusRow[];
+  usage: UsageSummary;
   sources: {
     sourceId: string;
     retailerLabel: string;
@@ -53,6 +61,15 @@ type Overview = {
     reasons: string[];
     fetchedAt: string;
   }[];
+  estimateRejections: {
+    sourceId: string | null;
+    query: string;
+    url: string;
+    title: string;
+    price: number | null;
+    reasons: string[];
+    foundAt: string;
+  }[];
   sessions: {
     id: string;
     query: string;
@@ -85,19 +102,24 @@ type Overview = {
   }[];
 };
 
-const TABS = ["Sources", "Failures", "Review queue", "Sessions", "Flags", "Data entry"] as const;
+const TABS = ["Stores", "Products to review", "Data entry", "Usage"] as const;
 type Tab = (typeof TABS)[number];
+const TECH_TABS = ["Sources", "Failures", "Sessions", "Flags"] as const;
+type TechTab = (typeof TECH_TABS)[number];
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
 const ms = (x: number | null) => (x === null ? "—" : `${(x / 1000).toFixed(1)} s`);
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-CA", { dateStyle: "short", timeStyle: "short" }) : "—";
+/** "Fri, Oct 10, 9:02 a.m." */
+const checkedAt = (iso: string | null) =>
+  iso ? `${formatWeekdayDate(iso)}, ${formatTime(iso)}` : "Never";
 
-export default function AdminPage() {
+export default function StoreStatusPage() {
   const { authed } = useStore();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>("Sources");
+  const [tab, setTab] = useState<Tab>("Stores");
   const overview = useQuery({
     queryKey: ["admin-overview"],
     enabled: authed,
@@ -106,21 +128,24 @@ export default function AdminPage() {
   });
   const refresh = () => void qc.invalidateQueries({ queryKey: ["admin-overview"] });
   const act = useMutation({
-    mutationFn: (v: { path: string; body: unknown }) =>
+    mutationFn: (v: { path: string; body: unknown; done: string }) =>
       apiFetch<Record<string, unknown>>(v.path, { method: "POST", json: v.body }),
-    onSuccess: () => {
-      toast.success("Done");
+    onSuccess: (_r, v) => {
+      toast.success(v.done);
       refresh();
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(errorMessage(err, "That didn't work."), { description: "Please try again." }),
   });
+  const onAct: ActFn = (path, body, done = "Saved.") => act.mutate({ path, body, done });
 
   const forbidden = overview.error instanceof ApiRequestError && overview.error.status === 403;
+  const data = overview.data;
 
   return (
     <AppLayout
-      title="Admin"
-      subtitle="Price engine health, sources and data quality"
+      title="Store status"
+      subtitle="What each store gives us, products to check, and price entry"
       actions={<div />}
     >
       {forbidden ? (
@@ -128,10 +153,14 @@ export default function AdminPage() {
           role="alert"
           className="mx-auto max-w-xl rounded-xl border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground"
         >
-          Admins only. Ask the owner to add your user id to <code>app_admins</code> (see
-          docs/HUMAN_ACTIONS.md).
+          Store status is for the shop&rsquo;s own account. Sign in with that account to see it.
         </p>
-      ) : overview.isLoading || !overview.data ? (
+      ) : overview.isError ? (
+        <ErrorState
+          message={errorMessage(overview.error, "Store status couldn't load.")}
+          onRetry={() => void overview.refetch()}
+        />
+      ) : overview.isLoading || !data ? (
         <p className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading…
         </p>
@@ -141,7 +170,7 @@ export default function AdminPage() {
             <div
               className="inline-flex flex-wrap rounded-lg border border-border bg-card p-0.5 text-xs"
               role="tablist"
-              aria-label="Admin sections"
+              aria-label="Store status sections"
             >
               {TABS.map((t) => (
                 <button
@@ -156,8 +185,8 @@ export default function AdminPage() {
                   )}
                 >
                   {t}
-                  {t === "Review queue" && overview.data.reviews.length > 0
-                    ? ` (${overview.data.reviews.length})`
+                  {t === "Products to review" && data.reviews.length > 0
+                    ? ` (${data.reviews.length})`
                     : ""}
                 </button>
               ))}
@@ -166,48 +195,401 @@ export default function AdminPage() {
               <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Refresh
             </Button>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Store: {overview.data.store} ·{" "}
-            {Object.entries(overview.data.config)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(" · ")}
-          </p>
-          <div role="tabpanel">
-            {tab === "Sources" && (
-              <Sources data={overview.data} onAct={(path, body) => act.mutate({ path, body })} />
-            )}
-            {tab === "Failures" && <Failures data={overview.data} />}
-            {tab === "Review queue" && (
-              <Reviews data={overview.data} onAct={(path, body) => act.mutate({ path, body })} />
-            )}
-            {tab === "Sessions" && <Sessions data={overview.data} />}
-            {tab === "Flags" && (
-              <Flags data={overview.data} onAct={(path, body) => act.mutate({ path, body })} />
-            )}
+          <div role="tabpanel" aria-label={tab}>
+            {tab === "Stores" && <Stores rows={data.stores} />}
+            {tab === "Products to review" && <Reviews data={data} onAct={onAct} />}
             {tab === "Data entry" && (
-              <DataEntry
-                data={overview.data}
-                onAct={(path, body) => act.mutate({ path, body })}
-                pending={act.isPending}
-              />
+              <DataEntry data={data} onAct={onAct} pending={act.isPending} />
             )}
+            {tab === "Usage" && <Usage usage={data.usage} />}
           </div>
+          <Technical data={data} onAct={onAct} />
         </div>
       )}
     </AppLayout>
   );
 }
 
-type ActFn = (path: string, body: unknown) => void;
+type ActFn = (path: string, body: unknown, done?: string) => void;
 
-function Table({ head, children }: { head: string[]; children: React.ReactNode }) {
+/* ── default tabs ─────────────────────────────────────────────────── */
+
+function Stores({ rows }: { rows: StoreStatusRow[] }) {
+  return (
+    <>
+      {/* Phones: one card per store. */}
+      <ul className="space-y-2 sm:hidden">
+        {rows.map((r) => (
+          <li key={r.sourceId} className="rounded-xl border border-border bg-card p-3 text-sm">
+            <p className="font-medium">{r.name}</p>
+            <p className="mt-1 text-xs">{r.gets.join(" · ")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Last successful check: {checkedAt(r.lastOkAt)}
+            </p>
+            <p className={cn("mt-1 text-xs", !r.problem && "text-muted-foreground")}>
+              {r.problem ?? "No problems."}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden sm:block">
+        <Table head={["Store", "What we can get there", "Last successful check", "Problems"]}>
+          {rows.map((r) => (
+            <tr key={r.sourceId}>
+              <td className="px-3 py-2 font-medium">{r.name}</td>
+              <td className="px-3 py-2">{r.gets.join(" · ")}</td>
+              <td className="whitespace-nowrap px-3 py-2">{checkedAt(r.lastOkAt)}</td>
+              <td className={cn("px-3 py-2", !r.problem && "text-muted-foreground")}>
+                {r.problem ?? "No problems."}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      </div>
+    </>
+  );
+}
+
+function Reviews({ data, onAct }: { data: Overview; onAct: ActFn }) {
+  const storeName = new Map(data.stores.map((s) => [s.sourceId, s.name]));
+  if (data.reviews.length === 0)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Nothing to review. When a store lists a bag we can&rsquo;t match for sure, it shows up here.
+      </p>
+    );
+  return (
+    <ul className="space-y-2">
+      {data.reviews.map((r) => (
+        <li key={r.id} className="rounded-xl border border-border bg-card p-3 text-sm">
+          <p className="font-medium">
+            <a
+              href={r.listingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn("hover:underline", FOCUS)}
+            >
+              {r.listingTitle}
+            </a>{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              at {storeName.get(r.sourceId) ?? "a store"}
+            </span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {r.candidateName ? (
+              <>
+                This looks like <strong>{r.candidateName}</strong>. If it&rsquo;s the same bag, its
+                prices join that product.
+              </>
+            ) : (
+              "We couldn't match this to a product we know, so it's kept on its own."
+            )}
+          </p>
+          <div className="mt-2 flex gap-2">
+            {r.candidateProductId && (
+              <Button
+                size="sm"
+                className="h-7 text-[11px]"
+                onClick={() =>
+                  onAct(`/api/admin/review/${r.id}`, { decision: "approved" }, "Joined.")
+                }
+              >
+                Same product
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() =>
+                onAct(`/api/admin/review/${r.id}`, { decision: "rejected" }, "Kept apart.")
+              }
+            >
+              Different product
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Usage({ usage }: { usage: UsageSummary }) {
+  return (
+    <ul className="space-y-2 rounded-xl border border-border bg-card p-4 text-sm">
+      {usageLines(usage).map((line) => (
+        <li key={line} className="tabular-nums">
+          {line}
+        </li>
+      ))}
+      <li className="pt-1 text-xs text-muted-foreground">
+        Both are free allowances. When one runs out, the app keeps working with verified,
+        staff-checked and dealer prices, and the morning email waits for the next day.
+      </li>
+    </ul>
+  );
+}
+
+function DataEntry({ data, onAct, pending }: { data: Overview; onAct: ActFn; pending: boolean }) {
+  const [feed, setFeed] = useState({
+    sourceId: "samsonite-ca",
+    asOf: new Date().toISOString().slice(0, 10),
+    name: "",
+    format: "csv" as "csv" | "json",
+    content: "",
+  });
+  const [manual, setManual] = useState({
+    sourceId: "costco-ca",
+    title: "",
+    price: "",
+    checkedAt: new Date().toISOString().slice(0, 10),
+    url: "",
+    note: "",
+  });
+
+  const submitFeed = (e: FormEvent) => {
+    e.preventDefault();
+    onAct(
+      "/api/admin/actions",
+      { action: "feed", ...feed, name: feed.name || `feed-${feed.asOf}` },
+      "Dealer list imported.",
+    );
+  };
+  const submitManual = (e: FormEvent) => {
+    e.preventDefault();
+    onAct(
+      "/api/admin/actions",
+      {
+        action: "manual",
+        sourceId: manual.sourceId,
+        title: manual.title,
+        price: Number(manual.price),
+        checkedAt: manual.checkedAt,
+        url: manual.url || null,
+        note: manual.note || null,
+      },
+      "Staff-checked price saved.",
+    );
+  };
+  const input = cn(
+    "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm",
+    FOCUS,
+  );
+  const storeOptions = data.stores.map((s) => (
+    <option key={s.sourceId} value={s.sourceId}>
+      {s.name}
+    </option>
+  ));
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <form
+        onSubmit={submitManual}
+        className="space-y-2 rounded-xl border border-border bg-card p-4"
+        aria-labelledby="man-h"
+      >
+        <h2 id="man-h" className="text-sm font-medium">
+          Staff-checked price
+        </h2>
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden /> A price someone saw in a
+          store or a flyer. Shown as &ldquo;Staff-checked · Oct 9&rdquo; with the date you pick.
+        </p>
+        <label className="block text-xs">
+          Store
+          <select
+            className={input}
+            value={manual.sourceId}
+            onChange={(e) => setManual({ ...manual, sourceId: e.target.value })}
+          >
+            {storeOptions}
+          </select>
+        </label>
+        <label className="block text-xs">
+          Product name
+          <input
+            className={input}
+            value={manual.title}
+            onChange={(e) => setManual({ ...manual, title: e.target.value })}
+            required
+            maxLength={300}
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-xs">
+            Price ($)
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              className={input}
+              value={manual.price}
+              onChange={(e) => setManual({ ...manual, price: e.target.value })}
+              required
+            />
+          </label>
+          <label className="block text-xs">
+            Checked on
+            <input
+              type="date"
+              className={input}
+              value={manual.checkedAt}
+              onChange={(e) => setManual({ ...manual, checkedAt: e.target.value })}
+              required
+            />
+          </label>
+        </div>
+        <label className="block text-xs">
+          Link to the store&rsquo;s page (optional)
+          <input
+            type="url"
+            className={input}
+            value={manual.url}
+            onChange={(e) => setManual({ ...manual, url: e.target.value })}
+          />
+        </label>
+        <label className="block text-xs">
+          Note (optional)
+          <input
+            className={input}
+            value={manual.note}
+            onChange={(e) => setManual({ ...manual, note: e.target.value })}
+            maxLength={500}
+          />
+        </label>
+        <Button type="submit" size="sm" disabled={pending}>
+          Save
+        </Button>
+      </form>
+
+      <form
+        onSubmit={submitFeed}
+        className="space-y-2 rounded-xl border border-border bg-card p-4"
+        aria-labelledby="feed-h"
+      >
+        <h2 id="feed-h" className="text-sm font-medium">
+          Dealer list
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          A spreadsheet (CSV) or JSON file from the brand or a dealer. Columns: title, price, sku,
+          upc, model, brand, list price, availability, url, as of. Prices show as &ldquo;Dealer list
+          · as of Oct 1&rdquo;.
+        </p>
+        <label className="block text-xs">
+          Store
+          <select
+            className={input}
+            value={feed.sourceId}
+            onChange={(e) => setFeed({ ...feed, sourceId: e.target.value })}
+          >
+            {storeOptions}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-xs">
+            Valid from
+            <input
+              type="date"
+              className={input}
+              value={feed.asOf}
+              onChange={(e) => setFeed({ ...feed, asOf: e.target.value })}
+              required
+            />
+          </label>
+          <label className="block text-xs">
+            File type
+            <select
+              className={input}
+              value={feed.format}
+              onChange={(e) => setFeed({ ...feed, format: e.target.value as "csv" | "json" })}
+            >
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+            </select>
+          </label>
+        </div>
+        <label className="block text-xs">
+          File
+          <input
+            type="file"
+            accept=".csv,.json,text/csv,application/json"
+            className={input}
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (f)
+                setFeed({
+                  ...feed,
+                  name: f.name,
+                  content: await f.text(),
+                  format: f.name.endsWith(".json") ? "json" : "csv",
+                });
+            }}
+          />
+        </label>
+        <Button type="submit" size="sm" disabled={pending || !feed.content}>
+          Import
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+/* ── Technical details (collapsed) ────────────────────────────────── */
+
+function Technical({ data, onAct }: { data: Overview; onAct: ActFn }) {
+  const [tab, setTab] = useState<TechTab>("Sources");
+  return (
+    <details className="mt-8 rounded-xl border border-border bg-card/50 p-3" data-technical="">
+      <summary className={cn("cursor-pointer text-sm font-medium", FOCUS)}>
+        Technical details
+      </summary>
+      <div className="mt-3">
+        <p className="mb-3 text-xs text-muted-foreground">
+          Store: {data.store} ·{" "}
+          {Object.entries(data.config)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(" · ")}
+        </p>
+        <div
+          className="mb-3 inline-flex flex-wrap rounded-lg border border-border bg-card p-0.5 text-xs"
+          role="tablist"
+          aria-label="Technical details"
+        >
+          {TECH_TABS.map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "rounded-md px-3 py-1.5",
+                tab === t ? "bg-muted font-medium" : "text-muted-foreground",
+                FOCUS,
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div role="tabpanel" aria-label={tab}>
+          {tab === "Sources" && <Sources data={data} onAct={onAct} />}
+          {tab === "Failures" && <Failures data={data} />}
+          {tab === "Sessions" && <Sessions data={data} />}
+          {tab === "Flags" && <Flags data={data} onAct={onAct} />}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function Table({ head, children }: { head: string[]; children: ReactNode }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
       <table className="w-full text-left text-xs">
         <thead className="bg-muted/50 text-muted-foreground">
           <tr>
-            {head.map((h) => (
-              <th key={h} scope="col" className="px-3 py-2 font-medium">
+            {head.map((h, i) => (
+              <th key={`${h}-${i}`} scope="col" className="px-3 py-2 font-medium">
                 {h}
               </th>
             ))}
@@ -280,7 +662,11 @@ function Sources({ data, onAct }: { data: Overview; onAct: ActFn }) {
               size="sm"
               className="h-7 text-[11px]"
               onClick={() =>
-                onAct("/api/admin/actions", { action: "discover", sourceId: s.sourceId })
+                onAct(
+                  "/api/admin/actions",
+                  { action: "discover", sourceId: s.sourceId },
+                  "Looking for products at this store.",
+                )
               }
             >
               Discover
@@ -290,11 +676,11 @@ function Sources({ data, onAct }: { data: Overview; onAct: ActFn }) {
               size="sm"
               className="h-7 text-[11px]"
               onClick={() =>
-                onAct("/api/admin/actions", {
-                  action: "source",
-                  sourceId: s.sourceId,
-                  enabled: !s.enabled,
-                })
+                onAct(
+                  "/api/admin/actions",
+                  { action: "source", sourceId: s.sourceId, enabled: !s.enabled },
+                  s.enabled ? "Store switched off." : "Store switched on.",
+                )
               }
             >
               {s.enabled ? "Disable" : "Enable"}
@@ -316,7 +702,7 @@ function Failures({ data }: { data: Overview }) {
         <Table head={["When", "Store", "Adapter", "Outcome", "Status", "URL", "Error"]}>
           {data.failures.map((f, i) => (
             <tr key={i}>
-              <td className="px-3 py-2 whitespace-nowrap">{when(f.startedAt)}</td>
+              <td className="whitespace-nowrap px-3 py-2">{when(f.startedAt)}</td>
               <td className="px-3 py-2">{f.sourceId}</td>
               <td className="px-3 py-2">{f.adapter}</td>
               <td
@@ -345,7 +731,7 @@ function Failures({ data }: { data: Overview }) {
         <Table head={["When", "Store", "Adapter", "Reasons"]}>
           {data.rejections.map((r, i) => (
             <tr key={i}>
-              <td className="px-3 py-2 whitespace-nowrap">{when(r.fetchedAt)}</td>
+              <td className="whitespace-nowrap px-3 py-2">{when(r.fetchedAt)}</td>
               <td className="px-3 py-2">{r.sourceId}</td>
               <td className="px-3 py-2">{r.adapter}</td>
               <td className="px-3 py-2">{r.reasons.join("; ")}</td>
@@ -353,60 +739,28 @@ function Failures({ data }: { data: Overview }) {
           ))}
         </Table>
       </section>
+      <section aria-labelledby="e-h">
+        <h2 id="e-h" className="mb-2 text-sm font-medium">
+          Rejected web estimates (stored, never shown)
+        </h2>
+        <Table head={["Found", "Store", "Search", "Result", "Price", "Reasons"]}>
+          {data.estimateRejections.map((r, i) => (
+            <tr key={i}>
+              <td className="whitespace-nowrap px-3 py-2">{when(r.foundAt)}</td>
+              <td className="px-3 py-2">{r.sourceId ?? "—"}</td>
+              <td className="px-3 py-2">{r.query}</td>
+              <td className="max-w-xs truncate px-3 py-2" title={r.url}>
+                {r.title || r.url}
+              </td>
+              <td className="px-3 py-2 tabular-nums">
+                {r.price === null ? "—" : `$${r.price.toFixed(2)}`}
+              </td>
+              <td className="px-3 py-2">{r.reasons.join("; ")}</td>
+            </tr>
+          ))}
+        </Table>
+      </section>
     </div>
-  );
-}
-
-function Reviews({ data, onAct }: { data: Overview; onAct: ActFn }) {
-  if (data.reviews.length === 0)
-    return <p className="text-sm text-muted-foreground">Nothing to review.</p>;
-  return (
-    <ul className="space-y-2">
-      {data.reviews.map((r) => (
-        <li key={r.id} className="rounded-xl border border-border bg-card p-3 text-sm">
-          <p className="font-medium">
-            <a
-              href={r.listingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-            >
-              {r.listingTitle}
-            </a>{" "}
-            <span className="text-xs text-muted-foreground">({r.sourceId})</span>
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {r.candidateName ? (
-              <>
-                Same product as <strong>{r.candidateName}</strong>? (score {r.score?.toFixed(2)})
-              </>
-            ) : (
-              "No candidate"
-            )}{" "}
-            — {r.reasons.join("; ")}
-          </p>
-          <div className="mt-2 flex gap-2">
-            {r.candidateProductId && (
-              <Button
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => onAct(`/api/admin/review/${r.id}`, { decision: "approved" })}
-              >
-                Same product
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-[11px]"
-              onClick={() => onAct(`/api/admin/review/${r.id}`, { decision: "rejected" })}
-            >
-              Different product
-            </Button>
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -423,7 +777,7 @@ function Sessions({ data }: { data: Overview }) {
       >
         {data.sessions.map((x) => (
           <tr key={x.id}>
-            <td className="px-3 py-2 whitespace-nowrap">{when(x.createdAt)}</td>
+            <td className="whitespace-nowrap px-3 py-2">{when(x.createdAt)}</td>
             <td className="px-3 py-2">{x.query}</td>
             <td className="px-3 py-2">{x.status}</td>
             <td className="px-3 py-2">{x.mode}</td>
@@ -457,7 +811,13 @@ function Flags({ data, onAct }: { data: Overview; onAct: ActFn }) {
             <input
               type="checkbox"
               checked={f.enabled}
-              onChange={(e) => onAct("/api/admin/flags", { key: f.key, enabled: e.target.checked })}
+              onChange={(e) =>
+                onAct(
+                  "/api/admin/flags",
+                  { key: f.key, enabled: e.target.checked },
+                  e.target.checked ? "Switched on." : "Switched off.",
+                )
+              }
               className={FOCUS}
             />
             {f.enabled ? "On" : "Off"}
@@ -465,208 +825,5 @@ function Flags({ data, onAct }: { data: Overview; onAct: ActFn }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function DataEntry({ data, onAct, pending }: { data: Overview; onAct: ActFn; pending: boolean }) {
-  const stores = data.sources.filter((s) => s.enabled);
-  const [feed, setFeed] = useState({
-    sourceId: "samsonite-ca",
-    asOf: new Date().toISOString().slice(0, 10),
-    name: "",
-    format: "csv" as "csv" | "json",
-    content: "",
-  });
-  const [manual, setManual] = useState({
-    sourceId: "costco-ca",
-    title: "",
-    price: "",
-    checkedAt: new Date().toISOString().slice(0, 10),
-    url: "",
-    note: "",
-  });
-
-  const submitFeed = (e: FormEvent) => {
-    e.preventDefault();
-    onAct("/api/admin/actions", {
-      action: "feed",
-      ...feed,
-      name: feed.name || `feed-${feed.asOf}`,
-    });
-  };
-  const submitManual = (e: FormEvent) => {
-    e.preventDefault();
-    onAct("/api/admin/actions", {
-      action: "manual",
-      sourceId: manual.sourceId,
-      title: manual.title,
-      price: Number(manual.price),
-      checkedAt: manual.checkedAt,
-      url: manual.url || null,
-      note: manual.note || null,
-    });
-  };
-  const input = cn(
-    "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm",
-    FOCUS,
-  );
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <form
-        onSubmit={submitFeed}
-        className="space-y-2 rounded-xl border border-border bg-card p-4"
-        aria-labelledby="feed-h"
-      >
-        <h2 id="feed-h" className="text-sm font-medium">
-          Import a dealer / affiliate feed
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Columns: title, price, sku, gtin/upc, mpn/model, brand, list_price/msrp, availability,
-          url, as_of. Prices show as &ldquo;Feed as of &lt;date&gt;&rdquo;.
-        </p>
-        <label className="block text-xs">
-          Store
-          <select
-            className={input}
-            value={feed.sourceId}
-            onChange={(e) => setFeed({ ...feed, sourceId: e.target.value })}
-          >
-            {stores.map((s) => (
-              <option key={s.sourceId} value={s.sourceId}>
-                {s.retailerLabel}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block text-xs">
-            As of
-            <input
-              type="date"
-              className={input}
-              value={feed.asOf}
-              onChange={(e) => setFeed({ ...feed, asOf: e.target.value })}
-              required
-            />
-          </label>
-          <label className="block text-xs">
-            Format
-            <select
-              className={input}
-              value={feed.format}
-              onChange={(e) => setFeed({ ...feed, format: e.target.value as "csv" | "json" })}
-            >
-              <option value="csv">CSV</option>
-              <option value="json">JSON</option>
-            </select>
-          </label>
-        </div>
-        <label className="block text-xs">
-          File
-          <input
-            type="file"
-            accept=".csv,.json,text/csv,application/json"
-            className={input}
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (f)
-                setFeed({
-                  ...feed,
-                  name: f.name,
-                  content: await f.text(),
-                  format: f.name.endsWith(".json") ? "json" : "csv",
-                });
-            }}
-          />
-        </label>
-        <Button type="submit" size="sm" disabled={pending || !feed.content}>
-          Import
-        </Button>
-      </form>
-
-      <form
-        onSubmit={submitManual}
-        className="space-y-2 rounded-xl border border-border bg-card p-4"
-        aria-labelledby="man-h"
-      >
-        <h2 id="man-h" className="text-sm font-medium">
-          Record a manually checked price
-        </h2>
-        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden /> For stores no automated
-          route reaches. Shown as &ldquo;Manually checked &lt;date&gt;&rdquo;.
-        </p>
-        <label className="block text-xs">
-          Store
-          <select
-            className={input}
-            value={manual.sourceId}
-            onChange={(e) => setManual({ ...manual, sourceId: e.target.value })}
-          >
-            {stores.map((s) => (
-              <option key={s.sourceId} value={s.sourceId}>
-                {s.retailerLabel}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-xs">
-          Product title
-          <input
-            className={input}
-            value={manual.title}
-            onChange={(e) => setManual({ ...manual, title: e.target.value })}
-            required
-            maxLength={300}
-          />
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block text-xs">
-            Price (CAD)
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              className={input}
-              value={manual.price}
-              onChange={(e) => setManual({ ...manual, price: e.target.value })}
-              required
-            />
-          </label>
-          <label className="block text-xs">
-            Checked on
-            <input
-              type="date"
-              className={input}
-              value={manual.checkedAt}
-              onChange={(e) => setManual({ ...manual, checkedAt: e.target.value })}
-              required
-            />
-          </label>
-        </div>
-        <label className="block text-xs">
-          Store link (optional, store&rsquo;s own site)
-          <input
-            type="url"
-            className={input}
-            value={manual.url}
-            onChange={(e) => setManual({ ...manual, url: e.target.value })}
-          />
-        </label>
-        <label className="block text-xs">
-          Note
-          <input
-            className={input}
-            value={manual.note}
-            onChange={(e) => setManual({ ...manual, note: e.target.value })}
-            maxLength={500}
-          />
-        </label>
-        <Button type="submit" size="sm" disabled={pending}>
-          Save
-        </Button>
-      </form>
-    </div>
   );
 }

@@ -373,6 +373,18 @@ describe("test send guards (R1.1, §6, R1.13)", () => {
     expect(mailer!.sent).toHaveLength(2);
   });
 
+  it("refuses a send that would pass this month's email limit", async () => {
+    const { deps, mailer } = await setup();
+    const monthly = { ...deps, monthlyLimit: 1 };
+    await sendTest(monthly, USER, "owner@example.test");
+    const err = await sendTest(monthly, USER, "owner@example.test").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DigestError);
+    expect((err as DigestError).message).toBe(
+      "This month's email limit (1) would be passed, so nothing was sent. Sending starts again on the 1st.",
+    );
+    expect(mailer!.sent).toHaveLength(1);
+  });
+
   it("says plainly when email isn't set up", async () => {
     const { deps } = await setup({ mailer: null });
     await expect(sendTest(deps, USER, "owner@example.test")).rejects.toMatchObject({ status: 503 });

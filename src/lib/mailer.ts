@@ -8,7 +8,8 @@
 /*  FROM (for example a Gmail account with an app password).           */
 /*                                                                     */
 /*  The free-plan limit is enforced by the callers with                */
-/*  emailDailyLimit() (EMAIL_DAILY_LIMIT, default 90 of Resend's 100). */
+/*  emailDailyLimit() (EMAIL_DAILY_LIMIT, default 90 of Resend's 100)  */
+/*  and emailMonthlyLimit() (EMAIL_MONTHLY_LIMIT, 2,700 of 3,000).     */
 /*  Addresses are masked in every log line (maskEmail).                */
 /* ------------------------------------------------------------------ */
 
@@ -52,6 +53,19 @@ export function emailProvider(env: NodeJS.ProcessEnv = process.env): EmailProvid
 export function emailDailyLimit(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number.parseInt(env.EMAIL_DAILY_LIMIT ?? "", 10);
   return Number.isFinite(n) && n > 0 ? Math.min(n, 10_000) : DEFAULT_EMAIL_DAILY_LIMIT;
+}
+
+export const DEFAULT_EMAIL_MONTHLY_LIMIT = 2_700;
+
+/** Emails the app may send per calendar month (UTC): Resend's free plan allows 3,000. */
+export function emailMonthlyLimit(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number.parseInt(env.EMAIL_MONTHLY_LIMIT ?? "", 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 300_000) : DEFAULT_EMAIL_MONTHLY_LIMIT;
+}
+
+/** The first moment of this calendar month in UTC, as the provider counts it. */
+export function monthStartUtc(now: Date): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
 
 /** The address inside "Name <a@b.c>", lower-cased. */

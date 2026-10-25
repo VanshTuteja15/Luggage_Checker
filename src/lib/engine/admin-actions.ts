@@ -5,27 +5,49 @@
 import { parseFeed } from "./adapters/feed-import";
 import { manualOffer, type ManualInput } from "./adapters/manual-entry";
 import { describeConfig } from "./config";
-import { FLAG_DEFAULTS, isKnownFlag, resolveFlags } from "./flags";
+import { tavilyConfigured } from "@/lib/tavily";
+import { FLAG_DEFAULTS, flagOn, isKnownFlag, resolveFlags } from "./flags";
 import { observeOffer } from "./observe";
 import type { EngineRuntime } from "./recorder";
 import { checkRoutes } from "./registry";
+import { storeStatusRows } from "./store-status";
 import type { CategoryPack } from "./types";
 
-export async function adminOverview(rt: EngineRuntime) {
+export async function adminOverview(
+  rt: EngineRuntime,
+  opts: { estimatesConfigured?: boolean } = {},
+) {
   const store = rt.store;
-  const [health, failures, rejections, sessions, flagRows, counts, reviews, sources] =
-    await Promise.all([
-      store.sourceHealthStats(),
-      store.recentFailures(60),
-      store.recentRejections(60),
-      store.sessionTimings(60),
-      store.listFlagRows(),
-      store.countListingsBySource(),
-      store.listReviews("pending", 200),
-      rt.sources(),
-    ]);
+  const [
+    health,
+    failures,
+    rejections,
+    sessions,
+    flagRows,
+    counts,
+    reviews,
+    sources,
+    feedSources,
+    manualSources,
+  ] = await Promise.all([
+    store.sourceHealthStats(),
+    store.recentFailures(60),
+    store.recentRejections(60),
+    store.sessionTimings(60),
+    store.listFlagRows(),
+    store.countListingsBySource(),
+    store.listReviews("pending", 200),
+    rt.sources(),
+    store.sourcesWithAdapter("feed_import"),
+    store.sourcesWithAdapter("manual_entry"),
+  ]);
   const flags = resolveFlags(flagRows);
-  const routeCtx = { flags, config: rt.config };
+  const routeCtx = { flags, config: rt.config, feedSources, manualSources };
+  // Plain rows for the default Stores tab (R5.2); the technical ones follow.
+  const stores = storeStatusRows(sources, health, {
+    ...routeCtx,
+    estimatesOn: flagOn(flags, "estimates.web") && (opts.estimatesConfigured ?? tavilyConfigured()),
+  });
   const byId = new Map(sources.map((s) => [s.id, s]));
   const finished = sessions.filter((s) => s.totalMs !== null);
   const pct = (xs: number[], p: number) =>
@@ -35,6 +57,7 @@ export async function adminOverview(rt: EngineRuntime) {
   return {
     config: describeConfig(rt.config),
     store: store.kind,
+    stores,
     sources: health.map((h) => {
       const s = byId.get(h.sourceId);
       const checks = s ? checkRoutes(s, routeCtx) : [];
@@ -113,11 +136,14 @@ export async function importFeedAdmin(
   userId: string,
 ) {
   const source = (await rt.sources()).find((s) => s.id === req.sourceId);
-  if (!source) return { ok: false as const, error: "unknown store" };
+  if (!source) return { ok: false as const, error: "That store isn't in the list." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(req.asOf))
-    return { ok: false as const, error: "asOf must be a YYYY-MM-DD date" };
+    return { ok: false as const, error: "Pick the date the dealer list is valid from." };
   if (req.content.length > 5_000_000)
-    return { ok: false as const, error: "feed is larger than 5 MB" };
+    return {
+      ok: false as const,
+      error: "The file is larger than 5 MB. Split it and import each part.",
+    };
   const parsed = parseFeed(req.content, req.format, source, pack, req.asOf, req.name.slice(0, 120));
   let accepted = 0;
   let rejected = parsed.errors.length;
@@ -153,7 +179,7 @@ export async function recordManualAdmin(
   userId: string,
 ) {
   const source = (await rt.sources()).find((s) => s.id === sourceId);
-  if (!source) return { ok: false as const, error: "unknown store" };
+  if (!source) return { ok: false as const, error: "That store isn't in the list." };
   const m = manualOffer(source, pack, { ...input, enteredBy: userId });
   if (!m.ok) return { ok: false as const, error: m.reason };
   const r = await observeOffer(rt.store, pack, source, m.offer, {

@@ -490,8 +490,12 @@ export function useAddToEmail() {
 
 /* ------------------------------------------------------------------ */
 
+/** Server messages are written for people (R5.5); a dropped connection gets a plain sentence. */
 export function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiRequestError) return err.message;
+  // fetch() rejects with a TypeError ("Failed to fetch") when the network is down.
+  if (err instanceof TypeError)
+    return "We couldn't reach LuggageTracker. Check your connection and try again.";
   if (err instanceof Error) return err.message;
   return fallback;
 }

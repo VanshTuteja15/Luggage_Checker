@@ -30,7 +30,8 @@ export async function decideReview(
         await store.linkListing(listing.id, pending.candidateProductId, null);
       }
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : "Could not merge" };
+      console.error("decideReview: merge failed", err);
+      return { ok: false, error: "Couldn't join the two products. Please try again." };
     }
   }
 

@@ -12,7 +12,14 @@
 
 import type { EngineStore } from "@/lib/engine/store/port";
 import type { CategoryPack, SourceRecord } from "@/lib/engine/types";
-import { emailDailyLimit, maskEmail, type Mailer, type MailMessage } from "@/lib/mailer";
+import {
+  emailDailyLimit,
+  emailMonthlyLimit,
+  maskEmail,
+  monthStartUtc,
+  type Mailer,
+  type MailMessage,
+} from "@/lib/mailer";
 import { allStoresChosen, enabledStoreIds } from "@/lib/stores";
 import { addDays, localDate } from "@/lib/time/local";
 import { buildDigest, type DigestProductInput, type DigestView } from "./build";
@@ -34,6 +41,8 @@ export type DigestDeps = {
   sleep?: (ms: number) => Promise<void>;
   /** EMAIL_DAILY_LIMIT; read from the environment when omitted. */
   dailyLimit?: number;
+  /** EMAIL_MONTHLY_LIMIT; read from the environment when omitted. */
+  monthlyLimit?: number;
 };
 
 /** A refusal with a plain sentence for the person and an HTTP status for the route. */
@@ -225,7 +234,7 @@ export async function deliver(
   return out;
 }
 
-/** Refuse before sending when these recipients would pass the daily limit. */
+/** Refuse before sending when these recipients would pass the daily or monthly limit. */
 export async function checkDailyLimit(deps: DigestDeps, count: number): Promise<void> {
   const limit = deps.dailyLimit ?? emailDailyLimit();
   const since = new Date(deps.now().getTime() - 24 * 3_600_000).toISOString();
@@ -234,6 +243,13 @@ export async function checkDailyLimit(deps: DigestDeps, count: number): Promise<
     throw new DigestError(
       429,
       `The daily email limit (${limit}) would be passed, so nothing was sent. Sending starts again within 24 hours.`,
+    );
+  const monthly = deps.monthlyLimit ?? emailMonthlyLimit();
+  const usedThisMonth = await deps.store.emailsSentSince(monthStartUtc(deps.now()));
+  if (usedThisMonth + count > monthly)
+    throw new DigestError(
+      429,
+      `This month's email limit (${monthly.toLocaleString("en-CA")}) would be passed, so nothing was sent. Sending starts again on the 1st.`,
     );
 }
 
