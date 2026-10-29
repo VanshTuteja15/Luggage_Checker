@@ -248,7 +248,7 @@ IDs (S1.x …) go in commits, task files and progress.
 | V3-10 Model fallback | Claude | S1.4, S4.2 behind flags; enable only if eval improves | Eval shows a gain, or the flags stay off with the reason |
 | V3-11 Verify + docs | Claude | Full eval; real searches for 20 queries; update README, ARCHITECTURE, RUNBOOK, HUMAN_ACTIONS, DEPLOY; write `docs/FINAL_REPORT_V3.md` | All acceptance met, or the gaps are documented honestly |
 
-Each phase follows the same loop: inspect → test first → build or delegate → review → gates → commit → progress.
+Each phase follows the same loop: inspect → test first → build or delegate → review → gates → progress → "Ready to commit" hand-off. **The owner (Vansh) does every commit, merge and push**; agents never run `git commit/push/merge` (see `AGENTS.md`).
 
 ## 4. Quality gates (every phase)
 

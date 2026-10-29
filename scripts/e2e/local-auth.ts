@@ -205,6 +205,7 @@ async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string)
   restPool ??= new Pool({
     connectionString: dbUrl,
     max: 2,
+    connectionTimeoutMillis: 3_000,
     // PostgREST returns dates as YYYY-MM-DD; the app compares them as strings.
     types: {
       getTypeParser: (oid: number, format?: string) =>
@@ -216,7 +217,19 @@ async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string)
             ),
     },
   });
-  const client = await restPool.connect();
+  // A dropped database connection must not take the stand-in down.
+  if (restPool.listenerCount("error") === 0)
+    restPool.on("error", (err) =>
+      console.error("local auth stand-in: database connection lost:", err.message),
+    );
+  let client;
+  try {
+    client = await restPool.connect();
+  } catch (err) {
+    return send(res, 503, {
+      message: `local dev database not reachable (${err instanceof Error ? err.message : "error"})`,
+    });
+  }
   try {
     await client.query("BEGIN");
     await client.query(`SET LOCAL ROLE ${user ? "authenticated" : "anon"}`);
@@ -253,6 +266,10 @@ async function restGet(req: IncomingMessage, res: ServerResponse, dbUrl: string)
   }
 }
 
+process.on("unhandledRejection", (err) => {
+  console.error("local auth stand-in: unhandled error (still running):", err);
+});
+
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL ?? "";
   if (!/@127\.0\.0\.1:/.test(url))
@@ -261,32 +278,43 @@ async function main(): Promise<void> {
 
   createServer((req, res) => {
     void (async () => {
-      const path = new URL(req.url ?? "/", "http://x").pathname;
-      if (req.method === "OPTIONS") return send(res, 204);
-      if (path === "/auth/v1/token" && req.method === "POST") {
-        const grant = new URL(req.url ?? "/", "http://x").searchParams.get("grant_type");
-        const body = await readJson(req);
-        if (grant === "refresh_token") return send(res, 200, session());
-        if (body.email === EMAIL && body.password === PASSWORD) return send(res, 200, session());
-        return send(res, 400, {
-          error: "invalid_grant",
-          error_description: "Invalid login credentials",
-        });
-      }
-      if (path === "/auth/v1/user" && req.method === "GET") {
-        const auth = req.headers.authorization ?? "";
-        const [, payload] = auth.replace(/^Bearer\s+/i, "").split(".");
-        try {
-          const claims = JSON.parse(Buffer.from(payload ?? "", "base64url").toString());
-          if (claims.sub === USER_ID && claims.exp * 1000 > Date.now()) return send(res, 200, user);
-        } catch {
-          /* fall through */
+      try {
+        const path = new URL(req.url ?? "/", "http://x").pathname;
+        if (req.method === "OPTIONS") return send(res, 204);
+        if (path === "/auth/v1/token" && req.method === "POST") {
+          const grant = new URL(req.url ?? "/", "http://x").searchParams.get("grant_type");
+          const body = await readJson(req);
+          if (grant === "refresh_token") return send(res, 200, session());
+          if (body.email === EMAIL && body.password === PASSWORD) return send(res, 200, session());
+          return send(res, 400, {
+            error: "invalid_grant",
+            error_description: "Invalid login credentials",
+          });
         }
-        return send(res, 401, { message: "invalid token" });
+        if (path === "/auth/v1/user" && req.method === "GET") {
+          const auth = req.headers.authorization ?? "";
+          const [, payload] = auth.replace(/^Bearer\s+/i, "").split(".");
+          try {
+            const claims = JSON.parse(Buffer.from(payload ?? "", "base64url").toString());
+            if (claims.sub === USER_ID && claims.exp * 1000 > Date.now())
+              return send(res, 200, user);
+          } catch {
+            /* fall through */
+          }
+          return send(res, 401, { message: "invalid token" });
+        }
+        if (path === "/auth/v1/logout") return send(res, 204);
+        if (path.startsWith("/rest/v1/") && req.method === "GET") return restGet(req, res, url);
+        return send(res, 501, { message: "not part of the local stand-in" });
+      } catch (err) {
+        // Never let one bad request stop the stand-in (an unhandled rejection exits Node).
+        console.error(
+          "local auth stand-in: request failed:",
+          err instanceof Error ? err.message : err,
+        );
+        if (!res.headersSent) send(res, 500, { message: "local auth stand-in error" });
+        else res.end();
       }
-      if (path === "/auth/v1/logout") return send(res, 204);
-      if (path.startsWith("/rest/v1/") && req.method === "GET") return restGet(req, res, url);
-      return send(res, 501, { message: "not part of the local stand-in" });
     })();
   }).listen(PORT, "127.0.0.1", () => {
     console.log(

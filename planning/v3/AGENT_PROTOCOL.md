@@ -7,7 +7,7 @@ This protocol lets two AI agents work on one codebase without stepping on each o
 | | Claude Code: **brain / lead** | Cursor: **worker** |
 |---|---|---|
 | Owns | Architecture, contracts, engine (`src/lib/engine/**`, `src/lib/contracts/**`), worker (`worker/**`), database (`supabase/**`), scripts and eval (`scripts/**`), API routes (`src/app/api/**`), security, merges | UI pages and components (`src/app/**/page.tsx` except protected files, `src/components/**`, styles), UI tests, small well-specified tasks Claude assigns |
-| Does | Plans phases, writes task specs, builds engine-critical code, reviews every Cursor change, runs all gates, merges | Implements exactly the task spec, runs the task's checks, writes a report, never merges |
+| Does | Plans phases, writes task specs, builds engine-critical code, reviews every Cursor change, runs all gates, tells the owner what is ready to commit/merge | Implements exactly the task spec, runs the task's checks, writes a report, never merges |
 | Never | Lets a task go unreviewed; edits files locked by an open Cursor task | Edits files outside its task's allow-list; changes contracts, API routes, migrations, engine or protected files; merges; pushes |
 
 Protected for both, always:
@@ -83,14 +83,14 @@ Requirement IDs: S3.3, S7
 
   Open `D:\luggage-watch-ui` in Cursor. For each task: `git switch -c v3/ui-T### v3/integration`.
 - A file listed under "Allowed files" of a task in `in-progress` / `review` / `changes` is **locked** to that task's owner. Claude checks `BOARD.md` before editing any UI file.
-- Claude merges with `git merge --no-ff v3/ui-T###` after review. No force-push and no history rewrite, ever (the Lovable-connected repo).
+- **Only the owner commits, merges and pushes.** After Claude approves a task, it tells the owner: "T-### approved: commit these files on v3/ui-T### with message …, then merge into v3/integration". No agent runs `git commit/merge/push`. No force-push and no history rewrite, ever (the Lovable-connected repo).
 
 ## 4. Two ways to hand a task to Cursor
 
 **A. Automatic (Claude runs Cursor's CLI).** Requires the owner to install the Cursor CLI and set `CURSOR_API_KEY` in the shell environment (never in a file). Claude runs, in the worktree:
 
 ```
-agent -p --force --output-format json "Read docs/agents/tasks/T-###.md and AGENTS.md. Do exactly that task on branch v3/ui-T###. Edit only the allowed files. Run the acceptance checks. Fill the Worker report. Set Status: review. Commit on the task branch."
+agent -p --force --output-format json "Read docs/agents/tasks/T-###.md and AGENTS.md. Do exactly that task on branch v3/ui-T###. Edit only the allowed files. Run the acceptance checks. Fill the Worker report. Set Status: review. Do not commit; leave changes for the owner."
 ```
 
 Then Claude reads the report, reviews the diff and runs the checks itself. If the CLI isn't available, use B.

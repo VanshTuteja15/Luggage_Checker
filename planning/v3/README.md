@@ -25,5 +25,5 @@
 **3. In Cursor** (open `D:\luggage-watch-ui` once Claude has created it), when Claude hands you a task:
 
 ```
-Read docs/agents/tasks/T-###.md and AGENTS.md. Do exactly that task. Edit only the allowed files. Run the acceptance checks, fill the Worker report, set Status: review, and commit on the task branch.
+Read docs/agents/tasks/T-###.md and AGENTS.md. Do exactly that task. Edit only the allowed files. Run the acceptance checks, fill the Worker report, set Status: review. Don't commit: I'll commit myself.
 ```

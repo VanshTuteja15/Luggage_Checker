@@ -6,7 +6,7 @@ alwaysApply: true
 # You are the worker. Claude Code is the lead.
 
 - Work only from a task file in `docs/agents/tasks/T-###.md` with `Status: ready` (or `changes`) and `Owner: cursor`. With no task, ask the owner. Don't invent work.
-- Work on a branch named `v3/ui-T###`, created from `v3/integration`, in the `luggage-watch-ui` worktree. Never merge, push, rebase shared branches or force-push.
+- Work on a branch named `v3/ui-T###`, created from `v3/integration`, in the `luggage-watch-ui` worktree. Never run `git commit`, `merge`, `push`, `rebase`, `reset` or `stash`: the owner (Vansh) commits everything himself. Leave your changes uncommitted with a "Ready to commit" list in the Worker report.
 - **Edit only the files listed under "Allowed files".** If you need another file, write the question under "Questions", set `Status: blocked`, and stop.
 - Never edit any of these:
   - `src/lib/contracts/**`, `src/lib/engine/**`, `src/app/api/**`;

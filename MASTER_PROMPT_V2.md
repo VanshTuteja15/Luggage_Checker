@@ -48,7 +48,7 @@ Track your work in `docs/PROGRESS_V2.md` (a phase table with status and evidence
    - Never print, log, commit or echo secrets.
    - Never edit `.env*` files or `.github/`; list needed variables in `.env.example` and `docs/HUMAN_ACTIONS.md`.
    - Do not write to `.env.local`.
-7. **Git.** Small commits per step, on `feat/client-ready`. No force-push, no history rewrite (the repo is connected to Lovable). Do not merge to `main`.
+7. **Git: the owner commits.** Never run `git commit`, `push`, `merge`, `rebase`, `reset` or `stash`. Work on `feat/client-ready`. At the end of each step, leave the changes uncommitted and give a "Ready to commit" list (files + suggested message), then wait for the owner. See `AGENTS.md`.
 8. **$0 guardrails.**
    - Keep the Tavily monthly cap (`TAVILY_MONTHLY_CREDIT_CAP`, default 950) and the PAYGO refusal.
    - Add no new paid service.
@@ -518,7 +518,7 @@ Additive and idempotent, with RLS on every table (owner = `auth.uid()`; service 
   - `npm run test:worker`;
   - `npm run probe:sources -- --selftest`.
 
-## 12. Phases (do them in order; each ends with its checks passing and a commit)
+## 12. Phases (do them in order; each ends with its checks passing and a "Ready to commit" hand-off to the owner)
 
 | Phase | Work | Done when |
 |---|---|---|
@@ -541,7 +541,7 @@ Inside each phase:
 3. Implement.
 4. Run the phase checks and all gates.
 5. Fix failures.
-6. Commit (`feat(email): … [R1.4]`).
+6. Stop with a "Ready to commit" list (files + suggested message, e.g. `feat(email): … [R1.4]`). The owner commits; continue after he says so.
 7. Update `PROGRESS_V2.md`.
 
 If you discover a missing requirement, add it to §15 of `PROGRESS_V2.md` with the reason, implement it if it's clearly in scope and $0, otherwise list it as an open question.

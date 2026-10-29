@@ -66,7 +66,7 @@ export function engineConfig(): EngineConfig {
       amzId && amzSecret && amzTag
         ? { credentialId: amzId, credentialSecret: amzSecret, partnerTag: amzTag }
         : null,
-    sessionDeadlineMs: int("ENGINE_SESSION_DEADLINE_MS", 11_000, 3_000, 12_000),
+    sessionDeadlineMs: int("ENGINE_SESSION_DEADLINE_MS", 8_000, 3_000, 12_000),
     singleFlightMs: int("ENGINE_SINGLE_FLIGHT_MS", 90_000, 0, 600_000),
     fetchTimeoutMs: int("ENGINE_FETCH_TIMEOUT_MS", 8_000, 1_000, 30_000),
     rateLimit: {

@@ -21,7 +21,7 @@ export type EstimateFinder = (req: EstimateRequest) => Promise<EstimateResult>;
 const memory = new MemoryEstimateStore();
 
 /** A basic snippet-only search answers in 1–2 s; with less than this left it isn't sent. */
-export const SNIPPET_MIN_ATTEMPT_MS = 4_000;
+export const SNIPPET_MIN_ATTEMPT_MS = 3_000;
 
 export function estimateStoreFor(rt: EngineRuntime): EstimateStore {
   const pool = pgPoolOf(rt.store);
