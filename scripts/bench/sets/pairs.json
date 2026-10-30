@@ -1,0 +1,897 @@
+{
+ "name": "pairs",
+ "task": "(d) two listing titles -> same | variant | different",
+ "recordedFrom": "dev DB listings (Delsey.ca EN pages vs the same store's /fr/ pages, indexed 2026-10-08) + CLD/Amazon.ca/Samsonite.ca/U.N./Luggage City titles in the index",
+ "labelRules": {
+  "same": "the same product (and colour where both name one); Delsey: identical 11-digit store code",
+  "variant": "same product, different colour; Delsey: same 9-digit model, different 2-digit colour code",
+  "different": "anything else: size, inches, version, edition, line words that tell products apart",
+  "stores": "the store each title came from (both pipelines get it; production fills a brand-direct store brand from it)"
+ },
+ "knownGaps": [
+  "Chatelet Air 1.0 is not in our index, so the 2.0 vs 1.0 trap is represented by SKY MAX 2.0 vs 3.0",
+  "Delsey lists three different 2-piece sets with identical titles; title-only pairs can't tell them apart, so they are left out (they need the SKU)"
+ ],
+ "items": [
+  {
+   "id": "p01",
+   "a": "LE CUIR GRAINE | Leather Toiletry Bag, Black",
+   "b": "40299215000 Le Cuir Graine Leather Toiletry Bag Black",
+   "expected": "same",
+   "truth": "delsey code 40299215000 = 40299215000",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p02",
+   "a": "CRUISE 3.0 | 30-Inch Check-In Trunk Suitcase, Black",
+   "b": "40287981800 Cruise 3 0 30 Inch Check In Trunk Suitcase Black",
+   "expected": "same",
+   "truth": "delsey code 40287981800 = 40287981800",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p03",
+   "a": "HELIUM DLX | 4-Wheeled Garment Bag, Navy",
+   "b": "40239752502 Helium Dlx 4 Wheeled Garment Bag Navy",
+   "expected": "same",
+   "truth": "delsey code 40239752502 = 40239752502",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p04",
+   "a": "DYLAN | 15.6-Inch Laptop Backpack, Pearl grey",
+   "b": "40362360001 Dylan 15 6 Inch Laptop Backpack Pearl Grey",
+   "expected": "same",
+   "truth": "delsey code 40362360001 = 40362360001",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p05",
+   "a": "CHATELET AIR 2.0 | Carry-On Underseater Suitcase, Angora",
+   "b": "40167645115 Chatelet Air 2 0 Carry On Underseater Suitcase Angora",
+   "expected": "same",
+   "truth": "delsey code 40167645115 = 40167645115",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p06",
+   "a": "BROCHANT 3 |.0 27-Inch Expandable Check-In Suitcase, Deep black",
+   "b": "40225782050 Brochant 3 27 Inch Expandable Check In Suitcase Deep Black",
+   "expected": "same",
+   "truth": "delsey code 40225782050 = 40225782050",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p07",
+   "a": "SKY MAX 2.0 | 2-Piece Luggage Set, Black",
+   "b": "40328491000 Sky Max 2 0 2 Piece Luggage Set Black",
+   "expected": "same",
+   "truth": "delsey code 40328491000 = 40328491000",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p08",
+   "a": "DLC PRO | Carry-On Underseater Suitcase, Black",
+   "b": "40210245200 Dlc Pro Carry On Underseater Suitcase Black",
+   "expected": "same",
+   "truth": "delsey code 40210245200 = 40210245200",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p09",
+   "a": "SKY MAX 2.0 | 2-Wheeled Garment Bag, Black",
+   "b": "40328452100 Sky Max 2 0 2 Wheeled Garment Bag Black",
+   "expected": "same",
+   "truth": "delsey code 40328452100 = 40328452100",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p10",
+   "a": "CHATELET AIR 2.0 | 3-Piece Luggage Set, Brown",
+   "b": "40167698606 Chatelet Air 2 0 3 Piece Luggage Set Brown",
+   "expected": "same",
+   "truth": "delsey code 40167698606 = 40167698606",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p11",
+   "a": "FLANERIE SE | 14-Inch Laptop Backpack, Black",
+   "b": "40303160000 Flanerie Se 14 Inch Laptop Backpack Noir",
+   "expected": "same",
+   "truth": "delsey code 40303160000 = 40303160000",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p12",
+   "a": "CHATELET AIR 2.0 | 23-Inch Carry-On Suitcase, Angora",
+   "b": "40167680515 Chatelet Air 2 0 23 Inch Carry On Suitcase Angora",
+   "expected": "same",
+   "truth": "delsey code 40167680515 = 40167680515",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p13",
+   "a": "CHATELET AIR 2.0 | 30-Inch Check-In Suitcase, Brown",
+   "b": "40167682106 Chatelet Air 2 0 30 Inch Check In Suitcase Brown",
+   "expected": "same",
+   "truth": "delsey code 40167682106 = 40167682106",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p14",
+   "a": "CRUISE 3.0 | 23-Inch Expandable Carry-On Suitcase, Black",
+   "b": "40287980500 Cruise 3 0 23 Inch Expandable Carry On Suitcase Black",
+   "expected": "same",
+   "truth": "delsey code 40287980500 = 40287980500",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p15",
+   "a": "CHATELET AIR 2.0 | Large Toiletry Bag, Brown",
+   "b": "40167615006 Chatelet Air 2 0 Large Toiletry Bag Brown",
+   "expected": "same",
+   "truth": "delsey code 40167615006 = 40167615006",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p16",
+   "a": "LE CUIR GRAINE | Leather Sling Bag, Black",
+   "b": "40299214200 Le Cuir Graine Leather Sling Bag Black",
+   "expected": "same",
+   "truth": "delsey code 40299214200 = 40299214200",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p17",
+   "a": "CHATELET AIR 2.0 | 14-Inch Laptop Backpack, Navy blue",
+   "b": "40167660322 Chatelet Air 2 0 14 Inch Laptop Backpack Navy Blue",
+   "expected": "same",
+   "truth": "delsey code 40167660322 = 40167660322",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p18",
+   "a": "WAGRAM | 15.6-Inch Laptop Briefcase, Navy",
+   "b": "40119916002 Wagram 15 6 Inch Laptop Briefcase Navy",
+   "expected": "same",
+   "truth": "delsey code 40119916002 = 40119916002",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p19",
+   "a": "COSMIQUE | 32-Inch Expandable Check-In Suitcase, Dark teal",
+   "b": "40392683023 Alexandra 32 Inch Expandable Check In Suitcase Dark Teal",
+   "expected": "same",
+   "truth": "delsey code 40392683023 = 40392683023",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p20",
+   "a": "CRUISE 3.0 | 23-Inch Expandable Carry-On Suitcase, Deep sea navy",
+   "b": "40287980522 Cruise 3 0 23 Inch Expandable Carry On Suitcase Deep Sea Navy",
+   "expected": "same",
+   "truth": "delsey code 40287980522 = 40287980522",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p21",
+   "a": "CHATELET AIR 2.0 | 22-Inch Carry-On Suitcase, Angora",
+   "b": "40167680115 Chatelet Air 2 0 22 Inch Carry On Suitcase Angora",
+   "expected": "same",
+   "truth": "delsey code 40167680115 = 40167680115",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p22",
+   "a": "TURENNE SOFT | 14-Inch Laptop Backpack, Night blue",
+   "b": "40163261002 Turenne Soft 14 Inch Laptop Backpack Night Blue",
+   "expected": "same",
+   "truth": "delsey code 40163261002 = 40163261002",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p23",
+   "a": "FLANERIE SE | 14-Inch Laptop Backpack, Black",
+   "b": "FLANERIE SE | 14-Inch Laptop Backpack, Champagne",
+   "expected": "variant",
+   "truth": "delsey model 403031600 colours 00/17",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p24",
+   "a": "LE CUIR LISSE | Long Zip Leather Wallet, Cognac",
+   "b": "LE CUIR LISSE | Long Zip Leather Wallet, Yellow",
+   "expected": "variant",
+   "truth": "delsey model 402991020 colours 56/15",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p25",
+   "a": "CHATELET AIR 2.0 | 23-Inch Carry-On Suitcase, Brown",
+   "b": "CHATELET AIR 2.0 | 23-Inch Carry-On Suitcase, Angora",
+   "expected": "variant",
+   "truth": "delsey model 401676805 colours 06/15",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p26",
+   "a": "JULIAN 15.6-Inch Laptop Backpack, Black",
+   "b": "JULIAN 15.6-Inch Laptop Backpack, Olive green",
+   "expected": "variant",
+   "truth": "delsey model 403621600 colours 00/23",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p27",
+   "a": "CHATELET AIR 2.0 | 14-Inch Laptop Backpack, Navy blue",
+   "b": "CHATELET AIR 2.0 | 14-Inch Laptop Backpack, Brown",
+   "expected": "variant",
+   "truth": "delsey model 401676603 colours 22/06",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p28",
+   "a": "CHATELET AIR 2.0 | 22-Inch Carry-On Suitcase, Brown",
+   "b": "CHATELET AIR 2.0 | 22-Inch Carry-On Suitcase, Angora",
+   "expected": "variant",
+   "truth": "delsey model 401676801 colours 06/15",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p29",
+   "a": "HELIUM DLX | Carry-On Underseater Suitcase, Black",
+   "b": "HELIUM DLX | Carry-On Underseater Suitcase, Navy",
+   "expected": "variant",
+   "truth": "delsey model 402397451 colours 00/02",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p30",
+   "a": "HELIUM DLX | Weekender Bag, Navy",
+   "b": "HELIUM DLX | Weekender Bag, Black",
+   "expected": "variant",
+   "truth": "delsey model 402397410 colours 02/00",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p31",
+   "a": "SKY MAX 2.0 | 31-Inch Expandable Check-In Suitcase, Green",
+   "b": "SKY MAX 2.0 | 31-Inch Expandable Check-In Suitcase, Blue",
+   "expected": "variant",
+   "truth": "delsey model 403284830 colours 03/02",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p32",
+   "a": "CHATELET AIR 2.0 | 26-Inch Check-In Suitcase, Angora",
+   "b": "CHATELET AIR 2.0 | 26-Inch Check-In Suitcase, Brown",
+   "expected": "variant",
+   "truth": "delsey model 401676810 colours 15/06",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p33",
+   "a": "LE CUIR GRAINE | Leather Backpack, Black",
+   "b": "LE CUIR GRAINE | Leather Backpack, Cognac",
+   "expected": "variant",
+   "truth": "delsey model 402992600 colours 00/56",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p34",
+   "a": "CARROUSEL | 3-Piece Luggage Set, Black",
+   "b": "CARROUSEL | 3-Piece Luggage Set, Platinum",
+   "expected": "variant",
+   "truth": "delsey model 402087987 colours 00/11",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p35",
+   "a": "CHATELET AIR 2.0 | Carry-On Underseater Suitcase, Brown",
+   "b": "CHATELET AIR 2.0 | Carry-On Underseater Suitcase, Angora",
+   "expected": "variant",
+   "truth": "delsey model 401676451 colours 06/15",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p36",
+   "a": "CHATELET AIR 2.0 | 14-Inch Laptop Backpack, Brown",
+   "b": "CHATELET AIR 2.0 | 14-Inch Laptop Backpack, Angora",
+   "expected": "variant",
+   "truth": "delsey model 401676601 colours 06/15",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p37",
+   "a": "CHATELET AIR 2.0 | 2-Piece Luggage Set, Brown",
+   "b": "CHATELET AIR 2.0 | 2-Piece Luggage Set, Angora",
+   "expected": "variant",
+   "truth": "delsey model 401676975 colours 06/15",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p38",
+   "a": "CHATELET AIR 2.0 | Wedding Dress Garment Cover, Angora",
+   "b": "CHATELET AIR 2.0 | Wedding Dress Garment Cover, Brown",
+   "expected": "variant",
+   "truth": "delsey model 401676551 colours 15/06",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p39",
+   "a": "CHATELET AIR 2.0 | 29-Inch Check-In Trunk Suitcase, Navy blue",
+   "b": "CHATELET AIR 2.0 | 29-Inch Check-In Trunk Suitcase, Light pink",
+   "expected": "variant",
+   "truth": "delsey model 401676818 colours 22/19",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p40",
+   "a": "JENNY | 15.6-Inch Laptop Backpack, Deep forest green",
+   "b": "JENNY | 15.6-Inch Laptop Backpack, Red",
+   "expected": "variant",
+   "truth": "delsey model 403619600 colours 03/04",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p41",
+   "a": "CRUISE 3.0 | 30-Inch Check-In Trunk Suitcase, Graphite",
+   "b": "CRUISE 3.0 | 30-Inch Check-In Trunk Suitcase, Platinum",
+   "expected": "variant",
+   "truth": "delsey model 402879818 colours 01/11",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p42",
+   "a": "CHATELET AIR 2.0 | Tote Bag, Navy blue",
+   "b": "CHATELET AIR 2.0 | Tote Bag, Brown",
+   "expected": "variant",
+   "truth": "delsey model 401676402 colours 22/06",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p43",
+   "a": "CRUISE 3.0 | 2-Piece Luggage Set, Graphite",
+   "b": "CRUISE 3.0 | 27-Inch Expandable Check-In Suitcase, Ivory",
+   "expected": "different",
+   "truth": "delsey models 402879978 vs 402879820",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p44",
+   "a": "SKY MAX 3.0 | 23-Inch Expandable Carry-On Suitcase, Teal blue",
+   "b": "SKY MAX 3.0 | 27-Inch Check-In Suitcase, Black",
+   "expected": "different",
+   "truth": "delsey models 403975805 vs 403975820",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p45",
+   "a": "CHATELET AIR 2.0 | 30-Inch Check-In Suitcase, Angora",
+   "b": "CHATELET AIR 2.0 | 26-Inch Check-In Suitcase, Brown",
+   "expected": "different",
+   "truth": "delsey models 401676821 vs 401676810",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p46",
+   "a": "ALU'R | 19-Inch Aluminum Carry-On Suitcase, Green",
+   "b": "ALU'R | 28-Inch Aluminum Check-In Suitcase, Silver",
+   "expected": "different",
+   "truth": "delsey models 401030801 vs 401030821",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p47",
+   "a": "HELIUM DLX | Weekender Bag, Navy",
+   "b": "HELIUM DLX | 24-Inch Expandable Carry-On Suitcase, Black",
+   "expected": "different",
+   "truth": "delsey models 402397410 vs 402397805",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p48",
+   "a": "COSMIQUE | 23-Inch Expandable Carry-On Suitcase, Black",
+   "b": "COSMIQUE | 27-Inch Expandable Check-In Suitcase, Syrah red",
+   "expected": "different",
+   "truth": "delsey models 403926805 vs 403926820",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p49",
+   "a": "TURENNE 2.0 | 22-Inch Front Pocket Carry-On Suitcase, Blue grey",
+   "b": "TURENNE 2.0 | 32-Inch Check-In Trunk Suitcase, Night blue",
+   "expected": "different",
+   "truth": "delsey models 401622804 vs 401622828",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p50",
+   "a": "CADENCE | 31-Inch Expandable Check-In Suitcase, Deep black",
+   "b": "CADENCE | 23-Inch Expandable Carry-On Suitcase, Deep black",
+   "expected": "different",
+   "truth": "delsey models 401677830 vs 401677805",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p51",
+   "a": "CRUISE 3.0 | 30-Inch Check-In Trunk Suitcase, Platinum",
+   "b": "CRUISE 3.0 | 27-Inch Expandable Check-In Suitcase, Graphite",
+   "expected": "different",
+   "truth": "delsey models 402879818 vs 402879820",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p52",
+   "a": "COSMIQUE | 27-Inch Expandable Check-In Suitcase, Black",
+   "b": "COSMIQUE | 23-Inch Expandable Carry-On Suitcase, Beige",
+   "expected": "different",
+   "truth": "delsey models 403926820 vs 403926805",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p53",
+   "a": "CRUISE 3.0 | 23-Inch Expandable Carry-On Suitcase, Deep sea navy",
+   "b": "CRUISE 3.0 | 3-Piece Luggage Set, Deep sea navy",
+   "expected": "different",
+   "truth": "delsey models 402879806 vs 402879987",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p54",
+   "a": "Samsonite Outline Pro Carry-On Spinner Luggage",
+   "b": "Samsonite Outline Pro Carry-On",
+   "expected": "same",
+   "truth": "CLD vs Luggage City",
+   "stores": [
+    "canadaluggagedepot",
+    "luggagecity"
+   ]
+  },
+  {
+   "id": "p55",
+   "a": "Samsonite Outline Pro Carry-On Spinner Luggage",
+   "b": "Samsonite Outline Pro Spinner Carry-On",
+   "expected": "same",
+   "truth": "CLD vs Samsonite.ca",
+   "stores": [
+    "canadaluggagedepot",
+    "samsonite-ca"
+   ]
+  },
+  {
+   "id": "p56",
+   "a": "Samsonite Outline Pro Large Expandable Spinner Luggage",
+   "b": "Samsonite Outline Pro Spinner Large",
+   "expected": "same",
+   "truth": "CLD vs Amazon.ca",
+   "stores": [
+    "canadaluggagedepot",
+    "amazon-ca"
+   ]
+  },
+  {
+   "id": "p57",
+   "a": "Samsonite Outline Pro Medium Expandable Spinner Luggage",
+   "b": "Samsonite Outline Pro Spinner Medium",
+   "expected": "same",
+   "truth": "CLD vs Samsonite.ca",
+   "stores": [
+    "canadaluggagedepot",
+    "samsonite-ca"
+   ]
+  },
+  {
+   "id": "p58",
+   "a": "Samsonite Paralux Hardside Expandable Spinner Medium Luggage",
+   "b": "Samsonite Paralux Hardside Spinner Medium",
+   "expected": "same",
+   "truth": "CLD vs U.N. Luggage (V2 A2.1 real run)",
+   "stores": [
+    "canadaluggagedepot",
+    "unluggage"
+   ]
+  },
+  {
+   "id": "p59",
+   "a": "Samsonite Paralux Hardside Expandable Spinner Large Luggage",
+   "b": "Samsonite Paralux Hardside Spinner Large",
+   "expected": "same",
+   "truth": "CLD vs Samsonite.ca",
+   "stores": [
+    "canadaluggagedepot",
+    "samsonite-ca"
+   ]
+  },
+  {
+   "id": "p60",
+   "a": "Samsonite Paralux Hardside Spinner Medium",
+   "b": "Samsonite Paralux Hardside Spinner Medium, Black",
+   "expected": "same",
+   "truth": "Luggage City vs Amazon.ca (colour named on one side only)",
+   "stores": [
+    "luggagecity",
+    "amazon-ca"
+   ]
+  },
+  {
+   "id": "p61",
+   "a": "Samsonite Paralux Hardside Spinner Large, Black",
+   "b": "Samsonite Paralux Hardside Spinner Large, Stone Grey",
+   "expected": "variant",
+   "truth": "Amazon.ca colours",
+   "stores": [
+    "amazon-ca",
+    "amazon-ca"
+   ]
+  },
+  {
+   "id": "p62",
+   "a": "Samsonite Outline Pro Carry-On Spinner Luggage",
+   "b": "Samsonite Outline Pro Carry-On Spinner Luggage - Shiraz/Burgundy",
+   "expected": "variant",
+   "truth": "CLD colour page",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p63",
+   "a": "Samsonite Nexis Spinner Large Luggage (28)",
+   "b": "Samsonite Nexis Spinner Large Luggage (31)",
+   "expected": "different",
+   "truth": "trap: Nexis Large 28 vs 31 (shadow run)",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p64",
+   "a": "Samsonite Paralux Hardside Expandable Spinner Medium Luggage",
+   "b": "Samsonite Paralux Hardside Expandable Spinner Large Luggage",
+   "expected": "different",
+   "truth": "trap: Paralux Medium vs Large (E1)",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p65",
+   "a": "Tumi 19 Degree Aluminum International Carry-On Luggage",
+   "b": "Tumi 19 Degree Aluminum International Expandable Carry-On Luggage - Silver",
+   "expected": "different",
+   "truth": "trap: International vs International Expandable",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p66",
+   "a": "Tumi 19 Degree International Expandable 4 Wheeled Carry-On Luggage - Textured Finish",
+   "b": "Tumi 19 Degree Lite International 4 Wheeled Carry-On Luggage",
+   "expected": "different",
+   "truth": "19 Degree vs 19 Degree Lite",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p67",
+   "a": "Tumi Aerotour International Expandable 4 Wheeled Carry-On Luggage",
+   "b": "Tumi Aerotour Continental Expandable 4 Wheeled Carry-On Luggage",
+   "expected": "different",
+   "truth": "International vs Continental",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p68",
+   "a": "Travelpro Maxlite 5 International Carry-On Spinner Luggage",
+   "b": "Travelpro Maxlite Air V2 International Carry-On Hardside Spinner",
+   "expected": "different",
+   "truth": "Maxlite 5 vs Maxlite Air V2",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p69",
+   "a": "Travelpro Maxlite 5 25 Inch Expandable Spinner Luggage",
+   "b": "Travelpro Maxlite 5 29 Inch Expandable Spinner Luggage",
+   "expected": "different",
+   "truth": "25 vs 29 inch",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p70",
+   "a": "Travelpro Maxlite Air V2 Compact Carry-On Hardside Spinner",
+   "b": "Travelpro Maxlite Air V2 International Carry-On Hardside Spinner",
+   "expected": "different",
+   "truth": "Compact vs International carry-on",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p71",
+   "a": "Air Canada Omni Large Expandable Softside Luggage",
+   "b": "Samsonite Omni 3.0 Large Spinner Expandable Luggage",
+   "expected": "different",
+   "truth": "different brand, same line word",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p72",
+   "a": "Samsonite Paralux Everyday Backpack",
+   "b": "Samsonite Paralux 2:1 Travel Backpack",
+   "expected": "different",
+   "truth": "two Paralux backpacks",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p73",
+   "a": "Briggs & Riley Baseline Global Carry-On Spinner Luggage",
+   "b": "Briggs & Riley Baseline Essential 2-Wheel Carry-On Luggage",
+   "expected": "different",
+   "truth": "Global vs Essential",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p74",
+   "a": "Tumi Ventra Large Expandable Carry-On Luggage",
+   "b": "Tumi Ventra Expandable Carry-On Luggage",
+   "expected": "different",
+   "truth": "trap: Large Carry-On vs Carry-On",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p75",
+   "a": "Travelpro Platinum Elite 21 Inch Expandable Carry-On Spinner Luggage",
+   "b": "Travelpro Platinum Elite 20 Inch Expandable Business Plus Carry-On Spinner",
+   "expected": "different",
+   "truth": "21 inch vs 20 inch Business Plus",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p76",
+   "a": "Travelpro Platinum Elite International Expandable Carry-On Spinner Luggage",
+   "b": "Travelpro Platinum Elite 21 Inch Expandable Carry-On Spinner Luggage",
+   "expected": "different",
+   "truth": "International vs 21 inch",
+   "stores": [
+    "canadaluggagedepot",
+    "canadaluggagedepot"
+   ]
+  },
+  {
+   "id": "p77",
+   "a": "CHATELET AIR 2.0 | 22-Inch Carry-On Suitcase, Brown",
+   "b": "CHATELET AIR 2.0 | 23-Inch Carry-On Suitcase, Brown",
+   "expected": "different",
+   "truth": "22 vs 23 inch (Delsey models 401676801 vs 401676805)",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p78",
+   "a": "CHATELET AIR 2.0 | 23-Inch Carry-On Suitcase, Brown",
+   "b": "CHATELET AIR 2.0 | 23-Inch Expandable Carry-On Suitcase - 80th Anniversary Edition, Burgundy",
+   "expected": "different",
+   "truth": "regular vs 80th Anniversary Edition (different Delsey codes)",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p79",
+   "a": "SKY MAX 2.0 | 31-Inch Expandable Check-In Suitcase, Green",
+   "b": "SKY MAX 3.0 | 31-Inch Check-In Suitcase, Teal blue",
+   "expected": "different",
+   "truth": "trap: version 2.0 vs 3.0",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  },
+  {
+   "id": "p80",
+   "a": "CHATELET AIR 2.0 | 29-Inch Check-In Trunk Suitcase, Navy blue",
+   "b": "CHATELET AIR 2.0 | 30-Inch Check-In Suitcase, Angora",
+   "expected": "different",
+   "truth": "29 trunk vs 30 check-in",
+   "stores": [
+    "delsey-ca",
+    "delsey-ca"
+   ]
+  }
+ ]
+}

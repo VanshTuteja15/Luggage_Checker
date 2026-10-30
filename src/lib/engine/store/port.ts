@@ -47,6 +47,36 @@ export type CatalogVariant = {
   colourCode: string | null;
   title: string | null;
   imageUrl: string | null;
+  /** v4 A4.1: field → StoredAttribute (`extract/attributes.ts`). */
+  attributes: Record<string, unknown>;
+};
+
+/** v4 A4.2: a promotion the store itself states for one listing. Never a price source. */
+export type PromotionInput = {
+  kind: "percent_off" | "amount_off" | "sale_price" | "free_shipping" | "gift" | "code";
+  /** Where the store stated it: Shopify compare-at, JSON-LD strikethrough, or offer text. */
+  method: "compare_at" | "jsonld" | "page_text";
+  percentOff: number | null;
+  upTo: boolean;
+  amountOff: number | null;
+  salePrice: number | null;
+  wasPrice: number | null;
+  threshold: number | null;
+  code: string | null;
+  /** The end date exactly as the store wrote it, and our (approximate) reading of it. */
+  endsText: string | null;
+  endsAt: string | null;
+  /** The exact field or text each value came from. */
+  evidence: string[];
+};
+
+export type PromotionRecord = PromotionInput & {
+  id: string;
+  listingId: string;
+  sourceId: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  observationId: string | null;
 };
 
 export type ProductInput = {
@@ -215,6 +245,12 @@ export interface EngineStore {
     title: string | null,
     imageUrl: string | null,
   ): Promise<CatalogVariant>;
+  variantsForProduct(productId: string): Promise<CatalogVariant[]>;
+  /**
+   * v4 A4.1: merge evidence-backed attributes into a variant (rules in
+   * `mergeAttributes`). false = nothing changed, nothing written.
+   */
+  mergeVariantAttributes(variantId: string, attrs: Record<string, unknown>): Promise<boolean>;
   enqueueReview(
     listingId: string,
     candidateProductId: string | null,
@@ -238,8 +274,44 @@ export interface EngineStore {
   /** The latest shown (not rejected) reading of each listing, in one query. */
   latestObservations(listingIds: string[]): Promise<Observation[]>;
   priceRanges(listingId: string, limit: number): Promise<PriceRange[]>;
+  /**
+   * Event storage (v4 A3.4): when a reading repeats the latest price range
+   * (same price and stock, not older), extend that range instead of storing
+   * another observation. false = nothing to extend; the caller stores one.
+   */
+  touchPriceRange(
+    listingId: string,
+    price: number,
+    availability: string,
+    seenAt: string,
+  ): Promise<boolean>;
   /** Verified price ranges of these listings last seen at or after `sinceIso`. */
   priceRangesSince(listingIds: string[], sinceIso: string): Promise<PriceRange[]>;
+
+  /* promotions (v4 A4.2) */
+  /**
+   * The promotions one shown reading of a listing stated. A repeat extends
+   * its row (first/last seen); a new one opens a row. Nothing is written for
+   * a reading without promotions: a promotion it no longer shows simply
+   * stops being current (see `currentPromotions`).
+   */
+  recordPromotions(
+    listingId: string,
+    sourceId: string,
+    seen: PromotionInput[],
+    seenAt: string,
+    observationId: string | null,
+  ): Promise<{ opened: number; extended: number }>;
+  /**
+   * Promotions shown by their (active) listing's latest shown reading and
+   * not past their own end date at `at`. Newest first.
+   */
+  currentPromotions(opts: {
+    at: string;
+    listingIds?: string[];
+    sourceIds?: string[];
+    limit: number;
+  }): Promise<PromotionRecord[]>;
 
   /* fetch attempts */
   insertFetchAttempts(a: FetchAttempt[]): Promise<void>;

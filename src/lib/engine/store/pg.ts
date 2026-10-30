@@ -39,6 +39,8 @@ import type {
   FlagRow,
   PriceRange,
   ProductInput,
+  PromotionInput,
+  PromotionRecord,
   RejectionRow,
   ReviewItem,
   SessionInput,
@@ -46,6 +48,8 @@ import type {
   SessionTiming,
   SourceHealthStat,
 } from "./port";
+import { mergeAttributes, type StoredAttribute } from "../extract/attributes";
+import { promotionFingerprint } from "../extract/promotions";
 import { haystackFor, matchScore, preferExactSize, tsQueryFor } from "./terms";
 
 /* ── connection ───────────────────────────────────────────────────── */
@@ -155,6 +159,32 @@ function toVariant(r: Row): CatalogVariant {
     colourCode: r.colour_code,
     title: r.title,
     imageUrl: r.image_url,
+    attributes: r.attributes ?? {},
+  };
+}
+
+const numOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+
+function toPromotion(r: Row): PromotionRecord {
+  return {
+    id: String(r.id),
+    listingId: r.listing_id,
+    sourceId: r.source_id,
+    kind: r.kind,
+    method: r.method,
+    percentOff: numOrNull(r.percent_off),
+    upTo: r.up_to,
+    amountOff: numOrNull(r.amount_off),
+    salePrice: numOrNull(r.sale_price),
+    wasPrice: numOrNull(r.was_price),
+    threshold: numOrNull(r.threshold),
+    code: r.code,
+    endsText: r.ends_text,
+    endsAt: iso(r.ends_at),
+    evidence: Array.isArray(r.evidence) ? r.evidence : [],
+    firstSeenAt: isoReq(r.first_seen_at),
+    lastSeenAt: isoReq(r.last_seen_at),
+    observationId: r.observation_id === null ? null : String(r.observation_id),
   };
 }
 
@@ -562,6 +592,31 @@ export class PgEngineStore implements EngineStore {
     return toVariant(r);
   }
 
+  async variantsForProduct(productId: string): Promise<CatalogVariant[]> {
+    return (
+      await this.q("SELECT * FROM catalog_variants WHERE product_id = $1 ORDER BY created_at, id", [
+        productId,
+      ])
+    ).map(toVariant);
+  }
+
+  async mergeVariantAttributes(
+    variantId: string,
+    attrs: Record<string, unknown>,
+  ): Promise<boolean> {
+    const [row] = await this.q("SELECT attributes FROM catalog_variants WHERE id = $1", [
+      variantId,
+    ]);
+    if (!row) return false;
+    const changed = mergeAttributes(row.attributes ?? {}, attrs as Record<string, StoredAttribute>);
+    if (!changed) return false;
+    await this.q("UPDATE catalog_variants SET attributes = attributes || $2::jsonb WHERE id = $1", [
+      variantId,
+      JSON.stringify(changed),
+    ]);
+    return true;
+  }
+
   async enqueueReview(
     listingId: string,
     candidateProductId: string | null,
@@ -697,6 +752,22 @@ export class PgEngineStore implements EngineStore {
     return r ? toObservation(r) : null;
   }
 
+  async touchPriceRange(
+    listingId: string,
+    price: number,
+    availability: string,
+    seenAt: string,
+  ): Promise<boolean> {
+    const rows = await this.q(
+      `UPDATE price_ranges SET last_seen_at = $4, observation_count = observation_count + 1
+        WHERE id = (SELECT id FROM price_ranges WHERE listing_id = $1 ORDER BY last_seen_at DESC, id DESC LIMIT 1)
+          AND abs(price - $2) <= 0.005 AND availability = $3 AND last_seen_at <= $4
+        RETURNING id`,
+      [listingId, price, availability, seenAt],
+    );
+    return rows.length > 0;
+  }
+
   async latestObservations(listingIds: string[]): Promise<Observation[]> {
     if (listingIds.length === 0) return [];
     const rows = await this.q(
@@ -723,6 +794,77 @@ export class PgEngineStore implements EngineStore {
       lastSeenAt: isoReq(r.last_seen_at),
       observationCount: r.observation_count,
     }));
+  }
+
+  /* promotions (v4 A4.2) */
+
+  async recordPromotions(
+    listingId: string,
+    sourceId: string,
+    seen: PromotionInput[],
+    seenAt: string,
+    observationId: string | null,
+  ): Promise<{ opened: number; extended: number }> {
+    let opened = 0;
+    let extended = 0;
+    for (const p of seen) {
+      const [r] = await this.q(
+        `INSERT INTO promotions (listing_id, source_id, kind, method, percent_off, up_to, amount_off,
+           sale_price, was_price, threshold, code, ends_text, ends_at, evidence, fingerprint,
+           first_seen_at, last_seen_at, observation_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $16, $17)
+         ON CONFLICT (listing_id, fingerprint) DO UPDATE SET
+           first_seen_at  = LEAST(promotions.first_seen_at, EXCLUDED.first_seen_at),
+           last_seen_at   = GREATEST(promotions.last_seen_at, EXCLUDED.last_seen_at),
+           observation_id = CASE WHEN EXCLUDED.last_seen_at >= promotions.last_seen_at
+                                 THEN COALESCE(EXCLUDED.observation_id, promotions.observation_id)
+                                 ELSE promotions.observation_id END
+         RETURNING (xmax = 0) AS inserted`,
+        [
+          listingId,
+          sourceId,
+          p.kind,
+          p.method,
+          p.percentOff,
+          p.upTo,
+          p.amountOff,
+          p.salePrice,
+          p.wasPrice,
+          p.threshold,
+          p.code,
+          p.endsText,
+          p.endsAt,
+          JSON.stringify(p.evidence),
+          promotionFingerprint(p),
+          seenAt,
+          observationId,
+        ],
+      );
+      if (r?.inserted) opened++;
+      else extended++;
+    }
+    return { opened, extended };
+  }
+
+  async currentPromotions(opts: {
+    at: string;
+    listingIds?: string[];
+    sourceIds?: string[];
+    limit: number;
+  }): Promise<PromotionRecord[]> {
+    const rows = await this.q(
+      `SELECT p.* FROM promotions p
+         JOIN listings l ON l.id = p.listing_id AND l.active
+         JOIN LATERAL (SELECT max(r.last_seen_at) AS t FROM price_ranges r WHERE r.listing_id = p.listing_id) lr ON true
+        WHERE p.last_seen_at >= lr.t
+          AND (p.ends_at IS NULL OR p.ends_at > $1)
+          AND ($2::uuid[] IS NULL OR p.listing_id = ANY($2::uuid[]))
+          AND ($3::text[] IS NULL OR p.source_id = ANY($3::text[]))
+        ORDER BY p.last_seen_at DESC, p.id DESC
+        LIMIT $4`,
+      [opts.at, opts.listingIds ?? null, opts.sourceIds ?? null, opts.limit],
+    );
+    return rows.map(toPromotion);
   }
 
   async priceRanges(listingId: string, limit: number): Promise<PriceRange[]> {

@@ -7,7 +7,7 @@ import { PgBoss } from "pg-boss";
 import { poolConfig } from "@/lib/engine/store/pg";
 import { log } from "./log";
 
-export const JOB_NAMES = ["sources.health", "discover.source", "discover.refresh", "verify.tracked", "research.run", "digest.tick"] as const;
+export const JOB_NAMES = ["sources.health", "discover.source", "discover.refresh", "verify.tracked", "research.run", "digest.tick", "ai.small", "ai.large"] as const;
 export type JobName = (typeof JOB_NAMES)[number];
 
 export function isJobName(v: unknown): v is JobName {

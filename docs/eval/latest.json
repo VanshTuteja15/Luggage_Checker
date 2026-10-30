@@ -1,0 +1,117 @@
+{
+  "runAt": "2026-10-30T10:09:46.697Z",
+  "commit": "fd13f4d",
+  "ai": false,
+  "tasks": {
+    "queries": {
+      "n": 60,
+      "metrics": {
+        "brand": 96.7,
+        "line": 69,
+        "sizeClass": 93.3,
+        "inches": 90,
+        "colour": 98.3,
+        "maxPrice": 98.3,
+        "model": 100
+      },
+      "counts": {
+        "brand": "58/60",
+        "line": "40/58",
+        "sizeClass": "56/60",
+        "inches": "54/60",
+        "colour": "59/60",
+        "maxPrice": "59/60",
+        "model": "60/60"
+      },
+      "allRight": 60,
+      "extra": {},
+      "note": "type (spinner/duffel/…) isn't produced by the parser yet, so it isn't scored"
+    },
+    "titles": {
+      "n": 100,
+      "metrics": {
+        "brand": 80,
+        "line": 61.6,
+        "sizeClass": 87,
+        "inches": 100
+      },
+      "counts": {
+        "brand": "80/100",
+        "line": "53/86",
+        "sizeClass": "87/100",
+        "inches": "100/100"
+      },
+      "allRight": 53,
+      "extra": {},
+      "note": "version isn't a parser field yet, so it isn't scored"
+    },
+    "attributes": {
+      "n": 40,
+      "metrics": {
+        "dimsCm": 100,
+        "capacityL": 100,
+        "weightKg": 100,
+        "wheels": 95,
+        "expandable": 100
+      },
+      "counts": {
+        "dimsCm": "40/40",
+        "capacityL": "40/40",
+        "weightKg": "40/40",
+        "wheels": "38/40",
+        "expandable": "40/40"
+      },
+      "allRight": 95,
+      "extra": {}
+    },
+    "pairs": {
+      "n": 80,
+      "metrics": {
+        "verdict": 61.3,
+        "sameRecall": 10.3
+      },
+      "counts": {
+        "verdict": "49/80",
+        "sameRecall": "3/29"
+      },
+      "allRight": 61.3,
+      "extra": {
+        "wrongMerges": 0,
+        "sentToReview": 8
+      },
+      "note": "a near match goes to the review queue (counted as not right, never merged); the AI judge, when measured, only advises on those"
+    },
+    "terms": {
+      "n": 16,
+      "metrics": {
+        "category": 100,
+        "quoteVerbatim": 100
+      },
+      "counts": {
+        "category": "16/16",
+        "quoteVerbatim": "11/11"
+      },
+      "allRight": 100,
+      "extra": {}
+    },
+    "promos": {
+      "n": 30,
+      "metrics": {
+        "isPromotion": 100,
+        "kinds": 100,
+        "numbers": 96.7
+      },
+      "counts": {
+        "isPromotion": "30/30",
+        "kinds": "30/30",
+        "numbers": "29/30"
+      },
+      "allRight": 96.7,
+      "extra": {
+        "predictedPromotions": 14,
+        "fakePromotions": 0,
+        "precision": 100
+      }
+    }
+  }
+}

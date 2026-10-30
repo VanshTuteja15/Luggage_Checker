@@ -17,6 +17,8 @@
 
 import { ADAPTERS } from "../adapters";
 import { canonicalUrl } from "../adapters/base";
+import { readCatalog } from "../adapters/shopify-catalog";
+import { extractAttributes } from "../extract/attributes";
 import { decodeHtmlText } from "../extract/structured";
 import { flagOn } from "../flags";
 import { observeOffer } from "../observe";
@@ -114,7 +116,12 @@ function titleFromHandle(url: string): string {
 
 export type DiscoveryResult = {
   sourceId: string;
-  method: "sitemap" | "ucp" | "skipped";
+  method: "sitemap" | "ucp" | "catalog" | "skipped";
+  /** Catalogue runs: readings stored as new observations vs repeats that extended a price range. */
+  observationsStored?: number;
+  rangesExtended?: number;
+  /** Promotion rows the run opened or extended (v4 A4.2). */
+  promotions?: number;
   sitemapUrls: number;
   productUrls: number;
   newListings: number;
@@ -172,6 +179,13 @@ export async function discoverSource(
   );
   const ucp = usable.find((c) => c.route.adapter === "shopify_ucp");
 
+  // A permitted Shopify storefront with its catalogue flag on: read the whole catalogue (v4 A3).
+  if (
+    storefront?.route.adapter === "shopify_product_json" &&
+    flagOn(flags, `source.${source.id}.catalog`)
+  ) {
+    return discoverFromCatalog(rt, pack, source, out, opts);
+  }
   if (storefront) {
     const adapterId =
       storefront.route.adapter === "html_structured" ? "html_structured" : "shopify_product_json";
@@ -383,6 +397,134 @@ async function discoverFromSitemaps(
       imageUrl: first.imageUrl ?? l.imageUrl,
     });
     out.enriched++;
+  }
+  await rt.recorder.flush();
+  return out;
+}
+
+/**
+ * Whole-catalogue read (Shopify /products.json, after a currency canary), then
+ * a bounded GTIN backfill from per-product pages: the catalogue feed has SKUs
+ * (model numbers) but no barcodes. Prices are stored only when they change.
+ */
+async function discoverFromCatalog(
+  rt: EngineRuntime,
+  pack: CategoryPack,
+  source: SourceRecord,
+  out: DiscoveryResult,
+  opts: { maxFetches?: number; signal?: AbortSignal },
+): Promise<DiscoveryResult> {
+  out.method = "catalog";
+  out.observationsStored = 0;
+  out.rangesExtended = 0;
+  const ctx = {
+    source,
+    fetcher: rt.fetcher,
+    config: rt.config,
+    pack,
+    now: Date.now,
+    signal: opts.signal,
+    sessionId: null,
+  };
+  const read = await readCatalog(ctx);
+  out.requests += read.requests;
+  if (read.status !== "ok") {
+    out.errors.push(read.reason ?? read.status);
+    await rt.recorder.flush();
+    return out;
+  }
+  out.productUrls = read.products.length;
+  for (const { product, url, offers } of read.products) {
+    if (opts.signal?.aborted) break;
+    const before = await rt.store.findListingByUrl(source.id, url);
+    const brand =
+      pack.brandOf(product.vendor ?? "") ??
+      pack.brandOf(product.title) ??
+      source.identityQuality.houseBrand ??
+      null;
+    const page = await rt.store.upsertListing({
+      sourceId: source.id,
+      url,
+      externalId: product.id,
+      title: product.title,
+      brand,
+      sizeClass: pack.sizeClassOf(product.title),
+      colour: pack.colourOf(product.title),
+      identifiers: offers
+        .flatMap((o) => o.identifiers.filter((i) => i.kind === "model"))
+        .slice(0, 1),
+      imageUrl: product.imageUrl,
+      discoveredVia: before?.discoveredVia ?? "catalog",
+      lastmod: null,
+      active: true,
+    });
+    if (!before) out.newListings++;
+    // v4 A4.1: spec text → attributes, only when every variant is the same
+    // size (a multi-size product's description can't say which size it means).
+    const sizes = new Set(offers.map((o) => pack.sizeClassOf([o.title, ...o.options].join(" "))));
+    const specs =
+      sizes.size === 1 && product.description
+        ? extractAttributes(product.title, product.description)
+        : null;
+    const attributes = specs && Object.keys(specs.provenance).length > 0 ? specs : null;
+    for (const o of offers) {
+      const r = await observeOffer(rt.store, pack, source, attributes ? { ...o, attributes } : o, {
+        sessionId: null,
+        discoveredVia: "catalog",
+        parent: page,
+        persist: true,
+        resolve: true,
+        onlyOnChange: true,
+      });
+      if (r.stored === "observation") out.observationsStored++;
+      else if (r.stored === "range") out.rangesExtended++;
+      out.promotions = (out.promotions ?? 0) + r.promotions;
+    }
+    out.enriched++;
+  }
+
+  // GTIN backfill: luggage pages without a barcode first, within the per-run budget.
+  const LUGGAGE = new Set(["carry_on", "medium", "large", "extra_large", "set", "underseat"]);
+  const pages = (await rt.store.listingsBySource(source.id, 100_000)).filter(
+    (l) =>
+      l.active &&
+      /^https:/.test(l.url) &&
+      !new URL(l.url).search &&
+      !l.identifiers.some((i) => i.kind === "gtin"),
+  );
+  const backfill = [
+    ...pages.filter((l) => LUGGAGE.has(l.sizeClass ?? "")),
+    ...pages.filter((l) => !LUGGAGE.has(l.sizeClass ?? "")),
+  ].slice(0, opts.maxFetches ?? rt.config.discovery.maxProductFetchesPerStore);
+  for (const l of backfill) {
+    if (opts.signal?.aborted) break;
+    const r = await ADAPTERS.shopify_product_json.verify(ctx, {
+      url: l.url,
+      externalId: l.externalId,
+      identifiers: l.identifiers,
+      title: l.title,
+      brand: l.brand,
+    });
+    out.requests++;
+    if (r.status === "blocked") {
+      out.errors.push(
+        `${source.retailerLabel} refused the barcode backfill (${r.message ?? "blocked"}); stopping this run`,
+      );
+      break;
+    }
+    if (r.status !== "ok") continue;
+    for (const o of r.offers) {
+      const x = await observeOffer(rt.store, pack, source, o, {
+        sessionId: null,
+        discoveredVia: "catalog",
+        parent: l,
+        persist: true,
+        resolve: true,
+        onlyOnChange: true,
+      });
+      if (x.stored === "observation") out.observationsStored++;
+      else if (x.stored === "range") out.rangesExtended++;
+    }
   }
   await rt.recorder.flush();
   return out;

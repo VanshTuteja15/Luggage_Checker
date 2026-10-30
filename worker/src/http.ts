@@ -109,7 +109,8 @@ export function createWorkerServer(deps: WorkerDeps): Server {
         return send(res, 202, { accepted: true, sessionId: json.sessionId });
       }
 
-      if (!isJobName(json.name) || json.name === "research.run") return send(res, 400, { error: "unknown job" });
+      // AI lane jobs are queued only by engine code, never over HTTP (planning/v4/review/03 P3-03).
+      if (!isJobName(json.name) || json.name === "research.run" || json.name.startsWith("ai.")) return send(res, 400, { error: "unknown job" });
       const data = json.data && typeof json.data === "object" && !Array.isArray(json.data) ? (json.data as Record<string, unknown>) : {};
       const key = typeof data.sourceId === "string" ? `${json.name}:${data.sourceId}` : String(json.name);
       const id = await deps.queue.send(json.name, data, { singletonKey: key });

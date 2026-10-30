@@ -117,3 +117,35 @@ describe("morning email fallback trigger (R1.17a)", () => {
     expect(q.schedules).toEqual([{ name: "digest.tick", cron: "*/15 * * * *", tz: "America/Edmonton" }]);
   });
 });
+
+describe("AI lanes (v4 A1, U-LANE)", () => {
+  it("are job names, served only when AI_LANES lists them", async () => {
+    const { aiLanes } = await import("../src/jobs");
+    const { isJobName } = await import("../src/queue");
+    expect(isJobName("ai.small") && isJobName("ai.large")).toBe(true);
+    expect(aiLanes({})).toEqual([]);
+    expect(aiLanes({ AI_LANES: "ai.large" })).toEqual(["ai.large"]);
+    expect(aiLanes({ AI_LANES: " ai.small , ai.large, research.run, nonsense" })).toEqual(["ai.small", "ai.large"]);
+  });
+
+  it("are refused over HTTP: only engine code queues AI work, and duplicates collapse", async () => {
+    const queue = new MemoryQueue();
+    await queue.start();
+    const server = createWorkerServer({ secret: SECRET, queue, version: "test", storeKind: "memory", runResearch: () => undefined });
+    await new Promise<void>((r) => server.listen(0, r));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      for (const name of ["ai.small", "ai.large"]) {
+        const body = JSON.stringify({ name, data: { task: "terms", input: { text: "x" } } });
+        const res = await fetch(`${base}/v1/jobs`, { method: "POST", headers: { "content-type": "application/json", [SIGNATURE_HEADER]: signRequest(SECRET, "POST", "/v1/jobs", body) }, body });
+        expect(res.status).toBe(400);
+      }
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+    const first = await queue.send("ai.large", { task: "terms", input: { text: "x" } }, { singletonKey: "terms:abc" });
+    const again = await queue.send("ai.large", { task: "terms", input: { text: "x" } }, { singletonKey: "terms:abc" });
+    expect(first).not.toBeNull();
+    expect(again).toBeNull();
+  });
+});

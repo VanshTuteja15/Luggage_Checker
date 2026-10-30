@@ -12,6 +12,7 @@
 /* ------------------------------------------------------------------ */
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Client } from "pg";
@@ -148,6 +149,7 @@ async function main(): Promise<void> {
         "004_price_engine.sql",
         "005_scheduler_alerts.sql",
         "006_client_ready.sql",
+        "007_own_engine.sql",
       ]) {
         try {
           await c.query(sql(`supabase/migrations/${f}`));
@@ -703,6 +705,93 @@ async function main(): Promise<void> {
       ret[0].r.estimate_searches === 1 && ret[0].r.estimate_rejections === 1,
       JSON.stringify(ret[0].r),
     );
+
+    /* ── 007: AI cache (v4 A1) ─────────────────────────────────────── */
+    console.log(`\n${B}007 own engine: AI cache${X}`);
+    await c.query(
+      "INSERT INTO ai_cache (key, task, model, value, expires_at) VALUES ($1, 'attributes', 'qwen2.5:3b', '{}'::jsonb, now() + interval '1 day')",
+      ["a".repeat(64)],
+    );
+    await c.query(
+      "INSERT INTO ai_cache (key, task, model, value, created_at, expires_at) VALUES ($1, 'terms', 'qwen2.5:3b', '{}'::jsonb, now() - interval '2 days', now() - interval '1 day')",
+      ["b".repeat(64)],
+    );
+    check(
+      "ai_cache refuses a key that isn't a sha256",
+      (await expectError(
+        c,
+        "INSERT INTO ai_cache (key, task, model, value, expires_at) VALUES ('nope', 'attributes', 'm', '{}', now() + interval '1 day')",
+      )) !== null,
+    );
+    check(
+      "ai_cache refuses an unknown task (no price task exists)",
+      (await expectError(
+        c,
+        `INSERT INTO ai_cache (key, task, model, value, expires_at) VALUES ('${"c".repeat(64)}', 'price', 'm', '{}', now() + interval '1 day')`,
+      )) !== null,
+    );
+    await asRole(c, "authenticated", userA, async () => {
+      const { rows } = await c.query("SELECT 1 FROM ai_cache");
+      check("non-admins can't read ai_cache", rows.length === 0);
+    });
+    await asRole(c, "authenticated", adminUser, async () => {
+      const { rows } = await c.query("SELECT 1 FROM ai_cache");
+      check("admins can read ai_cache", rows.length >= 1);
+    });
+    await asRole(c, "anon", null, async () => {
+      check(
+        "the anon key can't read ai_cache",
+        (await expectError(c, "SELECT 1 FROM ai_cache")) !== null,
+      );
+    });
+    const { rows: pruned } = await c.query("SELECT ai_cache_prune() AS n");
+    check(
+      "ai_cache_prune removes only expired answers",
+      pruned[0].n === 1,
+      JSON.stringify(pruned[0]),
+    );
+
+    /* ── 007: promotions (v4 A4.2) ─────────────────────────────────── */
+    console.log(`\n${B}007 own engine: promotions${X}`);
+    const promo = (cols: string, vals: string) =>
+      `INSERT INTO promotions (listing_id, source_id, kind, method, fingerprint, first_seen_at, last_seen_at${cols})
+       VALUES ('${listingId}', 'canadaluggagedepot', 'sale_price', 'compare_at', 'fp-${randomUUID()}', now(), now()${vals})`;
+    await c.query(
+      promo(
+        ", sale_price, was_price, evidence",
+        ", 299.95, 399.95, '[\"compare_at_price 399.95\"]'",
+      ),
+    );
+    check(
+      "promotions refuse a 'sale' equal to the was-price",
+      (await expectError(c, promo(", sale_price, was_price", ", 399.95, 399.95"))) !== null,
+    );
+    check(
+      "promotions refuse an unknown kind (in-store / comparable value are never stored)",
+      (await expectError(c, promo("", "").replace("'sale_price'", "'reference_price'"))) !== null,
+    );
+    check(
+      "promotions refuse a percentage outside 0–100",
+      (await expectError(c, promo(", percent_off", ", 120"))) !== null,
+    );
+    check(
+      "promotions refuse evidence that isn't a list",
+      (await expectError(c, promo(", evidence", ", '{}'"))) !== null,
+    );
+    await asRole(c, "authenticated", userA, async () => {
+      const { rows } = await c.query("SELECT 1 FROM promotions");
+      check("signed-in users can read promotions", rows.length >= 1);
+      check(
+        "signed-in users can't write promotions",
+        (await expectError(c, promo(", sale_price, was_price", ", 1, 2"))) !== null,
+      );
+    });
+    await asRole(c, "anon", null, async () => {
+      check(
+        "the anon key can't read promotions",
+        (await expectError(c, "SELECT 1 FROM promotions")) !== null,
+      );
+    });
     await c.end();
 
     /* ── Path B: legacy install (001 → 002 → 003 → 004) ───────────── */
@@ -716,6 +805,7 @@ async function main(): Promise<void> {
       "004_price_engine.sql",
       "005_scheduler_alerts.sql",
       "006_client_ready.sql",
+      "007_own_engine.sql",
     ]) {
       try {
         await l.query(sql(`supabase/migrations/${f}`));

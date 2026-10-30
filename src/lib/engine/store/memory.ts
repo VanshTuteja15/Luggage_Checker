@@ -29,6 +29,8 @@ import type {
   FlagRow,
   PriceRange,
   ProductInput,
+  PromotionInput,
+  PromotionRecord,
   RejectionRow,
   ReviewItem,
   SessionInput,
@@ -36,6 +38,8 @@ import type {
   SessionTiming,
   SourceHealthStat,
 } from "./port";
+import { mergeAttributes, type StoredAttribute } from "../extract/attributes";
+import { promotionFingerprint } from "../extract/promotions";
 import { haystackFor, matchScore, preferExactSize } from "./terms";
 
 const now = () => new Date().toISOString();
@@ -323,9 +327,28 @@ export class MemoryEngineStore implements EngineStore {
       colourCode,
       title,
       imageUrl,
+      attributes: {},
     };
     this.variants.set(rec.id, rec);
     return { ...rec };
+  }
+
+  async variantsForProduct(productId: string): Promise<CatalogVariant[]> {
+    return [...this.variants.values()]
+      .filter((v) => v.productId === productId)
+      .map((v) => ({ ...v, attributes: { ...v.attributes } }));
+  }
+
+  async mergeVariantAttributes(
+    variantId: string,
+    attrs: Record<string, unknown>,
+  ): Promise<boolean> {
+    const v = this.variants.get(variantId);
+    if (!v) return false;
+    const changed = mergeAttributes(v.attributes, attrs as Record<string, StoredAttribute>);
+    if (!changed) return false;
+    v.attributes = { ...v.attributes, ...changed };
+    return true;
   }
 
   async enqueueReview(
@@ -441,6 +464,27 @@ export class MemoryEngineStore implements EngineStore {
     });
   }
 
+  async touchPriceRange(
+    listingId: string,
+    price: number,
+    availability: string,
+    seenAt: string,
+  ): Promise<boolean> {
+    const latest = this.ranges
+      .filter((r) => r.listingId === listingId)
+      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || b.id - a.id)[0];
+    if (
+      !latest ||
+      Math.abs(latest.price - price) > 0.005 ||
+      latest.availability !== availability ||
+      seenAt < latest.lastSeenAt
+    )
+      return false;
+    latest.lastSeenAt = seenAt;
+    latest.observationCount += 1;
+    return true;
+  }
+
   async latestObservation(
     listingId: string,
     opts: { shownOnly?: boolean } = {},
@@ -476,6 +520,75 @@ export class MemoryEngineStore implements EngineStore {
         lastSeenAt: r.lastSeenAt,
         observationCount: r.observationCount,
       }));
+  }
+
+  /* promotions */
+
+  private promos: PromotionRecord[] = [];
+  /** listing id + fingerprint → row (the table's UNIQUE key). */
+  private promoKeys = new Map<string, PromotionRecord>();
+  private promoSeq = 0;
+
+  async recordPromotions(
+    listingId: string,
+    sourceId: string,
+    seen: PromotionInput[],
+    seenAt: string,
+    observationId: string | null,
+  ): Promise<{ opened: number; extended: number }> {
+    let opened = 0;
+    let extended = 0;
+    for (const p of seen) {
+      const key = `${listingId}|${promotionFingerprint(p)}`;
+      const hit = this.promoKeys.get(key);
+      if (hit) {
+        if (seenAt < hit.firstSeenAt) hit.firstSeenAt = seenAt;
+        if (seenAt >= hit.lastSeenAt) {
+          hit.lastSeenAt = seenAt;
+          hit.observationId = observationId ?? hit.observationId;
+        }
+        extended++;
+        continue;
+      }
+      const rec: PromotionRecord = {
+        ...p,
+        evidence: [...p.evidence],
+        id: String(++this.promoSeq),
+        listingId,
+        sourceId,
+        firstSeenAt: seenAt,
+        lastSeenAt: seenAt,
+        observationId,
+      };
+      this.promos.push(rec);
+      this.promoKeys.set(key, rec);
+      opened++;
+    }
+    return { opened, extended };
+  }
+
+  async currentPromotions(opts: {
+    at: string;
+    listingIds?: string[];
+    sourceIds?: string[];
+    limit: number;
+  }): Promise<PromotionRecord[]> {
+    const latest = new Map<string, string>();
+    for (const r of this.ranges)
+      if ((latest.get(r.listingId) ?? "") < r.lastSeenAt) latest.set(r.listingId, r.lastSeenAt);
+    return this.promos
+      .filter(
+        (p) =>
+          this.listings.get(p.listingId)?.active === true &&
+          latest.has(p.listingId) &&
+          Date.parse(p.lastSeenAt) >= Date.parse(latest.get(p.listingId)!) &&
+          (p.endsAt === null || Date.parse(p.endsAt) > Date.parse(opts.at)) &&
+          (!opts.listingIds || opts.listingIds.includes(p.listingId)) &&
+          (!opts.sourceIds || opts.sourceIds.includes(p.sourceId)),
+      )
+      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || Number(b.id) - Number(a.id))
+      .slice(0, opts.limit)
+      .map((p) => ({ ...p, evidence: [...p.evidence] }));
   }
 
   async priceRanges(listingId: string, limit: number): Promise<PriceRange[]> {

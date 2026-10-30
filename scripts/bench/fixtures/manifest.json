@@ -1,0 +1,71 @@
+{
+  "note": "Reduced: first 40 products of each page, each product object unchanged. Full bodies were kept outside git.",
+  "attempts": [
+    {
+      "url": "https://www.canadaluggagedepot.ca/robots.txt",
+      "adapter": "robots",
+      "status": 200,
+      "outcome": "ok",
+      "ms": 390,
+      "at": "2026-10-30T06:57:16.967Z"
+    },
+    {
+      "url": "https://www.canadaluggagedepot.ca/products.json?limit=250&page=1",
+      "adapter": "shopify_product_json",
+      "status": 200,
+      "outcome": "ok",
+      "ms": 633,
+      "at": "2026-10-30T06:57:16.919Z"
+    },
+    {
+      "url": "https://www.canadaluggagedepot.ca/products.json?limit=250&page=13",
+      "adapter": "shopify_product_json",
+      "status": 200,
+      "outcome": "ok",
+      "ms": 889,
+      "at": "2026-10-30T06:57:18.629Z"
+    },
+    {
+      "url": "https://delsey.ca/robots.txt",
+      "adapter": "robots",
+      "status": 200,
+      "outcome": "ok",
+      "ms": 191,
+      "at": "2026-10-30T06:57:19.936Z"
+    },
+    {
+      "url": "https://delsey.ca/products.json?limit=250&page=1",
+      "adapter": "shopify_product_json",
+      "status": 200,
+      "outcome": "ok",
+      "ms": 347,
+      "at": "2026-10-30T06:57:19.892Z"
+    }
+  ],
+  "pages": [
+    {
+      "url": "https://www.canadaluggagedepot.ca/products.json?limit=250&page=1",
+      "status": 200,
+      "outcome": "ok",
+      "bytes": 1768082,
+      "ms": 633,
+      "recordedAt": "2026-10-30T06:57:18.615Z"
+    },
+    {
+      "url": "https://www.canadaluggagedepot.ca/products.json?limit=250&page=13",
+      "status": 200,
+      "outcome": "ok",
+      "bytes": 2090926,
+      "ms": 889,
+      "recordedAt": "2026-10-30T06:57:19.879Z"
+    },
+    {
+      "url": "https://delsey.ca/products.json?limit=250&page=1",
+      "status": 200,
+      "outcome": "ok",
+      "bytes": 1080300,
+      "ms": 347,
+      "recordedAt": "2026-10-30T06:57:21.288Z"
+    }
+  ]
+}

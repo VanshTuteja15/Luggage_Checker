@@ -1,0 +1,174 @@
+{
+ "name": "terms",
+ "task": "(f) terms excerpt -> automated-access category + the exact quote",
+ "recordedFrom": "real store terms text (sources per item)",
+ "labelRules": {
+  "category": "prohibits_automated_access (robots/spiders/scrapers/data mining/bots) | requires_permission (copying, reproducing or pricing use needs written permission) | non_commercial_only | none (the excerpt says nothing about automated access or reuse)",
+  "quote": "the shortest exact words that justify the category (must appear verbatim); null for none"
+ },
+ "knownGaps": [
+  "Only 16 real excerpts are on file: the audit kept short fragments; summaries we wrote ourselves were left out on purpose"
+ ],
+ "items": [
+  {
+   "id": "f01",
+   "source": "travelpro-ca",
+   "from": "registry seed terms.clause (src/lib/engine/registry/seed.ts), read by a person in the 2026-10-05 audit",
+   "text": "robot, spider ... to retrieve, index, 'data mine'",
+   "expected": {
+    "category": "prohibits_automated_access",
+    "quote": "robot, spider"
+   }
+  },
+  {
+   "id": "f02",
+   "source": "briggs-riley-ca",
+   "from": "docs/store-audit.json terms (2026-10-05 audit)",
+   "text": "to spam, phish, pharm, pretext, spider, crawl, or scrape",
+   "expected": {
+    "category": "prohibits_automated_access",
+    "quote": "spider, crawl, or scrape"
+   }
+  },
+  {
+   "id": "f03",
+   "source": "away-ca",
+   "from": "registry seed terms.clause (src/lib/engine/registry/seed.ts), read by a person in the 2026-10-05 audit",
+   "text": "spiders, robots, crawlers, data mining tools or the like",
+   "expected": {
+    "category": "prohibits_automated_access",
+    "quote": "spiders, robots, crawlers"
+   }
+  },
+  {
+   "id": "f04",
+   "source": "ebay-ca",
+   "from": "docs/store-audit.json terms (2026-10-05 audit)",
+   "text": "robot, spider, scraper ... buy-for-me agents, LLM-driven bots",
+   "expected": {
+    "category": "prohibits_automated_access",
+    "quote": "LLM-driven bots"
+   }
+  },
+  {
+   "id": "f05",
+   "source": "amazon-ca",
+   "from": "registry seed terms.clause (src/lib/engine/registry/seed.ts), read by a person in the 2026-10-05 audit",
+   "text": "data mining, robots, or similar data gathering and extraction tools",
+   "expected": {
+    "category": "prohibits_automated_access",
+    "quote": "data mining, robots"
+   }
+  },
+  {
+   "id": "f06",
+   "source": "walmart-ca",
+   "from": "docs/store-audit.json terms (2026-10-05 audit)",
+   "text": "spiders, robots, avatars or intelligent agents to scrape, navigate or search this Site",
+   "expected": {
+    "category": "prohibits_automated_access",
+    "quote": "intelligent agents to scrape"
+   }
+  },
+  {
+   "id": "f07",
+   "source": "costco-ca",
+   "from": "docs/store-audit.json terms (2026-10-05 audit)",
+   "text": "data mining, bots, spiders, automated tools ... scrape or collect any information",
+   "expected": {
+    "category": "prohibits_automated_access",
+    "quote": "automated tools"
+   }
+  },
+  {
+   "id": "f08",
+   "source": "bestbuy-ca",
+   "from": "docs/store-audit.json terms (2026-10-05 audit)",
+   "text": "Affiliate terms: may not place individual product pricing on your properties without express prior written permission",
+   "expected": {
+    "category": "requires_permission",
+    "quote": "without express prior written permission"
+   }
+  },
+  {
+   "id": "f09",
+   "source": "unluggage",
+   "from": "unluggage.com/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "None of the content found on the Website may be reproduced, republished, distributed, displayed, sold, transferred, or modified without the express written permission of U.N.",
+   "expected": {
+    "category": "requires_permission",
+    "quote": "without the express written permission"
+   }
+  },
+  {
+   "id": "f10",
+   "source": "unluggage",
+   "from": "unluggage.com/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "The Website may not, in whole or in part, be copied, reproduced, republished, uploaded, posted, transmitted or distributed without the written permission of U.N.",
+   "expected": {
+    "category": "requires_permission",
+    "quote": "without the written permission"
+   }
+  },
+  {
+   "id": "f11",
+   "source": "unluggage",
+   "from": "unluggage.com/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "Luggage, except that you may download, display and print the materials presented on Website for your personal, non-commercial use only.",
+   "expected": {
+    "category": "non_commercial_only",
+    "quote": "personal, non-commercial use only"
+   }
+  },
+  {
+   "id": "f12",
+   "source": "delsey-ca",
+   "from": "delsey.ca/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "Once you have placed an order, but before the purchase amount is charged to your payment card, the system will automatically calculate the estimate tax and shipping costs, which will be added to the total amount to be paid by you.",
+   "expected": {
+    "category": "none",
+    "quote": null
+   }
+  },
+  {
+   "id": "f13",
+   "source": "unluggage",
+   "from": "unluggage.com/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "We may require a copy of a government-issued form of identification before making any requested changes.",
+   "expected": {
+    "category": "none",
+    "quote": null
+   }
+  },
+  {
+   "id": "f14",
+   "source": "unluggage",
+   "from": "unluggage.com/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "Luggage and its respective agents, directors, officers, employees, information providers, service providers, supplies, suppliers, licensors and licensees, and all other related, associated, or connected persons from any and all manner of rights, claims, complaints, demands, causes of action, proceedings, liabilities, obligations, legal fees, costs, and disbursements of any nature and kind whatsoever and howsoever arising, whether known or unknown, which now or hereafter exist, which arise from, relate to, or are connected with your use of the Website.",
+   "expected": {
+    "category": "none",
+    "quote": null
+   }
+  },
+  {
+   "id": "f15",
+   "source": "unluggage",
+   "from": "unluggage.com/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "unauthorized use of the Website and/or the materials contained on the Website may violate applicable copyright, trademark or other intellectual property laws or other laws.",
+   "expected": {
+    "category": "none",
+    "quote": null
+   }
+  },
+  {
+   "id": "f16",
+   "source": "unluggage",
+   "from": "unluggage.com/policies/terms-of-service, read 2026-10-30 07:07 UTC through the PoliteFetcher",
+   "text": "shall not infringe any third party's copyright, patent, trademark, trade secret or other proprietary rights or rights of publicity or privacy; shall not violate any law, statute, ordinance or regulation; shall not be defamatory, trade libelous, unlawfully threatening or unlawfully harassing; shall not be obscene or pornographic; shall not contain any viruses or other computer programming routines ",
+   "expected": {
+    "category": "none",
+    "quote": null
+   }
+  }
+ ]
+}

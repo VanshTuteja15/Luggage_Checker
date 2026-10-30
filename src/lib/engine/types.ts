@@ -10,6 +10,8 @@
 /*  carries a Freshness label. Nothing in this module invents a price.  */
 /* ------------------------------------------------------------------ */
 
+import type { AttributeResult } from "./extract/attributes";
+
 /* ── Sources (the registry) ───────────────────────────────────────── */
 
 export type AdapterId =
@@ -215,7 +217,8 @@ export type ListingRecord = {
   imageUrl: string | null;
   productId: string | null;
   variantId: string | null;
-  discoveredVia: "sitemap" | "ucp" | "feed" | "tavily" | "manual" | "live_search" | "seed";
+  discoveredVia:
+    "sitemap" | "ucp" | "feed" | "tavily" | "manual" | "live_search" | "seed" | "catalog";
   lastmod: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -272,6 +275,11 @@ export type RawOffer = {
   cacheAgeSec: number | null;
   /** Feeds and manual entries: the date the price was valid. */
   asOf: string | null;
+  /**
+   * v4 A4.1: product attributes this page/feed states (JSON-LD or spec text),
+   * each with its evidence. Stored on the variant outside research sessions.
+   */
+  attributes?: AttributeResult | null;
 };
 
 export type ValidationOutcome = "accepted" | "low_confidence" | "rejected";

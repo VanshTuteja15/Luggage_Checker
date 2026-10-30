@@ -1,0 +1,569 @@
+{
+ "name": "promos",
+ "task": "(e) offer text -> structured promotion (or none)",
+ "recordedFrom": "real recorded snippets only (sources per item); text kept as recorded, whitespace collapsed",
+ "labelRules": {
+  "isPromotion": "true only when the text states a discount on the store's own price (sale vs its regular/was/original price, % or $ off, code), a free-shipping offer or a free gift; a 'Sale price' label that equals the regular price, 'Best Offer', 'Comparable value' and in-store-only discounts are not",
+  "kinds": "percent_off | amount_off | sale_price | free_shipping | gift | code | in_store | reference_price (set, order-free)",
+  "percentOff": "as stated; a cut-off figure like '(22' isn't a stated percentage",
+  "upTo": "true for 'up to N% off'",
+  "amountOff": "dollars off as stated",
+  "salePrice": "the offer price when a discount is stated",
+  "wasPrice": "the store's own regular/was/original price for the same item; never a 'comparable value'; null when it can't be tied to the same item",
+  "threshold": "free-shipping minimum order in CAD"
+ },
+ "items": [
+  {
+   "id": "e01",
+   "source": "samsonite-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Samsonite Upscape Spinner Medium Samsonite Upscape 3 Piece Set. Now C$ 784.95 , was C$ 985.00 , discount of 20% Off The current price is Now C$ 784.95 , was C$ 985.00 , discount of 20% Off.",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "percent_off"
+    ],
+    "percentOff": 20,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": 784.95,
+    "wasPrice": 985,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e02",
+   "source": "samsonite-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Samsonite Paralux Hardside Spinner Medium The current price is C$ 434.95 This product does not qualify for any further discounts.",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e03",
+   "source": "away-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Aluminum Medium in Silver The Aluminum Medium in Silver Regular price $725 Sale price $725 interest-free installments, or from $65.44/mo",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e04",
+   "source": "luggagecity",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Grey - $469.95 Black - $469.95 Midnight Navy - $469.95 Price: Sale price$469.95 CAD Regular price$522.00 CAD. Sample plans for $469.95 $117.49 every 2 weeksfor",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "sale_price"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": 469.95,
+    "wasPrice": 522,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e05",
+   "source": "monos-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Hybrid vs aluminum luggage: what's the difference? ... Carry-On Pro in Stellar White. Carry-On Pro. Sale price: $302 CAD Original price: $355 CAD. 14 colours available. Change Model, Carry-On · Carry",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "sale_price"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": 302,
+    "wasPrice": 355,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e06",
+   "source": "briggs-riley-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Extra Large Expandable Spinner Regular price Sale price $1,199.00 CAD / Free shipping over $99 & Free returns. Free of charge, no proof of purchase needed.",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "free_shipping"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": 99,
+    "code": null
+   }
+  },
+  {
+   "id": "e07",
+   "source": "jpgrimard",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "tline Pro 30'' Large Expandable Spinner Luggage Samsonite - Outline Pro - 30'' Large Expandable Spinner Luggage - Emerald Green - Discount in store · $369.95 CAD · Write a review · Status – Luggage Repair.",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [
+     "in_store"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e08",
+   "source": "jpgrimard",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "amsonite - Paralux 2-in-1- Recycled Travel Backpack - 17'' - Black - Discount in store. 17.30\" x 12.20\" x 9.50\". Comparable value: $350.00 CAD Price: $279.95",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [
+     "in_store",
+     "reference_price"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e09",
+   "source": "jpgrimard",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Outline Pro 27'' Medium Expandable Spinner Luggage Comparable value: $419.00 CAD. Price: $334.95 CAD Additional. Eco-Friendly Eligible for Free Shipping Free Gift Offered Available",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "free_shipping",
+     "gift",
+     "reference_price"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e10",
+   "source": "jpgrimard",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Samsonite ... Price: $224.95 CAD. Additional In-Store Discount. Eco-Friendly. Eligible for ... Samsonite - Travel cases 16,5'' Wheeled",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [
+     "in_store"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e11",
+   "source": "away-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Toy Story 5 Medium Checked Suitcase in Buzz Lightyear The Medium. in Buzz Lightyear Purple. Regular price $398. Sale price $398 Regular price $398. 4 interest-free installments, or from $35.92/mo with.",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e12",
+   "source": "samsonite-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Samsonite Outline Pro Spinner Medium. C$ 334.95 The current price is C$ 334.95. This product does not qualify for any further discounts. Quick Shop 8 colors.",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e13",
+   "source": "away-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Sale price $498 Regular price ~~$498~~ in 7 colors Color: Olive Green The Medium Flex (811) Regular price $395 Sale price $395 Regular price ~~$395~~ in 8 colors Color: Navy Blue The Medium (5.4K) Regular price From $345 Sale price From $345 in 10 colors",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e14",
+   "source": "ebay-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "25+ Briggs & Riley Spinner Suitcases for sale Briggs & Riley Sympatico 22\" CX Expandable Carry-On Spinner Bronze SU122CXSP · C $320.67. or Best Offer ; Briggs & Riley ZDX 29\" Check-In Large Expandable Spinner",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e15",
+   "source": "unluggage",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Briggs & Riley ZDX specially priced at $499. Large Expandable Spinner Regular price $879.00 CAD. Large 30\" Hardside Expandable Spinner Regular price $799.00 CAD. Regular price $",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "sale_price"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": 499,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e16",
+   "source": "luggagecity",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Skip to content PROUDLY CANADIAN FREE SHIPPING $69+\\ CANADA'S LARGEST REPAIR CENTRE BEST PRICE PROMISE PROUDLY CANADIAN FREE SHIPPING $69+\\ CANADA'S LARGEST REPAIR CENTRE BEST PRICE PROMISE Luggage City",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "free_shipping"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": 69,
+    "code": null
+   }
+  },
+  {
+   "id": "e17",
+   "source": "luggageonline.com",
+   "from": "scripts/fixtures/tavily-samsonite-freeform-21.json (recorded Tavily result)",
+   "text": "Samsonite Freeform 21\" 4-Wheel Carry-On Luggage - Black. Shop Brand ... Price: $219.99: Price:$169.99 & Free Shipping & Returns. You save:$50.00 (22",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "amount_off",
+     "free_shipping"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": 50,
+    "salePrice": 169.99,
+    "wasPrice": 219.99,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e18",
+   "source": "samsonite-ca",
+   "from": "scripts/fixtures/tavily-samsonite-freeform-21.json (recorded Tavily result)",
+   "text": "Carry-On ; Samsonite Ziplite 6 Spinner Carry-On™ · C$ 184.95 , was C$ 270.00 · 31% Off The current price is Now C$ 184.95 , was C$ 270.00 , discount of 31% Off.",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "percent_off"
+    ],
+    "percentOff": 31,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": 184.95,
+    "wasPrice": 270,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e19",
+   "source": "amazon-ca",
+   "from": "scripts/fixtures/tavily-samsonite-freeform-21.json (recorded Tavily result)",
+   "text": "Samsonite Freeform Hardside Spinner 21, Sage Green · Color isBlack. Current Price is . $191.49. In Stock · Color isWhite. Current Price is . $190.78. In Stock",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e20",
+   "source": "samsonite-ca",
+   "from": "scripts/fixtures/tavily-samsonite-freeform-21.json (recorded Tavily result)",
+   "text": "The current price is Now C$ 199.95 , The current price is Now C$ 39.95 , The current price is 125.00 CAD.",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e21",
+   "source": "unluggage",
+   "from": "scripts/fixtures/tavily-samsonite-outline-pro.json (recorded Tavily research)",
+   "text": "Samsonite Outline Pro Medium Spinner Up to 20% off Samsonite Samsonite Outline Pro Medium Spinner Sale price $324.95 CAD Regular price $405.00 Unit price / Unavailable View details",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "percent_off",
+     "sale_price"
+    ],
+    "percentOff": 20,
+    "upTo": true,
+    "amountOff": null,
+    "salePrice": 324.95,
+    "wasPrice": 405,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e22",
+   "source": "unluggage",
+   "from": "scripts/fixtures/tavily-samsonite-outline-pro.json (recorded Tavily research)",
+   "text": "Samsonite Outline Pro Carry-On Spinner Up to 19% off Samsonite Samsonite Outline Pro Carry-On Spinner Sale price $289.95 CAD Regular price $360.00 Unit price / Unavailable View details",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "percent_off",
+     "sale_price"
+    ],
+    "percentOff": 19,
+    "upTo": true,
+    "amountOff": null,
+    "salePrice": 289.95,
+    "wasPrice": 360,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e23",
+   "source": "unluggage",
+   "from": "scripts/fixtures/tavily-samsonite-outline-pro.json (recorded Tavily research)",
+   "text": "Free Shipping Over $100 Price Match Guarantee 30 Day Return Policy U.N. Luggage Canada",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "free_shipping"
+    ],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": 100,
+    "code": null
+   }
+  },
+  {
+   "id": "e24",
+   "source": "unluggage",
+   "from": "scripts/fixtures/tavily-samsonite-outline-pro.json (recorded Tavily research)",
+   "text": "Samsonite (124 products) Get up to 70% off on our best Samsonite deals with FREE shipping included!",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "percent_off",
+     "free_shipping"
+    ],
+    "percentOff": 70,
+    "upTo": true,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e25",
+   "source": "unluggage",
+   "from": "scripts/fixtures/tavily-samsonite-outline-pro.json (recorded Tavily research)",
+   "text": "Samsonite Airea Spinner Carry-On Up to 21% off Samsonite Samsonite Airea Spinner Carry-On Sale price $249.95 CAD Regular price $315.00 Unit price / Unavailable View details",
+   "expected": {
+    "isPromotion": true,
+    "kinds": [
+     "percent_off",
+     "sale_price"
+    ],
+    "percentOff": 21,
+    "upTo": true,
+    "amountOff": null,
+    "salePrice": 249.95,
+    "wasPrice": 315,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e26",
+   "source": "canadaluggagedepot",
+   "from": "CLD /products.json tags, 2026-10-30",
+   "text": "tags: $251 - $500, badge-F8700A-Free Gift, CLEARANCE, free-gift1, HM, icon-free-gift, icon-free-shipping, icon-pricebeat, ONMAP, Samsonite",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e27",
+   "source": "canadaluggagedepot",
+   "from": "CLD /products.json tags, 2026-10-30",
+   "text": "tags: $151 - $250, BLACKFRIDAY, CLEARANCE, Dakine, HM, icon-free-shipping, icon-pricebeat, promo-message, Ships-7, sydney",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e28",
+   "source": "samsonite-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Samsonite Paralux 2-in-1 Travel Backpack C$ 279.95 The current price is C$ 279.95. This product does not qualify for any further discounts. Colour: Select a Colour. Samsonite Paralux 2-in-1",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e29",
+   "source": "away-ca",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "The Aluminum Carry-On · (180) · $625 · Regular price $625. in 5 colors ; The Bigger Carry-On 3 · (48) · $348 · Regular price $348. in 8 colors ; The Aluminum Edge",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  },
+  {
+   "id": "e30",
+   "source": "luggagecity",
+   "from": "dev DB web_estimate_rejections.snippet (Tavily search result, stored 2026-10-10..26)",
+   "text": "Briggs and Riley Luggage in Toronto, Canada Sale price$899.00 CAD. Sympatico 3.0 Large Expandable Spinner 30\" - Luggage … spans 5,000 square feet, competitive pricing,",
+   "expected": {
+    "isPromotion": false,
+    "kinds": [],
+    "percentOff": null,
+    "upTo": false,
+    "amountOff": null,
+    "salePrice": null,
+    "wasPrice": null,
+    "threshold": null,
+    "code": null
+   }
+  }
+ ]
+}

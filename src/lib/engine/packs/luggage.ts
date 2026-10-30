@@ -313,7 +313,6 @@ const FILLER = new Set([
   "series",
   "new",
   "sale",
-  "carry",
   "on",
   "carryon",
   "cabin",
@@ -342,7 +341,6 @@ const FILLER = new Set([
   "x",
   "underseat",
   "underseater",
-  "global",
   "case",
   "edition",
 ]);
@@ -366,14 +364,30 @@ function lineOf(text: string, brand: string | null): string[] {
     .replace(/\b\d{2}\s*x\s*\d{1,2}(?:\s*x\s*\d{1,2})?\b/g, " ")
     // drop model numbers and colour codes
     .replace(/\b\d{5,}[-\s]?\w*\b/g, " ")
-    .replace(/[^a-z0-9.'& ]/g, " ");
+    .replace(/[^a-z0-9.'& ]/g, " ")
+    // "carry-on" is a size word; a line named "Carefree Carry" (Delsey) keeps its "carry".
+    .replace(/\bcarry\s+on\b/g, "carryon");
 
   const words = lower.split(/\s+/).filter(Boolean);
+  // "Large Carry-On" is a different bag from the "Carry-On" of the same line (TUMI Ventra):
+  // a size adjective right before the carry-on word belongs to the line, not the size class.
+  const keep = new Set<number>();
+  words.forEach((w, i) => {
+    if (w !== "large" && w !== "small") return;
+    for (let j = i + 1; j < Math.min(words.length, i + 4); j++) {
+      if (words[j] === "carryon") {
+        keep.add(i);
+        return;
+      }
+      if (!/^(?:expandable|spinner|international|hardside|softside|wheeled|4|2)$/.test(words[j]))
+        return;
+    }
+  });
   const out: string[] = [];
   for (let i = 0; i < words.length; i++) {
     const w = words[i].replace(/^\.+|\.+$/g, "");
     if (!w || w === "&" || w === "'") continue;
-    if (FILLER.has(w)) continue;
+    if (FILLER.has(w) && !keep.has(i)) continue;
     if (COLOUR_MODIFIERS.has(w) && words[i + 1] && COLOUR_WORDS.test(words[i + 1])) continue;
     if (COLOUR_WORDS.test(w) && w.length > 2) continue;
     // Wheel counts and bare two-digit sizes are not product-line words.
@@ -396,6 +410,8 @@ const OPTIONAL_LINE_WORDS: ReadonlySet<string> = new Set([
   "expansion",
   "international",
   "domestic",
+  // Briggs & Riley Baseline Global vs Domestic Carry-On.
+  "global",
 ]);
 
 /* ── Queries ────────────────────────────────────────────────────────── */

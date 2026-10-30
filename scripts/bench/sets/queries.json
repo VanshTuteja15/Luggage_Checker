@@ -1,0 +1,959 @@
+{
+ "name": "queries",
+ "task": "(a) shopper query -> intent JSON",
+ "recordedFrom": "Written for this set by Claude Code; every brand/line named is a real product family in the index (titles.json, dev DB listings, scripts/shadow/testset.json); q02 and q29 come from planning/v3/MASTER_PROMPT_V3.md",
+ "labelRules": {
+  "brand": "only when the query names it (no inference from the line)",
+  "line": "as titles.json; null = not scored",
+  "sizeClass": "titles.json classes; a bare number 18-34 right after a line reads as inches (Platinum Elite 21)",
+  "type": "spinner | upright | duffel | backpack | garment | set | null",
+  "colour": "base colour word (grey for stone grey); null when a colour word is part of a name (Black Label)",
+  "maxPrice": "upper bound in CAD (between 200 and 300 -> 300)",
+  "model": "manufacturer model number without colour code"
+ },
+ "items": [
+  {
+   "id": "q01",
+   "query": "Samsonite Omni 3.0 Large",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "omni",
+     "3.0"
+    ],
+    "sizeClass": "large",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q02",
+   "query": "cheapest 24 inch hard spinner under $300",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "medium",
+    "inches": 24,
+    "type": "spinner",
+    "colour": null,
+    "maxPrice": 300,
+    "model": null
+   }
+  },
+  {
+   "id": "q03",
+   "query": "Samsonite carry-on black",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": "black",
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q04",
+   "query": "samsonite paralux medium",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "paralux"
+    ],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q05",
+   "query": "Delsey Chatelet Air 2.0 26 inch",
+   "expected": {
+    "brand": "Delsey",
+    "line": [
+     "chatelet",
+     "air",
+     "2.0"
+    ],
+    "sizeClass": "medium",
+    "inches": 26,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q06",
+   "query": "chatelet air 1.0 carry on",
+   "expected": {
+    "brand": null,
+    "line": [
+     "chatelet",
+     "air",
+     "1.0"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q07",
+   "query": "TUMI 19 Degree International Expandable carry-on",
+   "expected": {
+    "brand": "TUMI",
+    "line": [
+     "19",
+     "degree",
+     "international"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q08",
+   "query": "tumi alpha bravo backpack",
+   "expected": {
+    "brand": "TUMI",
+    "line": [
+     "alpha",
+     "bravo"
+    ],
+    "sizeClass": "backpack",
+    "inches": null,
+    "type": "backpack",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q09",
+   "query": "Travelpro Platinum Elite 21",
+   "expected": {
+    "brand": "Travelpro",
+    "line": [
+     "platinum",
+     "elite"
+    ],
+    "sizeClass": "carry_on",
+    "inches": 21,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q10",
+   "query": "briggs and riley baseline global carry on",
+   "expected": {
+    "brand": "Briggs & Riley",
+    "line": [
+     "baseline",
+     "global"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q11",
+   "query": "Briggs & Riley Torq 21\" spinner",
+   "expected": {
+    "brand": "Briggs & Riley",
+    "line": [
+     "torq"
+    ],
+    "sizeClass": "carry_on",
+    "inches": 21,
+    "type": "spinner",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q12",
+   "query": "american tourister disney wavebreaker",
+   "expected": {
+    "brand": "American Tourister",
+    "line": [
+     "disney",
+     "wavebreaker"
+    ],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q13",
+   "query": "delsey helium aero 21 inch carry on",
+   "expected": {
+    "brand": "Delsey",
+    "line": [
+     "helium",
+     "aero"
+    ],
+    "sizeClass": "carry_on",
+    "inches": 21,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q14",
+   "query": "Nexis Large 28",
+   "expected": {
+    "brand": null,
+    "line": [
+     "nexis"
+    ],
+    "sizeClass": "large",
+    "inches": 28,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q15",
+   "query": "samsonite nexis 31 inch spinner",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "nexis"
+    ],
+    "sizeClass": "extra_large",
+    "inches": 31,
+    "type": "spinner",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q16",
+   "query": "luggage set 3 piece hardside",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "set",
+    "inches": null,
+    "type": "set",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q17",
+   "query": "duffel bag on wheels under 200",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "duffel",
+    "inches": null,
+    "type": "duffel",
+    "colour": null,
+    "maxPrice": 200,
+    "model": null
+   }
+  },
+  {
+   "id": "q18",
+   "query": "Outline Pro carry on stone grey",
+   "expected": {
+    "brand": null,
+    "line": [
+     "outline",
+     "pro"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": "grey",
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q19",
+   "query": "valise cabine samsonite",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q20",
+   "query": "bagage à main 55 cm",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q21",
+   "query": "large checked suitcase 75cm",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "large",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q22",
+   "query": "Samsonite 137394-1041",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": "137394"
+   }
+  },
+  {
+   "id": "q23",
+   "query": "underseat bag with usb port",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "underseat",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q24",
+   "query": "garment bag for suits",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "garment",
+    "inches": null,
+    "type": "garment",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q25",
+   "query": "Heys xcase 2G carry-on",
+   "expected": {
+    "brand": "Heys",
+    "line": [
+     "xcase",
+     "2g"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q26",
+   "query": "away the bigger carry-on",
+   "expected": {
+    "brand": "Away",
+    "line": [
+     "bigger"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q27",
+   "query": "carry on for getting away this weekend",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q28",
+   "query": "Monos carry-on pro",
+   "expected": {
+    "brand": "Monos",
+    "line": [
+     "pro"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q29",
+   "query": "Sky Max 3.0 spinner medium",
+   "expected": {
+    "brand": null,
+    "line": [
+     "sky",
+     "max",
+     "3.0"
+    ],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": "spinner",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q30",
+   "query": "samsonite under $250",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": 250,
+    "model": null
+   }
+  },
+  {
+   "id": "q31",
+   "query": "spinner luggage less than 400 dollars",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": null,
+    "inches": null,
+    "type": "spinner",
+    "colour": null,
+    "maxPrice": 400,
+    "model": null
+   }
+  },
+  {
+   "id": "q32",
+   "query": "cheap kids suitcase",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q33",
+   "query": "Samsonite Freeform 21\" carry-on",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "freeform"
+    ],
+    "sizeClass": "carry_on",
+    "inches": 21,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q34",
+   "query": "Ricardo Beverly Hills luggage",
+   "expected": {
+    "brand": "Ricardo Beverly Hills",
+    "line": [],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q35",
+   "query": "herschel hardshell large",
+   "expected": {
+    "brand": "Herschel",
+    "line": [],
+    "sizeClass": "large",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q36",
+   "query": "Delsey ALU'R 28",
+   "expected": {
+    "brand": "Delsey",
+    "line": [
+     "alu",
+     "r"
+    ],
+    "sizeClass": "large",
+    "inches": 28,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q37",
+   "query": "aluminum carry-on",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q38",
+   "query": "Samsonite Evoa Z medium black",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "evoa",
+     "z"
+    ],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": null,
+    "colour": "black",
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q39",
+   "query": "travelpro maxlite 5 22 inch",
+   "expected": {
+    "brand": "Travelpro",
+    "line": [
+     "maxlite",
+     "5"
+    ],
+    "sizeClass": "carry_on",
+    "inches": 22,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q40",
+   "query": "Dakine split roller 85L",
+   "expected": {
+    "brand": "Dakine",
+    "line": [
+     "split",
+     "roller"
+    ],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q41",
+   "query": "high sierra 28\" duffle",
+   "expected": {
+    "brand": "High Sierra",
+    "line": [],
+    "sizeClass": "duffel",
+    "inches": 28,
+    "type": "duffel",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q42",
+   "query": "Samsonite Uplift 3 piece set",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "uplift"
+    ],
+    "sizeClass": "set",
+    "inches": null,
+    "type": "set",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q43",
+   "query": "american tourister airconic large spinner navy",
+   "expected": {
+    "brand": "American Tourister",
+    "line": [
+     "airconic"
+    ],
+    "sizeClass": "large",
+    "inches": null,
+    "type": "spinner",
+    "colour": "navy",
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q44",
+   "query": "luggage 20 inch carry on under 150",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "carry_on",
+    "inches": 20,
+    "type": null,
+    "colour": null,
+    "maxPrice": 150,
+    "model": null
+   }
+  },
+  {
+   "id": "q45",
+   "query": "Swiss gear laptop backpack",
+   "expected": {
+    "brand": "SwissGear",
+    "line": [],
+    "sizeClass": "backpack",
+    "inches": null,
+    "type": "backpack",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q46",
+   "query": "briggs riley baseline medium",
+   "expected": {
+    "brand": "Briggs & Riley",
+    "line": [
+     "baseline"
+    ],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q47",
+   "query": "tumi 19 degree lite medium",
+   "expected": {
+    "brand": "TUMI",
+    "line": [
+     "19",
+     "degree",
+     "lite"
+    ],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q48",
+   "query": "samsonite black label c-lite 28",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "black",
+     "label",
+     "c",
+     "lite"
+    ],
+    "sizeClass": "large",
+    "inches": 28,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q49",
+   "query": "Delsey Cosmique 23-inch carry on light blue",
+   "expected": {
+    "brand": "Delsey",
+    "line": [
+     "cosmique"
+    ],
+    "sizeClass": "carry_on",
+    "inches": 23,
+    "type": null,
+    "colour": "blue",
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q50",
+   "query": "travelpro platinum elite international carry-on",
+   "expected": {
+    "brand": "Travelpro",
+    "line": [
+     "platinum",
+     "elite",
+     "international"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q51",
+   "query": "Delsey Carrousel 27 expandable",
+   "expected": {
+    "brand": "Delsey",
+    "line": [
+     "carrousel"
+    ],
+    "sizeClass": "large",
+    "inches": 27,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q52",
+   "query": "samsonite outline pro large under 400",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "outline",
+     "pro"
+    ],
+    "sizeClass": "large",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": 400,
+    "model": null
+   }
+  },
+  {
+   "id": "q53",
+   "query": "TUMI Aerotour international",
+   "expected": {
+    "brand": "TUMI",
+    "line": [
+     "aerotour",
+     "international"
+    ],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q54",
+   "query": "Samsonite Andante 2 wheeled duffel 28",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "andante",
+     "2"
+    ],
+    "sizeClass": "duffel",
+    "inches": 28,
+    "type": "duffel",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q55",
+   "query": "Peak Design packing cube",
+   "expected": {
+    "brand": "Peak Design",
+    "line": null,
+    "sizeClass": "accessory",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q56",
+   "query": "luggage scale",
+   "expected": {
+    "brand": null,
+    "line": null,
+    "sizeClass": "accessory",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q57",
+   "query": "medium spinner between 200 and 300",
+   "expected": {
+    "brand": null,
+    "line": [],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": "spinner",
+    "colour": null,
+    "maxPrice": 300,
+    "model": null
+   }
+  },
+  {
+   "id": "q58",
+   "query": "Delsey Brochant 3.0 check-in",
+   "expected": {
+    "brand": "Delsey",
+    "line": [
+     "brochant",
+     "3.0"
+    ],
+    "sizeClass": null,
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q59",
+   "query": "Samsonite 2 piece luggage set red",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [],
+    "sizeClass": "set",
+    "inches": null,
+    "type": "set",
+    "colour": "red",
+    "maxPrice": null,
+    "model": null
+   }
+  },
+  {
+   "id": "q60",
+   "query": "Herschel Heritage softshell carry-on",
+   "expected": {
+    "brand": "Herschel",
+    "line": [
+     "heritage"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   }
+  }
+ ]
+}

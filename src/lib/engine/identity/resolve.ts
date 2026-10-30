@@ -13,37 +13,19 @@
 
 import type { CatalogProduct, EngineStore } from "../store/port";
 import type { CategoryPack, Identifier, ListingRecord } from "../types";
+import { adviseReview, hardVeto, identityKey, lineOverlap, NEAR_MATCH } from "./match";
+
+export { identityKey };
 
 export type Resolution = {
   productId: string | null;
   variantId: string | null;
-  method: "gtin" | "model" | "name" | "new" | "review" | "unresolved";
+  method: "gtin" | "sku" | "model" | "name" | "new" | "review" | "unresolved";
   reasons: string[];
 };
 
 const ids = (list: Identifier[], kind: Identifier["kind"]) =>
   list.filter((i) => i.kind === kind).map((i) => i.value);
-
-/** brand|line words (sorted)|size[|inches]: the name-level identity of a product. */
-export function identityKey(
-  brand: string | null,
-  line: string[],
-  sizeClass: string | null,
-  inches: number | null = null,
-): string | null {
-  if (!brand || line.length === 0 || !sizeClass) return null;
-  const base = `${brand.toLowerCase()}|${[...line].sort().join(" ")}|${sizeClass}`;
-  return inches ? `${base}|${inches}in` : base;
-}
-
-function jaccard(a: string[], b: string[]): number {
-  const A = new Set(a);
-  const B = new Set(b);
-  if (A.size === 0 && B.size === 0) return 1;
-  let inter = 0;
-  for (const x of A) if (B.has(x)) inter++;
-  return inter / (A.size + B.size - inter);
-}
 
 /** Numbers in a line ("Omni 3.0", "Maxlite 5", "Alpha 3") must agree exactly. */
 function versionsAgree(a: string[], b: string[]): boolean {
@@ -143,6 +125,23 @@ export async function resolveListing(
     if (hits.length > 1) reasons.push(`GTIN ${gtin} is on ${hits.length} products`);
   }
 
+  /* 1b. the same SKU at the same store is the same product (v4 A5.1) */
+  for (const sku of ids(listing.identifiers, "store_sku")) {
+    const hits = await store.findProductsByIdentifier("store_sku", sku, listing.sourceId);
+    const products = (await Promise.all(hits.map((h) => store.getProduct(h)))).filter(
+      (p): p is CatalogProduct => !!p && sizeCompatible(p, sizeClass),
+    );
+    if (products.length === 1) {
+      const variantId = await attach(store, listing, products[0], colourCode);
+      return {
+        productId: products[0].id,
+        variantId,
+        method: "sku",
+        reasons: [`${listing.sourceId} SKU ${sku}`],
+      };
+    }
+  }
+
   /* 2. manufacturer model number, same size class */
   for (const model of ids(listing.identifiers, "model")) {
     const hits = await store.findProductsByIdentifier("model", model);
@@ -161,6 +160,39 @@ export async function resolveListing(
   if (key) {
     const exact = await store.findProductByIdentityKey(key);
     if (exact) {
+      // v4 A5.1: one store selling two products under one name in the same
+      // colour (Ventra "Large" Carry-On vs Carry-On before the A3.0 fix):
+      // different store products never merge on the name alone.
+      const clash = listing.externalId
+        ? (await store.listingsForProduct(exact.id)).find(
+            (l) =>
+              l.sourceId === listing.sourceId &&
+              l.id !== listing.id &&
+              !!l.externalId &&
+              l.externalId !== listing.externalId &&
+              (l.colour ?? "").toLowerCase() === (listing.colour ?? "").toLowerCase(),
+          )
+        : undefined;
+      if (clash) {
+        const own = await createFor(store, listing, brand, line, sizeClass, null);
+        await store.enqueueReview(listing.id, exact.id, 0.9, [
+          `${listing.sourceId} also sells "${clash.title}" under this name`,
+          ...reasons,
+        ]);
+        // Same request shape as the review row rebuilds (identity/advice.ts).
+        await adviseReview({
+          a: listing.title,
+          b: exact.name,
+          storeA: listing.sourceId,
+          storeB: "our catalogue",
+        });
+        return {
+          productId: own,
+          variantId: null,
+          method: "review",
+          reasons: ["same name as another product at this store: queued for review"],
+        };
+      }
       const variantId = await attach(store, listing, exact, colourCode);
       return {
         productId: exact.id,
@@ -177,10 +209,12 @@ export async function resolveListing(
       // Both state a size and they differ (Nexis Large 28 vs 31): not the same bag.
       const pInches = Number(p.identityKey?.match(/\|(\d+)in$/)?.[1]) || pack.inchesOf(p.name);
       if (inches && pInches && inches !== pInches) continue;
-      const score = jaccard(pLine, line);
+      // v4 A5.2: an edition, a Large/Compact carry-on, International/Lite/… on one side.
+      if (hardVeto(pack, p.name, listing.title)) continue;
+      const score = lineOverlap(pLine, line);
       if (!best || score > best.score) best = { p, score };
     }
-    if (best && best.score >= 0.6) {
+    if (best && best.score >= NEAR_MATCH) {
       // Close but not identical (e.g. "outline pro" vs "outline pro hardside"): a human decides.
       // The new product keeps its own key so its other colours join it instead of
       // each opening another review; approving a merge moves them all.
@@ -189,6 +223,12 @@ export async function resolveListing(
         `similar line: "${best.p.line}" vs "${line.join(" ")}"`,
         ...reasons,
       ]);
+      await adviseReview({
+        a: listing.title,
+        b: best.p.name,
+        storeA: listing.sourceId,
+        storeB: "our catalogue",
+      });
       return {
         productId: listingProduct,
         variantId: null,

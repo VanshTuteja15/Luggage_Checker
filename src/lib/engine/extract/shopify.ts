@@ -28,6 +28,8 @@ export type ShopifyProduct = {
   vendor: string | null;
   productType: string | null;
   imageUrl: string | null;
+  /** body_html as plain text; catalogue reads only (v4 A4.1). */
+  description?: string | null;
   variants: ShopifyVariant[];
   source: ".json" | ".js" | "merged";
 };

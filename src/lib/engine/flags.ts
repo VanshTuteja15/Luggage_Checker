@@ -47,6 +47,13 @@ export const FLAG_DEFAULTS = {
   /** Terms not yet read by a human: product JSON stays off until they are. */
   "source.unluggage.product_json": false,
   "source.bentley.product_json": false,
+  /**
+   * Whole-catalogue reads (/products.json) for stores whose storefront we may
+   * read: a few requests per run instead of one per product (v4 A3). Off until
+   * the owner switches them on; prices are stored only when they change.
+   */
+  "source.canadaluggagedepot.catalog": false,
+  "source.delsey-ca.catalog": false,
   /** Blocked by bot management from our network (P0 probe). */
   "source.samsonite-ca.html_structured": false,
   "source.tumi-ca.html_structured": false,
@@ -62,6 +69,21 @@ export const FLAG_DEFAULTS = {
   "feed.walmart-ca": false,
   "feed.bestbuy-ca": false,
   "feed.canadiantire": false,
+
+  /**
+   * Local AI helpers (Ollama). All OFF: on our labelled sets rules beat the
+   * 3–4 B models on every task (planning/v4/review/02), so a task may be
+   * switched on only when `npm run eval` shows it helps. Even then a model
+   * never sets a price, never merges two products, and every value it gives
+   * must be stated in the store's own text (src/lib/engine/ai/evidence.ts).
+   */
+  "ai.enabled": false,
+  /** Fill dimensions/capacity/weight/wheels the spec rules couldn't read. */
+  "ai.attributes": false,
+  /** An advisory opinion on near-match pairs in the review queue. */
+  "ai.match_judge": false,
+  /** Quote clauses about automated access in a candidate store's terms. */
+  "ai.terms_prescreen": false,
 } as const satisfies Record<string, boolean>;
 
 export type FlagSet = Record<string, boolean>;

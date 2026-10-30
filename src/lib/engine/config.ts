@@ -47,6 +47,18 @@ export type EngineConfig = {
   cron: { maxFetchesPerRun: number; maxProductsPerRun: number };
   /** Discovery caps per store per run. */
   discovery: { maxProductFetchesPerStore: number; maxSitemapUrls: number };
+  /**
+   * Local AI (Ollama). `url` unset = no AI at all; even when set, every task
+   * stays off until its flag is on (flags.ts). The URL must be loopback or in
+   * `allowedHosts` (ai/ollama.ts refuses anything else).
+   */
+  ai: {
+    url: string | null;
+    model: string;
+    timeoutMs: number;
+    allowedHosts: string[];
+    keepAlive: string;
+  };
 };
 
 export function engineConfig(): EngineConfig {
@@ -87,6 +99,17 @@ export function engineConfig(): EngineConfig {
       maxProductFetchesPerStore: int("ENGINE_DISCOVERY_MAX_FETCHES_PER_STORE", 150, 0, 10_000),
       maxSitemapUrls: int("ENGINE_DISCOVERY_MAX_SITEMAP_URLS", 20_000, 0, 200_000),
     },
+    ai: {
+      url: str("OLLAMA_URL"),
+      // The only benchmarked model that fits fully in the laptop's VRAM (review 02 §2).
+      model: str("OLLAMA_MODEL") ?? "qwen2.5:3b",
+      timeoutMs: int("OLLAMA_TIMEOUT_MS", 60_000, 1_000, 600_000),
+      allowedHosts: (str("OLLAMA_ALLOWED_HOSTS") ?? "")
+        .split(",")
+        .map((h) => h.trim())
+        .filter(Boolean),
+      keepAlive: str("OLLAMA_KEEP_ALIVE") ?? "5m",
+    },
   };
 }
 
@@ -106,5 +129,6 @@ export function describeConfig(c: EngineConfig = engineConfig()): Record<string,
     database: c.databaseUrl ? "set" : "not set (in-memory store)",
     sessionDeadlineMs: String(c.sessionDeadlineMs),
     singleFlightMs: String(c.singleFlightMs),
+    ai: c.ai.url ? `set (${c.ai.model})` : "not set (rules only)",
   };
 }

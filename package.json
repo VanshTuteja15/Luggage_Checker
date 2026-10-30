@@ -26,7 +26,8 @@
     "engine:reresolve": "node scripts/run-ts.mjs scripts/engine/reresolve.ts",
     "shadow:run": "node scripts/run-ts.mjs scripts/shadow/run.ts",
     "shadow:report": "node scripts/run-ts.mjs scripts/shadow/report.ts",
-    "e2e:auth": "node scripts/run-ts.mjs scripts/e2e/local-auth.ts"
+    "e2e:auth": "node scripts/run-ts.mjs scripts/e2e/local-auth.ts",
+    "eval": "node scripts/run-ts.mjs scripts/eval/run.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

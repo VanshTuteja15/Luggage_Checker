@@ -1,0 +1,2619 @@
+{
+ "name": "titles",
+ "task": "(b) listing title -> brand / line / size class / inches / version",
+ "recordedFrom": "Shopify /products.json pages read 2026-10-30 06:57 UTC through the PoliteFetcher (canadaluggagedepot p1+p13, delsey-ca p1); deterministic sample by sha1(handle), quotas 60 luggage / 28 bags / 12 accessories",
+ "labelledBy": "Claude Code (v4 overnight review), by hand from the title text only; brand also checked against the store vendor field",
+ "labelRules": {
+  "brand": "canonical brand name; compared case- and punctuation-insensitively",
+  "sizeClass": "one of underseat carry_on medium large extra_large set backpack duffel garment tote briefcase accessory; the store own size word wins over inches; null when the title states no size",
+  "inches": "integer part of a stated size in inches, 14-34; null if none",
+  "version": "version number of the product line (2.0, 3.0, 2, V2 -> 2); null if none",
+  "line": "product family words, lower case, split on non-alphanumerics except .; excludes brand, size, type, colour, material, feature words; null = not scored (accessories); [] = the title names no family"
+ },
+ "items": [
+  {
+   "id": "t001",
+   "source": "canadaluggagedepot",
+   "handle": "peak-design-packing-cube-large",
+   "vendor": "Peak Design",
+   "productType": "Travel Accessories",
+   "title": "Peak Design Packing Cube Large",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Sage",
+      "Charcoal"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Peak Design",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t002",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-ecodiver-laptop-backpack-l-17-3",
+   "vendor": "Samsonite",
+   "productType": "Backpacks",
+   "title": "Samsonite Ecodiver Laptop Backpack L (17.3\")",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Yellow"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "backpack",
+    "inches": 17,
+    "version": null,
+    "line": [
+     "ecodiver"
+    ]
+   }
+  },
+  {
+   "id": "t003",
+   "source": "canadaluggagedepot",
+   "handle": "peak-design-camera-cube-small",
+   "vendor": "Peak Design",
+   "productType": "Travel Accessories",
+   "title": "Peak Design Camera Cube Small",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Peak Design",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t004",
+   "source": "delsey-ca",
+   "handle": "j4274682801-jh001a-32-inch-expandable-check-in-trunk-suitcase-anthracite",
+   "vendor": "DELSEY PARIS",
+   "productType": "Trunk",
+   "title": "JH001A | 32-Inch Expandable Check-In Trunk Suitcase, Anthracite",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "extra_large",
+    "inches": 32,
+    "version": null,
+    "line": [
+     "jh001a"
+    ]
+   }
+  },
+  {
+   "id": "t005",
+   "source": "delsey-ca",
+   "handle": "40401097611-asphalt-2-piece-luggage-set-silver",
+   "vendor": "DELSEY PARIS",
+   "productType": "Set",
+   "title": "ASPHALT | 2-Piece Luggage Set, Silver",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "set",
+    "inches": null,
+    "version": null,
+    "line": [
+     "asphalt"
+    ]
+   }
+  },
+  {
+   "id": "t006",
+   "source": "delsey-ca",
+   "handle": "j4274026013-js006b-32-inch-2-wheeled-duffel-bag-elm-green",
+   "vendor": "DELSEY PARIS",
+   "productType": "Duffle Bag",
+   "title": "JS006B | 32-Inch 2-Wheeled Duffel Bag, Elm green",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "duffel",
+    "inches": 32,
+    "version": null,
+    "line": [
+     "js006b"
+    ]
+   }
+  },
+  {
+   "id": "t007",
+   "source": "delsey-ca",
+   "handle": "j4274682001-jh001a-27-inch-expandable-check-in-suitcase-anthracite",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "JH001A | 27-Inch Expandable Check-In Suitcase, Anthracite",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "large",
+    "inches": 27,
+    "version": null,
+    "line": [
+     "jh001a"
+    ]
+   }
+  },
+  {
+   "id": "t008",
+   "source": "delsey-ca",
+   "handle": "40392682012-alexandra-27-inch-expandable-check-in-suitcase-light-blue",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "COSMIQUE | 27-Inch Expandable Check-In Suitcase, Light blue",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "large",
+    "inches": 27,
+    "version": null,
+    "line": [
+     "cosmique"
+    ]
+   }
+  },
+  {
+   "id": "t009",
+   "source": "delsey-ca",
+   "handle": "f4398280501-catch-flights-23-inch-carry-on-suitcase-anthracite",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "CATCH FLIGHTS | 23-Inch Carry-On Suitcase, Anthracite",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "carry_on",
+    "inches": 23,
+    "version": null,
+    "line": [
+     "catch",
+     "flights"
+    ]
+   }
+  },
+  {
+   "id": "t010",
+   "source": "canadaluggagedepot",
+   "handle": "peak-design-rain-fly-25-30l-backpack-cover",
+   "vendor": "Peak Design",
+   "productType": "Backpacks",
+   "title": "Peak Design Rain Fly 25-30L Backpack Cover",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Peak Design",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t011",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-new-baseline-expandable-essentials-kit",
+   "vendor": "Briggs & Riley",
+   "productType": "Travel Accessories",
+   "title": "Briggs & Riley NEW Baseline Expandable Essentials Kit",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Navy",
+      "Black",
+      "Plum",
+      "Olive"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Briggs & Riley",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t012",
+   "source": "delsey-ca",
+   "handle": "f4398061133-carefree-carry-17-inch-laptop-backpack-sage-green",
+   "vendor": "DELSEY PARIS",
+   "productType": "Laptop Backpack",
+   "title": "CAREFREE CARRY | 17-Inch Laptop Backpack, Sage green",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "backpack",
+    "inches": 17,
+    "version": null,
+    "line": [
+     "carefree",
+     "carry"
+    ]
+   }
+  },
+  {
+   "id": "t013",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-dream-rider-ride-on-suitcase",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Dream Rider Ride-On Suitcase",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Tiger T",
+      "Puppy",
+      "Cheetah",
+      "Leopard"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": null,
+    "inches": null,
+    "version": null,
+    "line": [
+     "dream",
+     "rider"
+    ]
+   }
+  },
+  {
+   "id": "t014",
+   "source": "delsey-ca",
+   "handle": "40392680512-alexandra-23-inch-expandable-carry-on-suitcase-light-blue",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "COSMIQUE | 23-Inch Expandable Carry-On Suitcase, Light blue",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "carry_on",
+    "inches": 23,
+    "version": null,
+    "line": [
+     "cosmique"
+    ]
+   }
+  },
+  {
+   "id": "t015",
+   "source": "delsey-ca",
+   "handle": "j4274177807-jh003b-32-inch-2-wheeled-expandable-check-in-suitcase-warm-sand",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "JH003B | 32-Inch 2-Wheeled Expandable Check-In Suitcase, Warm sand",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "extra_large",
+    "inches": 32,
+    "version": null,
+    "line": [
+     "jh003b"
+    ]
+   }
+  },
+  {
+   "id": "t016",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-ventra-large-expandable-carry-on-luggage",
+   "vendor": "Tumi",
+   "productType": "Luggage",
+   "title": "Tumi Ventra Large Expandable Carry-On Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black Textured",
+      "Castle Rock Texture",
+      "Cadet Texture"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "ventra"
+    ]
+   }
+  },
+  {
+   "id": "t017",
+   "source": "canadaluggagedepot",
+   "handle": "high-sierra-hydrahike-2-0-4l-hydration-pack",
+   "vendor": "High Sierra",
+   "productType": "Backpacks",
+   "title": "High Sierra Hydrahike 2.0 4L Hydration Pack - Grey Blue",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Grey Blue"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "High Sierra",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": "2.0",
+    "line": [
+     "hydrahike",
+     "2.0"
+    ]
+   }
+  },
+  {
+   "id": "t018",
+   "source": "delsey-ca",
+   "handle": "40392680523-alexandra-23-inch-expandable-carry-on-suitcase-dark-teal",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "COSMIQUE | 23-Inch Expandable Carry-On Suitcase, Dark teal",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "carry_on",
+    "inches": 23,
+    "version": null,
+    "line": [
+     "cosmique"
+    ]
+   }
+  },
+  {
+   "id": "t019",
+   "source": "delsey-ca",
+   "handle": "40239741002-helium-dlx-weekender-bag-navy",
+   "vendor": "DELSEY PARIS",
+   "productType": "Weekender Bag",
+   "title": "HELIUM DLX | Weekender Bag, Navy",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "duffel",
+    "inches": null,
+    "version": null,
+    "line": [
+     "helium",
+     "dlx"
+    ]
+   }
+  },
+  {
+   "id": "t020",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-heli-2-0-pro-backpack-26l-rosin",
+   "vendor": "Dakine",
+   "productType": "Backpacks",
+   "title": "Dakine Heli 2.0 Pro Backpack 26L - Rosin",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Rosin"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Dakine",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": "2.0",
+    "line": [
+     "heli",
+     "2.0",
+     "pro"
+    ]
+   }
+  },
+  {
+   "id": "t021",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-spinner-underseater-with-usb-port",
+   "vendor": "Samsonite",
+   "productType": "Underseater",
+   "title": "Samsonite Spinner Underseater with USB Port",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Purple"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "underseat",
+    "inches": null,
+    "version": null,
+    "line": []
+   }
+  },
+  {
+   "id": "t022",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-19-degree-lite-medium-checked-luggage",
+   "vendor": "Tumi",
+   "productType": "Luggage",
+   "title": "Tumi 19 Degree Lite Medium Checked Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black Graphite"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "medium",
+    "inches": null,
+    "version": null,
+    "line": [
+     "19",
+     "degree",
+     "lite"
+    ]
+   }
+  },
+  {
+   "id": "t023",
+   "source": "delsey-ca",
+   "handle": "f4398061172-carefree-carry-17-inch-laptop-backpack-zinc-blue",
+   "vendor": "DELSEY PARIS",
+   "productType": "Laptop Backpack",
+   "title": "CAREFREE CARRY | 17-Inch Laptop Backpack, Zinc blue",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "backpack",
+    "inches": 17,
+    "version": null,
+    "line": [
+     "carefree",
+     "carry"
+    ]
+   }
+  },
+  {
+   "id": "t024",
+   "source": "canadaluggagedepot",
+   "handle": "peak-design-packing-cube-smedium",
+   "vendor": "Peak Design",
+   "productType": "Travel Accessories",
+   "title": "Peak Design Packing Cube Smedium",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Ocean",
+      "Sage",
+      "Charcoal"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Peak Design",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t025",
+   "source": "canadaluggagedepot",
+   "handle": "matador-ultralight-travel-towel-small",
+   "vendor": "Matador",
+   "productType": "Travel Accessories",
+   "title": "Matador Ultralight Travel Towel - Small",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Charcoal"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Matador",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t026",
+   "source": "delsey-ca",
+   "handle": "0764011-helium-aero-21-inch-front-pocket-expandable-carry-on-suitcase-metal-brushed",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "HELIUM AERO | 21-Inch Front Pocket Expandable Carry-On Suitcase, Metal brushed",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "carry_on",
+    "inches": 21,
+    "version": null,
+    "line": [
+     "helium",
+     "aero"
+    ]
+   }
+  },
+  {
+   "id": "t027",
+   "source": "delsey-ca",
+   "handle": "j4274683003-jh001a-32-inch-expandable-check-in-suitcase-green",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "JH001A | 32-Inch Expandable Check-In Suitcase, Green",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "extra_large",
+    "inches": 32,
+    "version": null,
+    "line": [
+     "jh001a"
+    ]
+   }
+  },
+  {
+   "id": "t028",
+   "source": "delsey-ca",
+   "handle": "40239783000-helium-dlx-33-inch-expandable-check-in-suitcase-black",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "HELIUM DLX | 33-Inch Expandable Check-In Suitcase, Black",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "extra_large",
+    "inches": 33,
+    "version": null,
+    "line": [
+     "helium",
+     "dlx"
+    ]
+   }
+  },
+  {
+   "id": "t029",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-split-carry-on-roller-bag-42l-black",
+   "vendor": "Dakine",
+   "productType": "Luggage",
+   "title": "Dakine Split Carry On Roller Bag 42L+ - Black",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Dakine",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "split",
+     "roller"
+    ]
+   }
+  },
+  {
+   "id": "t030",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-c-lite-28-large-spinner-luggage",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Black Label C-Lite 28\" Large Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Chili Red",
+      "Off-White"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "large",
+    "inches": 28,
+    "version": null,
+    "line": [
+     "black",
+     "label",
+     "c",
+     "lite"
+    ]
+   }
+  },
+  {
+   "id": "t031",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-fabric-cleaner",
+   "vendor": "Tumi",
+   "productType": "Travel Accessories",
+   "title": "Tumi Fabric Cleaner",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t032",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-new-baseline-medium-expandable-spinner-luggage",
+   "vendor": "Briggs & Riley",
+   "productType": "Luggage",
+   "title": "Briggs & Riley Baseline Medium Expandable Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Navy",
+      "Olive",
+      "Plum",
+      "Chocolate"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Briggs & Riley",
+    "sizeClass": "medium",
+    "inches": null,
+    "version": null,
+    "line": [
+     "baseline"
+    ]
+   }
+  },
+  {
+   "id": "t033",
+   "source": "canadaluggagedepot",
+   "handle": "helly-hansen-light-dry-bag-7l",
+   "vendor": "Helly Hansen",
+   "productType": "Travel Accessories",
+   "title": "Helly Hansen Light Dry Bag 7L",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Alert Red"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Helly Hansen",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t034",
+   "source": "canadaluggagedepot",
+   "handle": "matador-flatpak-travel-soap-bar-case-v2",
+   "vendor": "Matador",
+   "productType": "Travel Accessories",
+   "title": "Matador FlatPak Travel Soap Bar Case V2",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Garnet",
+      "Black",
+      "Juniper"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Matador",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": "2",
+    "line": null
+   }
+  },
+  {
+   "id": "t035",
+   "source": "delsey-ca",
+   "handle": "40303141122wb-flanerie-se-weekender-bag-navy-blue",
+   "vendor": "DELSEY PARIS",
+   "productType": "Weekender Bag",
+   "title": "FLANERIE SE | Weekender Bag, Navy blue",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "duffel",
+    "inches": null,
+    "version": null,
+    "line": [
+     "flanerie",
+     "se"
+    ]
+   }
+  },
+  {
+   "id": "t036",
+   "source": "delsey-ca",
+   "handle": "4016763100480-chatelet-air-2-0-beauty-case-80th-anniversary-edition-burgundy",
+   "vendor": "DELSEY PARIS",
+   "productType": "Beauty Case",
+   "title": "CHATELET AIR 2.0 | Beauty Case - 80th Anniversary Edition, Burgundy",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": "2.0",
+    "line": null
+   }
+  },
+  {
+   "id": "t037",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-uplift-spinner-carry-on-luggage",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Uplift Spinner Carry-On Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Elemental Blue"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "uplift"
+    ]
+   }
+  },
+  {
+   "id": "t038",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-travel-sentry-key-locks-set-of-2",
+   "vendor": "Samsonite",
+   "productType": "Locks",
+   "title": "Samsonite Travel Sentry Key Locks (Set of 2)",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t039",
+   "source": "delsey-ca",
+   "handle": "40303197020t9-flanerie-se-2-piece-luggage-set-black-brown",
+   "vendor": "DELSEY PARIS",
+   "productType": "Set",
+   "title": "FLANERIE SE | 2-Piece Luggage Set, Black brown",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "set",
+    "inches": null,
+    "version": null,
+    "line": [
+     "flanerie",
+     "se"
+    ]
+   }
+  },
+  {
+   "id": "t040",
+   "source": "canadaluggagedepot",
+   "handle": "austin-house-anti-nausea-wrist-bands",
+   "vendor": "Austin House",
+   "productType": "Travel Accessories",
+   "title": "Austin House Anti-Nausea Wrist Bands",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Austin House Anti-Nausea Wrist Bands"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Austin House",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t041",
+   "source": "delsey-ca",
+   "handle": "f4398061128-carefree-carry-17-inch-laptop-backpack-lavender",
+   "vendor": "DELSEY PARIS",
+   "productType": "Laptop Backpack",
+   "title": "CAREFREE CARRY | 17-Inch Laptop Backpack, Lavender",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "backpack",
+    "inches": 17,
+    "version": null,
+    "line": [
+     "carefree",
+     "carry"
+    ]
+   }
+  },
+  {
+   "id": "t042",
+   "source": "canadaluggagedepot",
+   "handle": "jansport-superbreak-backpack-color-me-vaporwave",
+   "vendor": "Jansport",
+   "productType": "Backpacks",
+   "title": "JanSport SuperBreak Backpack - Color Me Vaporwave",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Color Me Vaporwave"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "JanSport",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "superbreak"
+    ]
+   }
+  },
+  {
+   "id": "t043",
+   "source": "delsey-ca",
+   "handle": "b4376881009-ucb-hardside-26-inch-check-in-suitcase-pink",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "UCB HARDSIDE | 26-Inch Check-In Suitcase, Pink",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "medium",
+    "inches": 26,
+    "version": null,
+    "line": [
+     "ucb"
+    ]
+   }
+  },
+  {
+   "id": "t044",
+   "source": "canadaluggagedepot",
+   "handle": "high-sierra-fairlead-collection-28-drop-bottom-duffle",
+   "vendor": "High Sierra",
+   "productType": "Duffles",
+   "title": "High Sierra Fairlead Collection 28\" Drop Bottom Duffle",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Mercury Black",
+      "True Navy / Graphite Blue"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "High Sierra",
+    "sizeClass": "duffel",
+    "inches": 28,
+    "version": null,
+    "line": [
+     "fairlead",
+     "drop",
+     "bottom"
+    ]
+   }
+  },
+  {
+   "id": "t045",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-campus-backpack-33l-carbon-heather",
+   "vendor": "Dakine",
+   "productType": "Backpacks",
+   "title": "Dakine Campus Backpack 33L - Carbon Heather",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Carbon Heather"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Dakine",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "campus"
+    ]
+   }
+  },
+  {
+   "id": "t046",
+   "source": "canadaluggagedepot",
+   "handle": "austin-house-inflatable-neck-pillow",
+   "vendor": "Austin House",
+   "productType": "Travel Accessories",
+   "title": "Austin House Inflatable Neck Pillow",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Austin House Inflatable Neck Pillow"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Austin House",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t047",
+   "source": "canadaluggagedepot",
+   "handle": "matador-24l-adventure-pack",
+   "vendor": "Matador",
+   "productType": "Backpacks",
+   "title": "Matador 24L Adventure Pack",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Garnet",
+      "Black",
+      "Juniper"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Matador",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "adventure"
+    ]
+   }
+  },
+  {
+   "id": "t048",
+   "source": "canadaluggagedepot",
+   "handle": "high-sierra-fairlead-collection-convertible-duffle",
+   "vendor": "High Sierra",
+   "productType": "Duffles",
+   "title": "High Sierra Fairlead Collection Convertible Duffle",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "True Navy / Graphite Blue",
+      "Mercury Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "High Sierra",
+    "sizeClass": "duffel",
+    "inches": null,
+    "version": null,
+    "line": [
+     "fairlead",
+     "convertible"
+    ]
+   }
+  },
+  {
+   "id": "t049",
+   "source": "delsey-ca",
+   "handle": "40103082121-alu-r-28-inch-aluminum-check-in-suitcase-silver",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "ALU'R | 28-Inch Aluminum Check-In Suitcase, Silver",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "large",
+    "inches": 28,
+    "version": null,
+    "line": [
+     "alu",
+     "r"
+    ]
+   }
+  },
+  {
+   "id": "t050",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-poacher-ras-backpack-26l-black",
+   "vendor": "Dakine",
+   "productType": "Backpacks",
+   "title": "Dakine Poacher RAS Backpack 26L - Black",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Dakine",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "poacher",
+     "ras"
+    ]
+   }
+  },
+  {
+   "id": "t051",
+   "source": "delsey-ca",
+   "handle": "j4274697703-jh001a-2-piece-luggage-set-green",
+   "vendor": "DELSEY PARIS",
+   "productType": "Set",
+   "title": "JH001A | 2-Piece Luggage Set, Green",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "set",
+    "inches": null,
+    "version": null,
+    "line": [
+     "jh001a"
+    ]
+   }
+  },
+  {
+   "id": "t052",
+   "source": "delsey-ca",
+   "handle": "40167682602-chatelet-air-2-0-27-inch-expandable-check-in-suitcase-blue",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "CHATELET AIR 2.0 | 27-Inch Expandable Check-In Suitcase, Blue",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "large",
+    "inches": 27,
+    "version": "2.0",
+    "line": [
+     "chatelet",
+     "air",
+     "2.0"
+    ]
+   }
+  },
+  {
+   "id": "t053",
+   "source": "delsey-ca",
+   "handle": "b4376281000-now-hardside-26-inch-check-in-suitcase-black",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "NOW HARDSIDE | 26-Inch Check-In Suitcase, Black",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "medium",
+    "inches": 26,
+    "version": null,
+    "line": [
+     "now"
+    ]
+   }
+  },
+  {
+   "id": "t054",
+   "source": "delsey-ca",
+   "handle": "40239745100-helium-dlx-carry-on-underseater-suitcase-black",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "HELIUM DLX | Carry-On Underseater Suitcase, Black",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "underseat",
+    "inches": null,
+    "version": null,
+    "line": [
+     "helium",
+     "dlx"
+    ]
+   }
+  },
+  {
+   "id": "t055",
+   "source": "delsey-ca",
+   "handle": "f4398283001-catch-flights-31-inch-check-in-suitcase-anthracite",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "CATCH FLIGHTS | 31-Inch Check-In Suitcase, Anthracite",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "extra_large",
+    "inches": 31,
+    "version": null,
+    "line": [
+     "catch",
+     "flights"
+    ]
+   }
+  },
+  {
+   "id": "t056",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-pro-standard-backpack",
+   "vendor": "Samsonite",
+   "productType": "Backpacks",
+   "title": "Samsonite Pro Standard Backpack",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "pro",
+     "standard"
+    ]
+   }
+  },
+  {
+   "id": "t057",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-campus-backpack-33l-rosin",
+   "vendor": "Dakine",
+   "productType": "Backpacks",
+   "title": "Dakine Campus Backpack 33L - Rosin",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Rosin"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Dakine",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "campus"
+    ]
+   }
+  },
+  {
+   "id": "t058",
+   "source": "canadaluggagedepot",
+   "handle": "mancini-buffalo-collection-leather-duffle-bag",
+   "vendor": "Mancini",
+   "productType": "Duffles",
+   "title": "Mancini Buffalo Collection Leather Duffle Bag",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Brown",
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Mancini",
+    "sizeClass": "duffel",
+    "inches": null,
+    "version": null,
+    "line": [
+     "buffalo"
+    ]
+   }
+  },
+  {
+   "id": "t059",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-ventra-large-expandable-checked-luggage",
+   "vendor": "Tumi",
+   "productType": "Luggage",
+   "title": "Tumi Ventra Large Expandable Checked Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black Textured",
+      "Castle Rock Texture",
+      "Cadet Texture"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "large",
+    "inches": null,
+    "version": null,
+    "line": [
+     "ventra"
+    ]
+   }
+  },
+  {
+   "id": "t060",
+   "source": "delsey-ca",
+   "handle": "j4374483017-jh004c-32-inch-expandable-check-in-suitcase-beige",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "JH004C | 32-Inch Expandable Check-In Suitcase, Beige",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "extra_large",
+    "inches": 32,
+    "version": null,
+    "line": [
+     "jh004c"
+    ]
+   }
+  },
+  {
+   "id": "t061",
+   "source": "canadaluggagedepot",
+   "handle": "austin-house-travel-sentry-3-dial-combination-padlock",
+   "vendor": "Austin House",
+   "productType": "Locks",
+   "title": "Austin House Travel Sentry 3-Dial Combination Padlock",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Purple",
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Austin House",
+    "sizeClass": "accessory",
+    "inches": null,
+    "version": null,
+    "line": null
+   }
+  },
+  {
+   "id": "t062",
+   "source": "delsey-ca",
+   "handle": "40167698606-chatelet-air-2-0-3-piece-luggage-set-brown",
+   "vendor": "DELSEY PARIS",
+   "productType": "Set",
+   "title": "CHATELET AIR 2.0 | 3-Piece Luggage Set, Brown",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "set",
+    "inches": null,
+    "version": "2.0",
+    "line": [
+     "chatelet",
+     "air",
+     "2.0"
+    ]
+   }
+  },
+  {
+   "id": "t063",
+   "source": "delsey-ca",
+   "handle": "40322340911-egoa-18-inch-duffel-bag-grey",
+   "vendor": "DELSEY PARIS",
+   "productType": "Duffle Bag",
+   "title": "EGOA | 18-Inch Duffel Bag, Grey",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "duffel",
+    "inches": 18,
+    "version": null,
+    "line": [
+     "egoa"
+    ]
+   }
+  },
+  {
+   "id": "t064",
+   "source": "canadaluggagedepot",
+   "handle": "bellroy-venture-grab-pack",
+   "vendor": "Bellroy",
+   "productType": "Backpacks",
+   "title": "Bellroy Venture Grab Pack",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Deep Ocean"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Bellroy",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "venture",
+     "grab"
+    ]
+   }
+  },
+  {
+   "id": "t065",
+   "source": "canadaluggagedepot",
+   "handle": "american-tourister-disney-wavebreaker-carry-on-spinner-luggage-mickey-future-pop",
+   "vendor": "American Tourister",
+   "productType": "Luggage",
+   "title": "American Tourister Disney Wavebreaker Carry-On Spinner Luggage - Mickey Future Pop",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Mickey Future Pop"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "American Tourister",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "disney",
+     "wavebreaker"
+    ]
+   }
+  },
+  {
+   "id": "t066",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-classic-leather-slim-backpack",
+   "vendor": "Samsonite",
+   "productType": "Backpacks",
+   "title": "Samsonite Classic Leather Slim Backpack",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Cognac",
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "classic",
+     "slim"
+    ]
+   }
+  },
+  {
+   "id": "t067",
+   "source": "canadaluggagedepot",
+   "handle": "swiss-gear-the-1900-scansmart-laptop-backpack",
+   "vendor": "Swiss Gear",
+   "productType": "Backpacks",
+   "title": "Swiss Gear The 1900 ScanSmart Laptop Backpack",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "SwissGear",
+    "sizeClass": "backpack",
+    "inches": null,
+    "version": null,
+    "line": [
+     "1900",
+     "scansmart"
+    ]
+   }
+  },
+  {
+   "id": "t068",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-19-degree-large-front-access-expandable-checked-luggage",
+   "vendor": "Tumi",
+   "productType": "Luggage",
+   "title": "Tumi 19 Degree Large Front Access Expandable Checked Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black Textured"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "large",
+    "inches": null,
+    "version": null,
+    "line": [
+     "19",
+     "degree",
+     "front",
+     "access"
+    ]
+   }
+  },
+  {
+   "id": "t069",
+   "source": "delsey-ca",
+   "handle": "40167683602-chatelet-air-2-0-32-inch-expandable-check-in-suitcase-blue",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "CHATELET AIR 2.0 | 32-Inch Expandable Check-In Suitcase, Blue",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "extra_large",
+    "inches": 32,
+    "version": "2.0",
+    "line": [
+     "chatelet",
+     "air",
+     "2.0"
+    ]
+   }
+  },
+  {
+   "id": "t070",
+   "source": "delsey-ca",
+   "handle": "40208782000-carrousel-27-inch-expandable-check-in-suitcase-black",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "CARROUSEL | 27-Inch Expandable Check-In Suitcase, Black",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "large",
+    "inches": 27,
+    "version": null,
+    "line": [
+     "carrousel"
+    ]
+   }
+  },
+  {
+   "id": "t071",
+   "source": "delsey-ca",
+   "handle": "40100641000-peugeot-voyages-21-inch-carry-on-duffle-bag-black",
+   "vendor": "DELSEY PARIS",
+   "productType": "Duffle Bag",
+   "title": "PEUGEOT VOYAGES | 21-inch Carry-On Duffle Bag, Black",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "duffel",
+    "inches": 21,
+    "version": null,
+    "line": [
+     "peugeot",
+     "voyages"
+    ]
+   }
+  },
+  {
+   "id": "t072",
+   "source": "canadaluggagedepot",
+   "handle": "travelpro-platinum-elite-international-expandable-carry-on-spinner-luggage",
+   "vendor": "Travelpro",
+   "productType": "Luggage",
+   "title": "Travelpro Platinum Elite International Expandable Carry-On Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Grey",
+      "Shadow Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Travelpro",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "platinum",
+     "elite",
+     "international"
+    ]
+   }
+  },
+  {
+   "id": "t073",
+   "source": "delsey-ca",
+   "handle": "40210161023-dlc-2-0-15-inch-laptop-backpack-olive",
+   "vendor": "DELSEY PARIS",
+   "productType": "Laptop Backpack",
+   "title": "DLC 2.0 | 15-Inch Laptop Backpack, Olive",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "backpack",
+    "inches": 15,
+    "version": "2.0",
+    "line": [
+     "dlc",
+     "2.0"
+    ]
+   }
+  },
+  {
+   "id": "t074",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-sport-golf-duffel",
+   "vendor": "Tumi",
+   "productType": "Duffles",
+   "title": "Tumi Sport Golf Duffel",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "duffel",
+    "inches": null,
+    "version": null,
+    "line": [
+     "sport",
+     "golf"
+    ]
+   }
+  },
+  {
+   "id": "t075",
+   "source": "delsey-ca",
+   "handle": "40225782050-brochant-3-27-inch-expandable-check-in-suitcase-deep-black",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "BROCHANT 3 |.0 27-Inch Expandable Check-In Suitcase, Deep black",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "large",
+    "inches": 27,
+    "version": "3.0",
+    "line": [
+     "brochant",
+     "3.0"
+    ]
+   }
+  },
+  {
+   "id": "t076",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-andante-2-28-wheeled-duffel",
+   "vendor": "Samsonite",
+   "productType": "Wheeled Duffle",
+   "title": "Samsonite Andante 2 - 28\" Wheeled Duffel",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "All Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "duffel",
+    "inches": 28,
+    "version": "2",
+    "line": [
+     "andante",
+     "2"
+    ]
+   }
+  },
+  {
+   "id": "t077",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-torq-international-21-carry-on-spinner-luggage",
+   "vendor": "Briggs & Riley",
+   "productType": "Luggage",
+   "title": "Briggs & Riley Torq International 21\" Carry-On Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Granite"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Briggs & Riley",
+    "sizeClass": "carry_on",
+    "inches": 21,
+    "version": null,
+    "line": [
+     "torq",
+     "international"
+    ]
+   }
+  },
+  {
+   "id": "t078",
+   "source": "canadaluggagedepot",
+   "handle": "american-tourister-airconic-spinner-large-luggage",
+   "vendor": "American Tourister",
+   "productType": "Luggage",
+   "title": "American Tourister Airconic Spinner Large Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Neptune Blue",
+      "Purist Blue",
+      "Onyx Black",
+      "Limited Edition: Dark Plum"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "American Tourister",
+    "sizeClass": "large",
+    "inches": null,
+    "version": null,
+    "line": [
+     "airconic"
+    ]
+   }
+  },
+  {
+   "id": "t079",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-new-baseline-global-carry-on-spinner-luggage",
+   "vendor": "Briggs & Riley",
+   "productType": "Luggage",
+   "title": "Briggs & Riley Baseline Global Carry-On Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Navy",
+      "Olive",
+      "Black",
+      "Plum",
+      "Chocolate"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Briggs & Riley",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "baseline",
+     "global"
+    ]
+   }
+  },
+  {
+   "id": "t080",
+   "source": "delsey-ca",
+   "handle": "40303197520t9-flanerie-se-2-piece-luggage-set-black-brown",
+   "vendor": "DELSEY PARIS",
+   "productType": "Set",
+   "title": "FLANERIE SE | 2-Piece Luggage Set, Black brown",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "set",
+    "inches": null,
+    "version": null,
+    "line": [
+     "flanerie",
+     "se"
+    ]
+   }
+  },
+  {
+   "id": "t081",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-new-baseline-cabin-spinner",
+   "vendor": "Briggs & Riley",
+   "productType": "Luggage",
+   "title": "Briggs & Riley Baseline Cabin Spinner",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Navy",
+      "Plum",
+      "Olive"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Briggs & Riley",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "baseline"
+    ]
+   }
+  },
+  {
+   "id": "t082",
+   "source": "delsey-ca",
+   "handle": "b4376881001-ucb-hardside-26-inch-check-in-suitcase-steel-grey",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "UCB HARDSIDE | 26-Inch Check-In Suitcase, Steel grey",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "medium",
+    "inches": 26,
+    "version": null,
+    "line": [
+     "ucb"
+    ]
+   }
+  },
+  {
+   "id": "t083",
+   "source": "delsey-ca",
+   "handle": "07647rd-helium-aero-27-inch-expandable-check-in-suitcase-red",
+   "vendor": "DELSEY PARIS",
+   "productType": "Suitcase",
+   "title": "HELIUM AERO | 27-Inch Expandable Check-In Suitcase, Red",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "large",
+    "inches": 27,
+    "version": null,
+    "line": [
+     "helium",
+     "aero"
+    ]
+   }
+  },
+  {
+   "id": "t084",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-outline-pro-medium-expandable-spinner-luggage",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Outline Pro Medium Expandable Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Midnight Black",
+      "Stone Grey",
+      "Emerald Green",
+      "Limited Edition: Chocolate Mauve",
+      "Limited Edition: Sage"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "medium",
+    "inches": null,
+    "version": null,
+    "line": [
+     "outline",
+     "pro"
+    ]
+   }
+  },
+  {
+   "id": "t085",
+   "source": "delsey-ca",
+   "handle": "40401897703-rugged-soft-2-piece-luggage-set-green",
+   "vendor": "DELSEY PARIS",
+   "productType": "Set",
+   "title": "RUGGED SOFT | 2-Piece Luggage Set, Green",
+   "options": [
+    {
+     "name": "Title",
+     "values": [
+      "Default Title"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Delsey",
+    "sizeClass": "set",
+    "inches": null,
+    "version": null,
+    "line": [
+     "rugged"
+    ]
+   }
+  },
+  {
+   "id": "t086",
+   "source": "canadaluggagedepot",
+   "handle": "american-tourister-disney-wavebreaker-spinner-carry-on-luggage-winnie-the-pooh",
+   "vendor": "American Tourister",
+   "productType": "Luggage",
+   "title": "American Tourister Disney Wavebreaker Spinner Carry-On Luggage - Winnie The Pooh",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Winnie the Pooh"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "American Tourister",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "disney",
+     "wavebreaker"
+    ]
+   }
+  },
+  {
+   "id": "t087",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-vacay-spinner-carry-on-luggage",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Vaycay Spinner Carry-On Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Pistachio Green",
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "vaycay"
+    ]
+   }
+  },
+  {
+   "id": "t088",
+   "source": "canadaluggagedepot",
+   "handle": "american-tourister-airconic-spinner-frontload-carry-on",
+   "vendor": "American Tourister",
+   "productType": "Luggage",
+   "title": "American Tourister Airconic Spinner Frontload Carry-On",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Onyx Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "American Tourister",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "airconic",
+     "frontload"
+    ]
+   }
+  },
+  {
+   "id": "t089",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-aerotour-international-expandable-4-wheeled-carry-on-luggage",
+   "vendor": "Tumi",
+   "productType": "Luggage",
+   "title": "Tumi Aerotour International Expandable 4 Wheeled Carry-On Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Navy",
+      "Willow"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "aerotour",
+     "international"
+    ]
+   }
+  },
+  {
+   "id": "t090",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-aerotour-continental-expandable-4-wheeled-carry-on-luggage",
+   "vendor": "Tumi",
+   "productType": "Luggage",
+   "title": "Tumi Aerotour Continental Expandable 4 Wheeled Carry-On Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Navy"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "aerotour",
+     "continental"
+    ]
+   }
+  },
+  {
+   "id": "t091",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-new-baseline-essential-2-wheel-carry-on-luggage",
+   "vendor": "Briggs & Riley",
+   "productType": "Luggage",
+   "title": "Briggs & Riley Baseline Essential 2-Wheel Carry-On Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Navy",
+      "Black",
+      "Olive"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Briggs & Riley",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "baseline",
+     "essential"
+    ]
+   }
+  },
+  {
+   "id": "t092",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-airea-spinner-medium-luggage",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Airea Spinner Medium Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Dark Blue"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "medium",
+    "inches": null,
+    "version": null,
+    "line": [
+     "airea"
+    ]
+   }
+  },
+  {
+   "id": "t093",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-uplift-hardside-spinner-3-piece-nested-luggage-set",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Uplift Hardside Spinner 3-Piece Nested Luggage Set",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Elemental Blue",
+      "Silver Shimmer"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "set",
+    "inches": null,
+    "version": null,
+    "line": [
+     "uplift",
+     "nested"
+    ]
+   }
+  },
+  {
+   "id": "t094",
+   "source": "canadaluggagedepot",
+   "handle": "american-tourister-disney-wavebreaker-large-spinner-luggage-winnie-the-pooh",
+   "vendor": "American Tourister",
+   "productType": "Luggage",
+   "title": "American Tourister Disney Wavebreaker Large Spinner Luggage - Winnie The Pooh",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Winnie the Pooh"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "American Tourister",
+    "sizeClass": "large",
+    "inches": null,
+    "version": null,
+    "line": [
+     "disney",
+     "wavebreaker"
+    ]
+   }
+  },
+  {
+   "id": "t095",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-365-roller-bag-lt-100l-black",
+   "vendor": "Dakine",
+   "productType": "Luggage",
+   "title": "Dakine 365 Roller Bag LT 100L - Black",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Dakine",
+    "sizeClass": null,
+    "inches": null,
+    "version": null,
+    "line": [
+     "365",
+     "roller",
+     "lt"
+    ]
+   }
+  },
+  {
+   "id": "t096",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-evoa-z-expandable-spinner-medium-luggage",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Evoa Z Expandable Spinner Medium Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Black",
+      "Ivory Gold"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "medium",
+    "inches": null,
+    "version": null,
+    "line": [
+     "evoa",
+     "z"
+    ]
+   }
+  },
+  {
+   "id": "t097",
+   "source": "canadaluggagedepot",
+   "handle": "travelpro-platinum-elite-20-inch-expandable-business-plus-carry-on-spinner",
+   "vendor": "Travelpro",
+   "productType": "Luggage",
+   "title": "Travelpro Platinum Elite 20 Inch Expandable Business Plus Carry-On Spinner",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Grey",
+      "Shadow Black"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Travelpro",
+    "sizeClass": "carry_on",
+    "inches": 20,
+    "version": null,
+    "line": [
+     "platinum",
+     "elite",
+     "business",
+     "plus"
+    ]
+   }
+  },
+  {
+   "id": "t098",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-ventra-expandable-carry-on-luggage",
+   "vendor": "Tumi",
+   "productType": "Luggage",
+   "title": "Tumi Ventra Expandable Carry-On Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Cadet Texture",
+      "Black Textured",
+      "Castle Rock Texture"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "TUMI",
+    "sizeClass": "carry_on",
+    "inches": null,
+    "version": null,
+    "line": [
+     "ventra"
+    ]
+   }
+  },
+  {
+   "id": "t099",
+   "source": "canadaluggagedepot",
+   "handle": "travelpro-platinum-elite-21-inch-expandable-carry-on-spinner-luggage",
+   "vendor": "Travelpro",
+   "productType": "Luggage",
+   "title": "Travelpro Platinum Elite 21 Inch Expandable Carry-On Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Grey",
+      "Shadow Black",
+      "Bordeaux",
+      "True Navy",
+      "Espresso"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Travelpro",
+    "sizeClass": "carry_on",
+    "inches": 21,
+    "version": null,
+    "line": [
+     "platinum",
+     "elite"
+    ]
+   }
+  },
+  {
+   "id": "t100",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-outline-pro-large-expandable-spinner-luggage",
+   "vendor": "Samsonite",
+   "productType": "Luggage",
+   "title": "Samsonite Outline Pro Large Expandable Spinner Luggage",
+   "options": [
+    {
+     "name": "Color",
+     "values": [
+      "Emerald Green",
+      "Limited Edition: Chocolate Mauve",
+      "Midnight Black",
+      "Stone Grey",
+      "Limited Edition: Sage"
+     ]
+    }
+   ],
+   "expected": {
+    "brand": "Samsonite",
+    "sizeClass": "large",
+    "inches": null,
+    "version": null,
+    "line": [
+     "outline",
+     "pro"
+    ]
+   }
+  }
+ ]
+}

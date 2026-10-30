@@ -141,7 +141,13 @@ export const htmlStructured: Adapter = {
           displayedPrice: crossCheck,
           pageType: isProductPage ? "product" : "listing",
           cacheAgeSec: res.cacheAgeSec,
-          evidence: { ...evidence, from: "json-ld", priceValidUntil: c.offer.priceValidUntil },
+          evidence: {
+            ...evidence,
+            from: "json-ld",
+            priceValidUntil: c.offer.priceValidUntil,
+            listPriceFrom: c.offer.listPriceFrom,
+          },
+          attributes: c.node.attributes ?? c.parent?.attributes ?? null,
         }),
       );
     }

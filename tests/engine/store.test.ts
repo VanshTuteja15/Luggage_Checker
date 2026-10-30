@@ -290,6 +290,156 @@ for (const h of harnesses) {
       expect(await store.latestObservations([])).toEqual([]);
     });
 
+    it("extends the latest range only for the same price and stock, never backwards (v4 A3.4)", async () => {
+      const l = await store.upsertListing(listing());
+      expect(await store.touchPriceRange(l.id, 300, "in_stock", "2026-10-01T10:00:00.000Z")).toBe(
+        false,
+      );
+      await store.insertObservation(observation(l.id, 300, "2026-10-01T10:00:00.000Z"));
+      expect(await store.touchPriceRange(l.id, 300, "in_stock", "2026-10-02T10:00:00.000Z")).toBe(
+        true,
+      );
+      expect(await store.touchPriceRange(l.id, 290, "in_stock", "2026-10-03T10:00:00.000Z")).toBe(
+        false,
+      );
+      expect(
+        await store.touchPriceRange(l.id, 300, "out_of_stock", "2026-10-03T10:00:00.000Z"),
+      ).toBe(false);
+      expect(await store.touchPriceRange(l.id, 300, "in_stock", "2026-09-30T10:00:00.000Z")).toBe(
+        false,
+      );
+      expect(await store.priceRanges(l.id, 5)).toMatchObject([
+        { price: 300, observationCount: 2, lastSeenAt: "2026-10-02T10:00:00.000Z" },
+      ]);
+    });
+
+    it("keeps one row per promotion, current only while the latest reading shows it (v4 A4.2)", async () => {
+      const l = await store.upsertListing(listing());
+      const sale = {
+        kind: "sale_price" as const,
+        method: "compare_at" as const,
+        percentOff: null,
+        upTo: false,
+        amountOff: null,
+        salePrice: 299.95,
+        wasPrice: 399.95,
+        threshold: null,
+        code: null,
+        endsText: null,
+        endsAt: null,
+        evidence: ["compare_at_price 399.95", "price 299.95"],
+      };
+      const t1 = "2026-10-01T10:00:00.000Z";
+      const t2 = "2026-10-02T10:00:00.000Z";
+      const o1 = await store.insertObservation(observation(l.id, 299.95, t1));
+      expect(await store.recordPromotions(l.id, "canadaluggagedepot", [sale], t1, o1.id)).toEqual({
+        opened: 1,
+        extended: 0,
+      });
+      await store.insertObservation(observation(l.id, 299.95, t2));
+      expect(await store.recordPromotions(l.id, "canadaluggagedepot", [sale], t2, null)).toEqual({
+        opened: 0,
+        extended: 1,
+      });
+      const at = "2026-10-02T12:00:00.000Z";
+      const now = await store.currentPromotions({ at, listingIds: [l.id], limit: 10 });
+      expect(now).toMatchObject([
+        {
+          kind: "sale_price",
+          salePrice: 299.95,
+          wasPrice: 399.95,
+          firstSeenAt: t1,
+          lastSeenAt: t2,
+        },
+      ]);
+      expect(now[0].evidence).toEqual(sale.evidence);
+      expect(
+        await store.currentPromotions({
+          at,
+          listingIds: [l.id],
+          sourceIds: ["delsey-ca"],
+          limit: 10,
+        }),
+      ).toEqual([]);
+      // A later reading without it: no longer current (nothing was written for it).
+      await store.insertObservation(observation(l.id, 399.95, "2026-10-03T10:00:00.000Z"));
+      expect(await store.currentPromotions({ at, listingIds: [l.id], limit: 10 })).toEqual([]);
+
+      // Its own end date passed: never current, even while still shown.
+      const m = await store.upsertListing(listing());
+      const t3 = "2026-10-04T10:00:00.000Z";
+      await store.insertObservation(observation(m.id, 299.95, t3));
+      await store.recordPromotions(
+        m.id,
+        "canadaluggagedepot",
+        [{ ...sale, method: "jsonld", endsText: "2026-10-05", endsAt: "2026-10-05T23:59:59.000Z" }],
+        t3,
+        null,
+      );
+      const current = (iso: string) =>
+        store.currentPromotions({ at: iso, listingIds: [m.id], limit: 5 });
+      expect(await current("2026-10-05T12:00:00.000Z")).toHaveLength(1);
+      expect(await current("2026-10-06T00:00:00.000Z")).toEqual([]);
+      // A listing that left the store: its promotions aren't current.
+      await store.upsertListing({ ...listing(), url: m.url, active: false });
+      expect(await current("2026-10-05T12:00:00.000Z")).toEqual([]);
+    });
+
+    it("merges variant attributes: new fields, the same store restating, or a better method (v4 A4.1)", async () => {
+      const p = await store.createProduct({
+        category: "luggage",
+        brand: "Samsonite",
+        line: `attr ${tag()}`,
+        name: "Samsonite Attr Test Carry-On",
+        sizeClass: "carry_on",
+        identityKey: `samsonite|attr-${tag()}|carry_on`,
+      });
+      const v = await store.findOrCreateVariant(p.id, "Black", null, null, null);
+      expect(v.attributes).toEqual({});
+      const dims = (
+        value: number[],
+        sourceId = "canadaluggagedepot",
+        evidence = "55 x 40 x 20 cm",
+        method = "rules",
+      ) => ({
+        dimsCm: {
+          value,
+          method,
+          evidence,
+          confidence: 0.9,
+          sourceId,
+          url: "https://www.canadaluggagedepot.ca/products/x",
+          firstReadAt: "2026-10-01T10:00:00.000Z",
+        },
+      });
+      expect(await store.mergeVariantAttributes(v.id, dims([55, 40, 20]))).toBe(true);
+      expect(await store.mergeVariantAttributes(v.id, dims([55, 40, 20]))).toBe(false);
+      // Another store's rules don't flip it; the same store restating it does.
+      expect(
+        await store.mergeVariantAttributes(
+          v.id,
+          dims([56, 40, 20], "delsey-ca", "56 x 40 x 20 cm"),
+        ),
+      ).toBe(false);
+      expect(
+        await store.mergeVariantAttributes(
+          v.id,
+          dims([55, 40, 23], "canadaluggagedepot", "55 x 40 x 23 cm"),
+        ),
+      ).toBe(true);
+      // JSON-LD from another store beats rules.
+      expect(
+        await store.mergeVariantAttributes(
+          v.id,
+          dims([55, 40, 24], "delsey-ca", "height: 55 CMT", "jsonld"),
+        ),
+      ).toBe(true);
+      const [after] = await store.variantsForProduct(p.id);
+      expect(after.attributes).toMatchObject({
+        dimsCm: { value: [55, 40, 24], method: "jsonld", sourceId: "delsey-ca" },
+      });
+    });
+
     it("runs sessions with ordered, resumable events and per-user counts", async () => {
       const user = await newUser();
       const s = await store.createSession({

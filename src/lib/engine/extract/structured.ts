@@ -7,6 +7,8 @@
 /*  carry the price the customer is shown. Pure functions, no network.  */
 /* ------------------------------------------------------------------ */
 
+import { attributesFromJsonLd, type AttributeResult } from "./attributes";
+
 export type StructuredOffer = {
   price: number | null;
   priceCurrency: string | null;
@@ -18,6 +20,12 @@ export type StructuredOffer = {
   seller: string | null;
   /** List / strikethrough / MSRP price from priceSpecification or AggregateOffer.highPrice. */
   listPrice: number | null;
+  /**
+   * Where listPrice came from. Only a priceSpecification ListPrice /
+   * StrikethroughPrice / MSRP is a "was" price; an AggregateOffer highPrice
+   * is the dearest variant, never a discount (v4 A4.2).
+   */
+  listPriceFrom: "price_specification" | "aggregate_high" | null;
   itemCondition: string | null;
 };
 
@@ -34,6 +42,8 @@ export type StructuredProduct = {
   productGroupId: string | null;
   offers: StructuredOffer[];
   variants: StructuredProduct[];
+  /** v4 A4.1: weight / depth / width / height / additionalProperty, unit-checked. */
+  attributes: AttributeResult | null;
 };
 
 export type StructuredResult = {
@@ -178,6 +188,7 @@ function toOffers(raw: unknown): StructuredOffer[] {
           url: str(node.url),
           seller: str(node.seller),
           listPrice: parsePrice(node.highPrice),
+          listPriceFrom: parsePrice(node.highPrice) !== null ? "aggregate_high" : null,
           itemCondition: str(node.itemCondition),
         });
       continue;
@@ -208,6 +219,7 @@ function toOffers(raw: unknown): StructuredOffer[] {
       url: str(node.url),
       seller: str(node.seller),
       listPrice,
+      listPriceFrom: listPrice !== null ? "price_specification" : null,
       itemCondition: str(node.itemCondition),
     });
   }
@@ -233,6 +245,7 @@ function toProduct(node: Record<string, unknown>): StructuredProduct {
     productGroupId: str(node.productGroupID),
     offers: toOffers(node.offers),
     variants,
+    attributes: attributesFromJsonLd(node),
   };
 }
 

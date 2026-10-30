@@ -1,0 +1,748 @@
+{
+ "name": "attributes",
+ "task": "(c) product text -> dimensions (cm), capacity (L), weight (kg), wheels, expandable",
+ "recordedFrom": "body_html of real products in the 2026-10-30 /products.json pages (CLD p1/p13, Delsey p1), tags stripped, first 2,500 characters; deterministic sample (sha1)",
+ "labelRules": {
+  "dimsCm": "the three cm values the text states (first value of a range); inches only -> x2.54; null if none; compared sorted, +-1 cm",
+  "capacityL": "litres stated in the title or text; +-1 L",
+  "weightKg": "kg stated (lbs only -> /2.2046); +-0.05 kg or 3%",
+  "wheels": "wheel positions: 2 (two-wheeled/upright) or 4 (spinner, incl. double/dual spinner); null when the count isn't stated",
+  "expandable": "true when the bag itself is stated to expand; null otherwise (never false: absence isn't evidence)"
+ },
+ "items": [
+  {
+   "id": "a01",
+   "source": "delsey-ca",
+   "handle": "40239752502-helium-dlx-4-wheeled-garment-bag-navy",
+   "title": "HELIUM DLX | 4-Wheeled Garment Bag, Navy",
+   "productType": "Garment Bag",
+   "text": "The HELIUM DLX Large Rolling Garment Bag keeps your clothes wrinkle-free and organized with space for 6-8 outfits. Its smooth double spinner wheels and ergonomic handle make travel easy and comfortable. Made with durable DuraTec™ fabric, it withstands frequent trips. The bag features a secure hanging system, two front pockets, shoe compartments, and mesh pockets for versatile storage. Backed by a 5-year warranty, it’s designed to help you travel confidently and in style.. Perfect For: The organized jet-setter with a love for timeless design..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 4,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a02",
+   "source": "delsey-ca",
+   "handle": "40239745100-helium-dlx-carry-on-underseater-suitcase-black",
+   "title": "HELIUM DLX | Carry-On Underseater Suitcase, Black",
+   "productType": "Suitcase",
+   "text": "The HELIUM DLX underseater slides under most airline seats, keeping your essentials within reach. Its lightweight design accommodates laptops up to 14\", while durable DuraTec™ fabric and smooth double-spinner wheels make maneuvering effortless. Organized pockets keep items secure, and the anti-theft zipper adds peace of mind. The trolley sleeve lets you stack it on your rolling luggage for seamless and secure travel.. Perfect For: Polished travelers who believe every detail should be effortlessly chic..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 4,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a03",
+   "source": "delsey-ca",
+   "handle": "40167783031bt-cadence-31-inch-expandable-check-in-suitcase-silver",
+   "title": "CADENCE | 31-Inch Expandable Check-In Suitcase, Silver",
+   "productType": "Suitcase",
+   "text": "CADENCE LARGE Check-In Suitcase. The motto: think bigger. . . A single day holds many days. The CADENCE Check-In Suitcase is designed to hold them all. More than just well-equipped, it is prepared for any eventuality: patented SECURITECH® 2 zip, TSA-accepted lock, odor-resistant lining, dividers with zippered pockets, a dedicated Bluetooth tracker compartment, a multi-position trolley system, and custom laundry and shoe bags... Nothing shifts without your permission. A bold presence, accentuated by its two distinctive lines and shock-absorbing wheels. Expandable, it sets its own course. Fully packed trips never reach the breaking point..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": null,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a04",
+   "source": "delsey-ca",
+   "handle": "j4374126025-js009d-32-inch-2-wheeled-duffel-bag-orange",
+   "title": "JS009D | 32-Inch 2-Wheeled Duffel Bag, Orange",
+   "productType": "Duffle Bag",
+   "text": "Durable rolling duffel built for adventure. Made from recycled, water-resistant polyester with abrasion-resistant fabric to protect your gear through any terrain. Features smooth-rolling wheels, an expedition trolley system, and a top zipper portal for easy packing. Secure your belongings with interlocking zippers, and choose your carry style with the top handle or dual tote handles. Ready for your next journey..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 2,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a05",
+   "source": "delsey-ca",
+   "handle": "40401097602-asphalt-2-piece-luggage-set-navy",
+   "title": "ASPHALT | 2-Piece Luggage Set, Navy",
+   "productType": "Set",
+   "text": "The ASPHALT 2-Piece Luggage Set combines a spacious 27\" trunk and matching carry-on, designed for seamless travel. The trunk features a 70/30 split compartment system and front carry handle for easy loading, while the carry-on offers 50/50 split packing and nests inside for compact storage. Built with a lightweight, scratch-resistant shell and smooth-rolling spinner wheels, this set handles both road trips and air travel with durable, organized ease.. Perfect For: Grand adventures, bold style, and souvenirs from every stop..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 4,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a06",
+   "source": "delsey-ca",
+   "handle": "40167697706-chatelet-air-2-0-2-piece-luggage-set-brown",
+   "title": "CHATELET AIR 2.0 | 2-Piece Luggage Set, Brown",
+   "productType": "Set",
+   "text": "Care, taken to the highest level. . It moves through every space with the same elegance. From the greatest airports to the most demanding city streets. Soft-touch handles and dual-density wheels offer precise, effortless handling. A comfortable grip. It follows you without a sound. A remarkable silence that never goes unnoticed.. Its patented SECURITECH® zip, ultra-secure and resistant to intrusion, protects your essentials with absolute reliability. Inside, the journey already begins: organized, elegant, practical. Intelligent compartments, dedicated pockets, securing straps… all lined with a soft peach-skin-touch interior, refined and carefully crafted. Everything in its place. Your belongings too.. Perfect For: Weeklong getaways and travelers who pack with purpose — and a touch of flair..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a07",
+   "source": "delsey-ca",
+   "handle": "j4274326013-js005a-32-inch-2-wheeled-duffel-bag-elm-green",
+   "title": "JS005A | 32-Inch 2-Wheeled Duffel Bag, Elm green",
+   "productType": "Duffle Bag",
+   "text": "Durable and sustainable, the JS005A rolling duffel combines recycled water-resistant polyester with a reliable dual-wheel trolley system for effortless travel. Two spacious compartments keep gear organized, while front pockets provide quick access to essentials. Multiple carry handles—top handle and dual tote straps—offer flexible carrying options for any journey.. Delsey Paris is the official distributor of Jeep brand luggage and bags. .",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 2,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a08",
+   "source": "canadaluggagedepot",
+   "handle": "high-sierra-hydrahike-2-0-8l-hydration-pack-grey-blue",
+   "title": "High Sierra Hydrahike 2.0 8L Hydration Pack - Grey Blue",
+   "productType": "Backpacks",
+   "text": "The HydraHike hydration backpack is comfortable, convenient and made to last for all adventures. . Features: . Main compartment is accessible through top zipper. Lightweight ripstop fabric. Insulated reservoir pocket + 2L wide slide reservoir included. BPA free reservoir has bite valve with on/off switch. 360° reflectivity: Be bold. Be bright.. Full-length main compartment. Front accessory pocket with organizer. Quick-stash gusseted pocket with compression straps that unbuckle to attach gear. Adjustable waist belt. Exterior daisy chain for attaching gear. Specifications: . Material: Ripstop. Reservoir Compatible: No. Reservoir Included: Yes. Volume: 8 L. Linear Dimensions: 32.4\" . Dimensions: 17.1\" × 11.4\" × 3.9\" / 43 x 29 x 10 cm . Weight: 0.99 lbs. / 0.4 kg . Warranty: . High Sierra Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     43,
+     29,
+     10
+    ],
+    "capacityL": 8,
+    "weightKg": 0.4,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a09",
+   "source": "delsey-ca",
+   "handle": "j4274024000-js006b-29-inch-2-wheeled-duffel-bag-black",
+   "title": "JS006B | 29-Inch 2-Wheeled Duffel Bag, Black",
+   "productType": "Duffle Bag",
+   "text": "The Jeep JS006B Medium Rolling Duffel Bag combines durability and eco-friendly design with water-resistant recycled polyester. Its sturdy wheels and trolley system make travel smooth across varied terrain. Features include cushioned handles, secure interlocking zippers, and two front pockets for quick access. Inside, organized compartments and tie-down straps keep gear safe and tidy. Built to support your adventurous lifestyle, this duffel is ready to go wherever you do.. Delsey Paris is the official distributor of Jeep brand luggage and bags. . Perfect For: Grand adventures, bold style, and souvenirs from every stop..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 2,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a10",
+   "source": "delsey-ca",
+   "handle": "40392680500-alexandra-23-inch-expandable-carry-on-suitcase-black",
+   "title": "COSMIQUE | 23-Inch Expandable Carry-On Suitcase, Black",
+   "productType": "Suitcase",
+   "text": "Inspired by the spirit of the city and made for a new generation of travelers, the Cosmique Carry-On makes packing and navigating feel effortless. The luggage pairs a sleek brushed finish with refined black components for a look that is both sophisticated and contemporary. Featuring a fully lined interior with simple organization for streamlined packing, an expandable main compartment, and integrated TSA-accepted lock to keep your belongings secure. The perfect companion for every adventure. .",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": null,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a11",
+   "source": "delsey-ca",
+   "handle": "40239780500-helium-dlx-24-inch-expandable-carry-on-suitcase-black",
+   "title": "HELIUM DLX | 24-Inch Expandable Carry-On Suitcase, Black",
+   "productType": "Suitcase",
+   "text": "The HELIUM DLX Carry-On Plus Expandable Spinner combines lightweight durability with smart organization. Its smooth Dual-Density Silent-Core™ wheels and ergonomic handles make travel effortless. Stay secure with DELSEY’s patented Zip SECURITECH® anti-theft zipper. This bag expands to fit extra items and features multiple pockets, including shoe and wet sections, plus a removable organizer for convenience. Compatible with most airline carry-on rules and backed by a 5-year warranty, it’s designed to support your travel needs seamlessly.. Perfect For: Stylish overpackers who like a little extra room for “just in case.”.",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 4,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a12",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-campus-backpack-33l-rosin",
+   "title": "Dakine Campus Backpack 33L - Rosin",
+   "productType": "Backpacks",
+   "text": "Time-tested, the 33-liter Campus gets high marks for back-to-school-utility. The roomy design features four distinct compartments including a large main compartment with a padded laptop sleeve and room for books and binders. A handy insulated pocket keeps lunch and snacks cool, while a mix of organizer pockets keeps school-day essentials easy to grab. . FEATURES . S-curved back panel and shoulder straps. Adjustable sternum strap. Padded laptop sleeve. Organizer pocket. Fleece-lined sunglass pocket. Insulated cooler pocket. Mesh side pocket(s). Padded bottom panel. . DIMENSIONS & SPECS . Dimensions: 20.47\" x 12.99\" x 8.26\" / 52 x 33 x 21cm. Capacity: 33L. . Weight: 1.67lbs / 0.76kg . WARRANTY . Dakine Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     52,
+     33,
+     21
+    ],
+    "capacityL": 33,
+    "weightKg": 0.76,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a13",
+   "source": "delsey-ca",
+   "handle": "f4398024033-on-a-roll-28-inch-2-wheeled-duffel-bag-sage-green",
+   "title": "ON A ROLL | 28-Inch 2-Wheeled Duffel Bag, Sage green",
+   "productType": "Duffle Bag",
+   "text": "The ON A ROLL Large Duffel Bag is designed for easy travel and organization. Made with recycled materials, it offers a roomy interior with a 50/50 split and secure straps to keep your items in place. Smooth-rolling wheels and front tote handles provide flexible carrying options. An outside pocket gives quick access to essentials, while skid bars protect the bag from wear. Perfect for weekend trips, college moves, or quick getaways, it helps you pack more and worry less with lasting durability.. Perfect For: Long holidays, statement wardrobes, and those who never pack light..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 2,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a14",
+   "source": "delsey-ca",
+   "handle": "j4274177813-jh003b-32-inch-2-wheeled-expandable-check-in-suitcase-elm-green",
+   "title": "JH003B | 32-Inch 2-Wheeled Expandable Check-In Suitcase, Elm green",
+   "productType": "Suitcase",
+   "text": "Large Jeep-branded expandable hardside trunk built for serious travelers. Features durable two-wheel design, dual carry handles, and interlocking zippers for security. Inside, tie-down straps, flat pocket, and zippered mesh divider keep everything organized. Stackable construction maximizes packing efficiency. Made from tough ABS/Polycarbonate blend to handle demanding journeys. Backed by a 3-year limited worldwide warranty.. DELSEY PARIS is the official distributor of Jeep brand luggage and bags. .",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 2,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a15",
+   "source": "delsey-ca",
+   "handle": "40401897703-rugged-soft-2-piece-luggage-set-green",
+   "title": "RUGGED SOFT | 2-Piece Luggage Set, Green",
+   "productType": "Set",
+   "text": "The Securitech by Delsey Rugged Softside collection is a great choice for your next trip. The expandable interior makes it easy to maximize your packing space. You'll keep organized with two interior pockets and an exterior front pocket for accessiblity while traveling. The double spinner wheels make for a smooth ride through the airport. Features a push button trolley handle along with top and side handles for multiple carry options..",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 4,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a16",
+   "source": "delsey-ca",
+   "handle": "j4274195604-jh003b-2-piece-luggage-set-tomato",
+   "title": "JH003B | 2-Piece Luggage Set, Tomato",
+   "productType": "Set",
+   "text": "Jeep JHOO3B 2-Piece Expandable Hardside Luggage Set – carry-on and large suitcase built for adventure. Durable ABS/PC shell expands for extra packing capacity. Dual traction wheels roll smoothly over any terrain. Iconic Jeep logo embossment, expedition handles, and precision interlocking zippers with lock compatibility. Interior tie-down straps, utility pocket, and mesh divider keep gear organized. Backed by a 3-year limited worldwide warranty.. Delsey Paris is the official distributor of Jeep brand luggage and bags. .",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": null,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a17",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-outline-pro-carry-on-spinner-luggage",
+   "title": "Samsonite Outline Pro Carry-On Spinner Luggage",
+   "productType": "Luggage",
+   "text": "Our instantly-iconic Outline Pro polypropylene collection takes you confidently in the direction of your destination thanks to its elevated design and eye-catching colour options.. Constructed of 100% polypropylene offering extreme durability with a texture that reduces the visibility of scratches. The lining of this product was made from rPET fabric, made from plastic bottles used by consumers. Samsonite Antimicrobial Handle (AMH) Technology helps supress the growth of bacteria / mould to prevent degreation of the handles. Kompresspack divider and Wetpak pocket. Dimensions: 21.5 x 14.2 x 9 in / 55 x 36 x 23 cm. Weight: 2.7 kg / 6 lbs. Samsonite Limited 10 Year Global Warranty . .",
+   "expected": {
+    "dimsCm": [
+     55,
+     36,
+     23
+    ],
+    "capacityL": null,
+    "weightKg": 2.7,
+    "wheels": 4,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a18",
+   "source": "canadaluggagedepot",
+   "handle": "mancini-buffalo-collection-leather-duffle-bag",
+   "title": "Mancini Buffalo Collection Leather Duffle Bag",
+   "productType": "Duffles",
+   "text": "The Buffalo Collection represents the fusion of contemporary styling with the raw urban look of oily buffalo leather. This functional collection will fulfill all your business and personal needs with style.. This luxurious and versatile duffle bag features a large main compartment and multiple zippered and slit pockets. The rear is equipped with an add-a-bag strap to piggy-back the duffel on other baggage.. FEATURES . Large zippered main compartment. Multiple zippered front pockets. Convenient zippered pockets on the sides. Add-a-bag strap on the rear. Detachable shoulder strap included. DIMENSIONS & SPECS . Dimensions: 23\" x 10\" x 10.25\" / 58.42 x 25.4 x 26.04cm. Materials: Top Grain Oily Waxy Buffalo Leather. Weight: 3.5lbs / 1.6kg. WARRANTY . Mancini One Year Limited Warranty .",
+   "expected": {
+    "dimsCm": [
+     58.42,
+     25.4,
+     26.04
+    ],
+    "capacityL": null,
+    "weightKg": 1.6,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a19",
+   "source": "canadaluggagedepot",
+   "handle": "high-sierra-fairlead-collection-convertible-duffle",
+   "title": "High Sierra Fairlead Collection Convertible Duffle",
+   "productType": "Duffles",
+   "text": ". Protect your gear in style.. Constructed of durable 100% polyester fabric.. It's two bags in one! Use it as a regular duffle or wear it like a backpack.. Hidden backpack straps tuck away when not in use. Spacious interior. Multiple, quick-access, exterior pockets. Dimensions: 22 x 13 x 11.5 in / 56 x 33 x 29 cm . . Linear Dimensions: 46.5\". Weight: 0.9 kg / 2 lbs. Capacity: 64L. Limited Lifetime Warranty.",
+   "expected": {
+    "dimsCm": [
+     56,
+     33,
+     29
+    ],
+    "capacityL": 64,
+    "weightKg": 0.9,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a20",
+   "source": "canadaluggagedepot",
+   "handle": "travelpro-crew-executive-choice-3-large-backpack",
+   "title": "Travelpro Crew Executive Choice™ 3 Large Backpack",
+   "productType": "Backpacks",
+   "text": "Ready for just about anything, the highly-durable Travelpro ® Crew ™ Executive Choice ™ 3 Large Backpack with built-in charging ports and ample packing space offers endless uses as your well-organized satellite office, an all-in-one for short trips, a stackable companion to your other luggage and your new favorite personal bag.. . Stay connected to everything you need using external USB A and C ports (Patent Pending) with fast charge capabilities to power up electronics on the go. A dedicated pocket with connected USB cord stores your power bank securely (battery not included), padded laptop and tablet sleeves offer protection for electronics, and the spacious interior is also outfitted with compartments and integrated key leash for built-in organization.. Crafted with high-quality, stain-resistant nylon fabric and leather accents, this backpack is loaded with convenience features, including a Travelpro ® ID TheftBlock ™ pocket that protects credit cards and passports from loss and identity theft, the Travelpro ® QuickSlip ™ front pocket with magnetic closure for quick-access cell phone storage, a tricot-lined, exterior top-zip sunglass pocket and exterior, lie-flat side pockets that expand to hold water bottles or an umbrella.. When it’s time to move, the padded airflow back panel and adjustable, padded shoulder straps provide superior comfort and a dedicated strap pocket for earbud storage. For hands-free mobility, an unobtrusive rear stacking strap fits around the extension handle of any Rollaboard ® or spinner suitcase. Backed by our Built For a Lifetime Limited Warranty with Trusted Companion Promise that even covers damage caused by airlines or other common carriers for the first year of the lifetime warranty.. FEATURES . Travelpro ® QuickSlip ™ front pocket with magnetic closure is ideal for storing a cell phone or other essentials on the move. Travelpro ® ID TheftBlock ™ pocket keeps credit cards and passports protected against loss and identity theft. Tricot-lined exterior top-zip sunglass pocket offers quick and easy eyewear storage. . DIMENSIONS & SPECS . . Overall Dimensions: 17.25\" x 12.5\" x 8.75\" / 43.82 x 31.75 x 22.23cm . Case Dimensions: 15.25\" x 12.5\" x 8.75\" / 38.72 x 31.75 x 22.23cm . Capacity: 28L / 1709 cu in. Weight: 2.7lbs / 1.22kg. WARRANTY . Backed by Travelpro® Built For A Lifetime Limited Warranty .",
+   "expected": {
+    "dimsCm": [
+     43.82,
+     31.75,
+     22.23
+    ],
+    "capacityL": 28,
+    "weightKg": 1.22,
+    "wheels": null,
+    "expandable": null,
+    "dimsAlt": [
+     [
+      38.72,
+      31.75,
+      22.23
+     ]
+    ]
+   }
+  },
+  {
+   "id": "a21",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-poacher-ras-backpack-36l-black",
+   "title": "Dakine Poacher RAS Backpack 36L - Black",
+   "productType": "Backpacks",
+   "text": "Sized for full-day missions and airbag ready, the Poacher R.A.S. 36L offers a refined fit with all the storage you need to chase untracked backcountry lines. It's a panel loader with dedicated avalanche tool storage and backpanel access to the main compartment. A body-hugging, molded back fits snugly for aggressive riding. The pack is compatible with the Mammut® Removable Airbag System 3.0 and features Dakine's exclusive RollTop airbag closure. . FEATURES . Removable Airbag System 3.0 by Mammut® compatible (sold separately) with roll-top closure. Vertical snowboard carry. Diagonal or A-frame ski/splitboard carry. DK Impact Spine Protector compatible (sold separately). Back panel zippered main access. Large volume zippered top pocket. Deployable helmet carry (Dual position). Oversized fleece-lined goggle pocket. Two-way radio handset or insulated hydration compatible. Snow tools/shovel pocket with sleeves. Splitboard poles and ice axe carry loops. 38 mm padded hip belt with side pocket and reverse pull waist belt. Snow shedding molded backpanel, Rescue whistle on sternum strap. . DIMENSIONS & SPECS . Dimensions: 25.19\" x 14.96\" x 12.59\" / 64 x 38 x 32cm. Materials: 100% Recycled High Density Nylon. Weight: 4.15lbs / 1.89kg . WARRANTY . Dakine Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     64,
+     38,
+     32
+    ],
+    "capacityL": 36,
+    "weightKg": 1.89,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a22",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-alpha-large-dual-access-expandable-trunk",
+   "title": "Tumi Alpha Large Dual Access Expandable Trunk",
+   "productType": "Luggage",
+   "text": "Built for travelers who demand more from every journey, this travel trunk is engineered with front access ease, offering clever functionality signature to TUMI. FEATURES . Exterior:. Dual access zip entry to main compartment. Built-in TSA combination lock. Front U-zip pocket. 2-stage telescoping handle. 4 signature dual outboard wheels. Bottom grab handle. Front webbing grab handle with leather accent. Retractable top carry handle. Molded impact-resistant side panels. Zip to zipper expansion (up to \"2). TUMI Tracer®. Monogram patch. Luggage tag. . Interior:. AirTag® Pocket. Zip curtain separating front and back compartments. Compression straps. 5 dividers in back compartment for shoes and more. Open pocket. Mesh zip pocket. *AirTag® is a trademark of Apple Inc., registered in the U.S. and other countries. . DIMENSIONS & SPECS . Dimensions: 30.91\" x 15.94\" x 14.57\"-16.54\" / 78.5 x 40.5 x 37-42cm . Capacity: 100L . Materials: FXT® Ballistic Nylon . Weight: 14.8lbs / 6.71kg . WARRANTY . Tumi's Limited 5 Year Warranty .",
+   "expected": {
+    "dimsCm": [
+     78.5,
+     40.5,
+     37
+    ],
+    "capacityL": 100,
+    "weightKg": 6.71,
+    "wheels": 4,
+    "expandable": true,
+    "dimsAlt": [
+     [
+      78.5,
+      40.5,
+      42
+     ]
+    ]
+   }
+  },
+  {
+   "id": "a23",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-campus-backpack-33l-black",
+   "title": "Dakine Campus Backpack 33L - Black",
+   "productType": "Backpacks",
+   "text": "Time-tested, the 33-liter Campus gets high marks for back-to-school-utility. The roomy design features four distinct compartments including a large main compartment with a padded laptop sleeve and room for books and binders. A handy insulated pocket keeps lunch and snacks cool, while a mix of organizer pockets keeps school-day essentials easy to grab. . FEATURES . S-curved back panel and shoulder straps. Adjustable sternum strap. Padded laptop sleeve. Organizer pocket. Fleece-lined sunglass pocket. Insulated cooler pocket. Mesh side pocket(s). Padded bottom panel. . DIMENSIONS & SPECS . Dimensions: 20.47\" x 12.99\" x 8.26\" / 52 x 33 x 21cm. Capacity: 38L. Materials: . Body: 86% Recycled Polyester, 14% Nylon. Lining: 58% Polyester, 42% Recycled Polyvinyl Chloride. Weight: 1.67lbs / 0.76kg . WARRANTY . Dakine Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     52,
+     33,
+     21
+    ],
+    "capacityL": 38,
+    "weightKg": 0.76,
+    "wheels": null,
+    "expandable": null,
+    "capacityAlt": [
+     33
+    ],
+    "note": "the spec line says 38L, the title 33L (store inconsistency)"
+   }
+  },
+  {
+   "id": "a24",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-new-baseline-underseat-duffle",
+   "title": "Briggs & Riley Baseline Underseat Duffle",
+   "productType": "Duffles",
+   "text": "The Underseat Duffle is a must-have classic silhouette that pairs with any journey. Ample pockets and a roomy main compartment keep your travel essentials close by, while neatly tucking under your seat. . Interior Features: . Interior lining is soft and inviting.Contrasting color makes finding contents easy. SpeedThru™ pocket provides convenient access to your stored items at security checkpoints. Our signature orange lining visually informs you that the pocket is open. Large main compartment features a zip mesh pocket for extra storage of accessories. Adding convenience and organization to your travel. Two generously sized pockets for added storage of your personal items. Exterior Features: . Monogram leather detailing provides elegant personalization and immediate product identification . Slip-through back panel allows bag to slide over the Outsider® handle of a Briggs & Riley rolling bag for easy transport of two bags as one. Premium leather touch point on top carry handles offer a sleek look, while traveling in comfort. Hide-away leather ID tag is an elegant, discreet feature that keeps your personal information concealed during travel. Front pocketwith added slip pockets for organization. Right side pocket for additional storage of smaller personal items or water bottle. Adjustable shoulder strap included. Specs: . Zipper: Self-repairing YKK® RC zippers for smooth zipper action with lockable double zipper pulls . Fabric: Remarkably strong ballistic nylon fabric resists wear providing exceptional durability that endures the test of time . Capacity: 1903 cu. in. / 31.2 liters . Dimensions: 10.5\" x 16.5\" x 11.5\" / 26.7 x 41.9 x 29.2 cm . Weight: 2.8 lbs. / 1.3 kgs. . Warranty: . Simple as that® lifetime warranty—same as all Briggs & Riley bags .",
+   "expected": {
+    "dimsCm": [
+     26.7,
+     41.9,
+     29.2
+    ],
+    "capacityL": 31.2,
+    "weightKg": 1.3,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a25",
+   "source": "canadaluggagedepot",
+   "handle": "matador-30l-packable-duffel",
+   "title": "Matador 30L Packable Duffel",
+   "productType": "Duffles",
+   "text": "The 30L Packable Duffel is built to haul — then disappear. Ultralight and weatherproof, it carries the extra gear you did or didn’t plan for, and takes up nearly no space of its own. . FEATURES . 30 liter capacity | Carry-on compliant*. Packs into its own pocket for transport. Weatherproof — waterproof fabric + sealing zippers. Adjustable shoulder strap | Duffel or cross-body carry. Quad-compression strap system with buckles | Backpack carry + external lash straps. Rubberized carry handles. Grab handles on both ends. Reflective paracord seam for night visibility. High-vis interior. External access zipper pocket. DuraGlide™ sealing external zippers — Smooth. Strong. Long-lasting. Co-engineered by Matador® and Zoom®.. Anti-theft zipper security loops on all external pockets — theft deterrent + lockable. Recycled materials that meet Bluesign® criteria. Finished with Matador®’s signature Switchback Stitch™ — a mark of quality and authenticity. * “Carry-on compliant” bags strictly adhere to the carry-on size policy on approximately 80% of flights operated by the largest 50 airlines globally. . DIMENSIONS & SPECS . Dimensions: 20\" x 11\" x 9\" / 51 x 28 x 23cm. Capacity: 30L. Materials: 100D Bluesign® recycled nylon, PFAS free, #5 DuraGlide™ sealing zippers (exterior) . Weight: 0.5lbs / 0.23kg. WARRANTY . Matador's Better By Design Guarantee™ .",
+   "expected": {
+    "dimsCm": [
+     51,
+     28,
+     23
+    ],
+    "capacityL": 30,
+    "weightKg": 0.23,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a26",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-heli-2-0-backpack-12l-pear-sorbet",
+   "title": "Dakine Heli 2.0 Backpack 12L - Pear Sorbet",
+   "productType": "Backpacks",
+   "text": "For over 30 years, the Dakine Heli Backpack has been a trusted companion for backcountry riders pushing beyond the resort. Rooted in a legacy of innovation and durability, it remains a defining piece of Dakine’s mountain DNA.. The Heli 2.0 Backpack builds on that legacy with a modern, performance-driven design made for today’s riders. Engineered to handle harsh conditions and remote terrain, it features RECCO technology for added safety, refined storage for essential gear, and versatile ski and snowboard carry options. Whether you’re earning your turns or venturing deeper into the backcountry, the Heli 2.0 is built to go further.. FEATURES . RECCO technology makes you searchable to professional rescuers in the event of an avalanche accident or if lost in the outdoors. Vertical snowboard carry with horizontal snowboard carry option. Diagonal ski/splitboard deployable carry. Breathable mesh padded back panel with ergonomic padded shoulder straps. Snow tools sleeves in main compartment. Exterior shovel blade secure carry. Large fleece-lined goggle pocket. Exterior quick-stash pocket. Two-way radio handset or hydration compatible. 25 mm webbing hip belt with wings. Removable sternum strap with rescue whistle. . DIMENSIONS & SPECS . Dimensions: 18.89\" x 13.77\" x 1.96\" / 48 x 35 x 5cm . Materials: . Body: 97% Recycled Polyester, 3% Polyester. Lining: 57% Recycled Polyester, 43% Polyester. Weight: 2.22 lbs / 1.01kg . WARRANTY . Dakine Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     48,
+     35,
+     5
+    ],
+    "capacityL": 12,
+    "weightKg": 1.01,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a27",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-rosaline-eco-14-1-laptop-backpack",
+   "title": "Samsonite Rosaline Eco 14.1\" Laptop Backpack",
+   "productType": "Backpacks",
+   "text": "Rosaline Eco is your everyday business solution, designed with a clean and minimalistic look. Along with a spacious compartment and excellent organization, the exterior material is made from recycled nylon and the interior lining is made with rPET polyester.. Features: . Exterior & interior fabric is made from RecyclexTM, a materal created using 100% post-consumer recycled PET.. Gold-coloured zippers and detailing lend to a sophisticated style.. Padded laptop and tablet pockets.. SmartSleeveTM slips over upright handles for easy mobility.. Water-bottle pockets.. Water repellant.. Features: . Volume: 15 L / 938 in³. Dimensions: 14.7\" x 11\" x 5.8\" / 37 x 28 x 15 cm. Weight: 0.6 kg / 1.3 lbs. Warranty: . Samsonite 3 Year Limited Global Warranty.",
+   "expected": {
+    "dimsCm": [
+     37,
+     28,
+     15
+    ],
+    "capacityL": 15,
+    "weightKg": 0.6,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a28",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-uplift-spinner-carry-on-luggage",
+   "title": "Samsonite Uplift Spinner Carry-On Luggage",
+   "productType": "Luggage",
+   "text": "Experience a fresh take on Samsonite's familiar aesthetic with this lightweight luggage, meticulously designed to balance exceptional durability and contemporary style.. FEATURES . Interior & exterior fabrics were made from Recyclex®, a material created using 100% post-consumer recycled PET plastic.. USB cable pass-through to connect your charger cable to a battery pocket* inside. Stay fully charged while on the go. *Battery not included. Stackit™ Strap - fits over most suitcase pull-handles for hassle-free combination travel. RightHeight™ pull handle offers incremental height adjustments for a highly customized fit. Padded top and side carry handles help you to lift a fully-packed case. Kissing zipper pulls fit together so you have the option of adding on a lock. Lightweight design. Wheels have a shock-absorbing, suspension design for smooth and quiet rolling. Multiple exterior pockets are perfect for storing items you want easy access to. . Interior lining was made from Recyclex®, a material created using 100% post-consumer recycled PET plastic bottles. Discreet ID holder keeps your personal information hidden from view. Multiple pockets help keep you organized. Multiple interior pockets are perfect for storing toiletries or other travel accessories. Compression straps keep clothing neatly packed while travelling. Removable Wetpak ™ pouch - perfect for all your travel-sized toiletries. DIMENSIONS & SPECS . Dimensions (including handle and wheels): 21.5 \" x 14\" x 9 \" / 55 x 36 x 23cm. Capacity: 26L / 1579cu in. Weight: 5.3lbs / 2.4kg. WARRANTY . Samsonite 10 Year Limited Global Warranty .",
+   "expected": {
+    "dimsCm": [
+     55,
+     36,
+     23
+    ],
+    "capacityL": 26,
+    "weightKg": 2.4,
+    "wheels": 4,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a29",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-pro-slim-backpack",
+   "title": "Samsonite Pro Slim Backpack",
+   "productType": "Backpacks",
+   "text": "Samsonite Pro is designed for the upscale and serious professional who is looking for that tailored and sophisticated look. This premium collection features robust materials with a compact and sleek design in attractive colourways - offering all the tools one will need to succeed. The slim backpack design combines premium business organization executed in a compact style. . Features: . USB-compatible plug and wireless charging pocket (patent-pending) for internal charging of multiple electronic accessories using most personal battery banks. (Battery not included.) . 15.6\" laptop compartment with Fast Fit adjustable laptop sleeve includes tricot lining. . RFID pocket in front organization panel to protect sensitive data. Complete business organization provided in front upper panel. . Tricot-lined iPad pocket. . SmartSleeve™ on back panel fits over most luggage carry handles and includes a hidden security pocket on the back side. . Tricot-lined pocket on front panel for personal items. Lower front pocket with added electronics organization. . Main compartment has single divider for files. . Detachable cord management trifold pouch holds personal electronics and accessories. . S-curve comfort straps with reverse tricot lining to protect clothing. . Leather touch points on handles, logo and front panel accents. Zipper pulls feature a colour-pop accent. . Made out of durable 100% nylon that is water-resistant with leather accents. . Contents shown are not included. . Specifications: . Nylon - Durable Nylon fabric. . S-Curved Straps - Are designed for comfort and ease of carrying. Contoured non-slip shoulder pads are ergonomically designed to disburse weight more efficently on your shoulder.. Smartsleeve™ - Smartsleeve™ feature fits over most upright handles for hassle free combination travel.. Laptop compartment - Is a built-in padded compartment designed to carry your laptop computer and help protect it from shocks while travelling.. Tablet Pocket - A compartment designed to store your tablet.. USB Port - Integrated charging port allows for easy access to personal portable chargers (portable charger not included). Premium Organizer - Organizer compartment with multiple pockets, including zippered mesh pocket, pen pockets, lidded media pocket and key fob.. Capacity: 24 L. Body Dimensions: 17.0\" x 13.0\" x 6.5\" / 43.18 x 33.02 x 16.51 cm. . Overall Dimensions: 18.0\" x 13.8\" x 8.0\" / 45.72 x 35.05 x 20.32 cm. . Weight: 1.4 kgs / 3.0 lbs. . Warranty: . Samsonite Li",
+   "expected": {
+    "dimsCm": [
+     43.18,
+     33.02,
+     16.51
+    ],
+    "capacityL": 24,
+    "weightKg": 1.4,
+    "wheels": null,
+    "expandable": null,
+    "dimsAlt": [
+     [
+      45.72,
+      35.05,
+      20.32
+     ]
+    ]
+   }
+  },
+  {
+   "id": "a30",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-split-carry-on-roller-bag-42l-carbon-heather",
+   "title": "Dakine Split Carry On Roller Bag 42L+ - Carbon Heather",
+   "productType": "Luggage",
+   "text": "Navigate the airport like a pro with this overhead-compatible roller bag. The Dakine Split Carry-On Roller Bag 42L+ is sized for weekend travel and meets the legal carry-on specs for most airlines. Its split-level layout keeps you organized while traveling, and expandable design helps you fit that extra gear needed for a quick getaway. . FEATURES . Built in TSA approved lock set with DAKINE logo. Padded tubular web grab handles on top and side panel. Divided interior compartments. Interior Neoprene panel provides stretch for overpacking. Side access ID pocket. Two exterior quick access pockets with zipper closure(s). Expandable design for additional storage. Premium retractable handle. Reinforced and replaceable 8.5cm urethane wheels. Compression molded bottom with corner guards. YKK zippers. DIMENSIONS & SPECS . Dimensions: 13.97\" x 8.66\" x 22.05\" / 35.5 x 22 x 56cm. . Capacity: 42L. Materials: . Body: 100% Recycled Polyester. Lining: 100% Polyester . Weight: 8.8lbs / 4kg . WARRANTY . Dakine Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     35.5,
+     22,
+     56
+    ],
+    "capacityL": 42,
+    "weightKg": 4,
+    "wheels": null,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a31",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-365-carry-on-roller-bag-lt-40l-black",
+   "title": "Dakine 365 Carry On Roller Bag LT 40L - Black",
+   "productType": "Luggage",
+   "text": ". . FEATURES . Built in TSA approved lock set with DAKINE logo. YKK zippers. Reinforced 8 cm urethane wheels. External padded tubular web handles. Retractable top handle. DIMENSIONS & SPECS . Dimensions: 21.65\" x 14.96\" x 9.44\" / 55 x 38 x 24cm. Capacity: 40L. Materials: Body - 100% Recycled Polyester; Lining - 100% Polyester. . Weight: 5.23lbs / 2.38kg. WARRANTY . Dakine Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     55,
+     38,
+     24
+    ],
+    "capacityL": 40,
+    "weightKg": 2.38,
+    "wheels": null,
+    "expandable": null,
+    "note": "8 cm urethane wheels is a wheel size, not a count"
+   }
+  },
+  {
+   "id": "a32",
+   "source": "canadaluggagedepot",
+   "handle": "briggs-riley-new-baseline-extra-large-expandable-spinner-luggage",
+   "title": "Briggs & Riley Baseline Extra Large Expandable Spinner Luggage",
+   "productType": "Luggage",
+   "text": "Elevate your travel experiences with our Extra-Large Expandable Spinner, built to hold absolutely everything you desire with it's undeniably large capacity. Its impeccably crafted with all the features you come to rely on from the Baseline collection. . Interior Features: . One-touch CX™ expansion increases packing capacity when you need more space. Simply press CX™ buttons and pull up sides to expand. Once ready, zip closed and push down to compress. Built-in tri-fold garment folder with foam roll bar neatly holds 1-2 suits and prevents wrinkling. Interior lining is soft and inviting. Contrasting color makes finding contents easy. Premium extra-large garment panels envelops your clothing with minimal creasing. Cinching down the straps adds compression, reducing shifting in transit. Two mesh lid zip pockets strategically placed to optimize use of space, ideal for storing larger accessory items. Adds convenience and organization to your travel. Exterior Features: . Monogram leather detailing provides elegant personalization and immediate product identification . Outsider® handle provides optimal capacity and a ﬂat packing surface inside to minimize wrinkling. Aircraft-grade aluminum telescoping handle with multiple stop heights is engineered with a superior impact resistant V-groove design for worry-free travel. Proprietary shock absorbing spinner wheels offer 360° maneuvability and smooth quiet gliding for effortless navigation. Substantial corner-guard protection using impact-resistant material helps protect your luggage, ensuring durability for countless miles. SmartLink™ strap allows for easy transport of two bags as one. Simply attach the add-a-bag strap's t-bar to the docking base, then loop it through the handle of a second bag for convenience. Ergonomic Outsider® handle grip and cushioned top carry handle for comfort and smooth handling on your travel journeys. Hide-away leather ID tag is an elegant, discreet feature that keeps your personal information concealed during travel. SpeedThru™ pocket provides convenient access to your stored items at security checkpoints. Our signature orange lining visually informs you that the pocket is open. Enormous front pocket for hassle-free access to extra items. Integrated bottom fabric handle provides an additional grab point when needed. Retractable, low proﬁle side carry handle for easy grabbing. TSA cable combination lock included. Specs: . Zipper: Self-repairing YKK® RC zippers for smooth zipper action with",
+   "expected": {
+    "dimsCm": null,
+    "capacityL": null,
+    "weightKg": null,
+    "wheels": 4,
+    "expandable": true,
+    "note": "specs fall after the 2,500-character cut"
+   }
+  },
+  {
+   "id": "a33",
+   "source": "canadaluggagedepot",
+   "handle": "dakine-poacher-ras-backpack-26l-black",
+   "title": "Dakine Poacher RAS Backpack 26L - Black",
+   "productType": "Backpacks",
+   "text": "The Poacher R.A.S. 26L offers the refined fit and carry of its bigger siblings but is sized for snowcat, heli and lift-assist laps. It's a panel loader with dedicated avalanche tool storage and backpanel access to the main compartment. The molded back makes for a snug, comfortable fit, so you can give 'er as required. It's compatible with the Mammut® Removable Airbag System 3.0 and features Dakine's exclusive RollTop airbag closure. . FEATURES . Removable Airbag System 3.0 by Mammut® compatible (sold separately) with roll-top closure. Vertical snowboard carry. Diagonal or A-frame ski/splitboard carry. DK Impact Spine Protector compatible (sold separately). Back panel zippered main access. Large volume zippered top pocket. Deployable helmet carry (Dual position). Oversized fleece-lined goggle pocket. Two-way radio handset or insulated hydration compatible. Snow tools/shovel pocket with sleeves. Splitboard poles and ice axe carry loops. 38 mm padded hip belt with side pocket and reverse pull waist belt. Snow shedding molded backpanel, Rescue whistle on sternum strap. . DIMENSIONS & SPECS . Dimensions: 24.01\" x 14.17\" x 11.02\" / 61 x 36 x 28cm. . Materials: 100% Recycled High Density Nylon Materials. Weight: 3.89lbs / 1.77kg . WARRANTY . Dakine Limited Lifetime Warranty .",
+   "expected": {
+    "dimsCm": [
+     61,
+     36,
+     28
+    ],
+    "capacityL": 26,
+    "weightKg": 1.77,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a34",
+   "source": "canadaluggagedepot",
+   "handle": "swiss-gear-the-mini-1900-scansmart-laptop-backpack",
+   "title": "Swiss Gear The Mini 1900 ScanSmart Laptop Backpack",
+   "productType": "Backpacks",
+   "text": "Take strides toward seamless commutes with this SWISSGEAR Mini 1900 ScanSmart Laptop Backpack , a more compact version of the highly touted 1900 ScanSmart backpack. This urban bag embodies clever functionality via a back ScanSmart compartment that fully unzips and lays flat, so you can scan your 13” laptop and tablet at airport TSA without taking your devices out.. A large main compartment integrates a file pocket for quick access to campus papers and books and—for the small stuff—assemble pens, pencils, ID and ATM cards in the RFID-protected organizer pocket. Nestle your canteen in dual mesh water bottle pockets and additional items in a small top pocket. Ergonomic, air mesh shoulder straps and an Airflow back panel ensure comfort no matter how heavy your load gets.. FEATURES . TSA-friendly, Lay-flat ScanSmart compartment with padded 13” laptop and tablet sleeves. Ergonomically contoured, padded shoulder straps with built-in suspension, breathable mesh fabric, sunglasses holder loop, and thumb-ring adjusters. Padded, Airflow back panel with mesh fabric for superior back ventilation. Add-a-bag sleeve to glide over luggage handle. Large main compartment with files pocket. Front organizer zip pocket with key clip, and divider pockets with RFID protection to block identity theft. Small exterior zip pocket. Dual side mesh pockets. Side compression straps. Padded grab handle. Front carabiner. . DIMENSIONS & SPECS . Dimensions: 16\" x 11\" x 6\" / 40.64 x 27.94 x 15.24cm. Laptop Compartment: 13.5\" x 9.25\" x 0.75\" / 34.29 x 23.5 x 1.91cm. Tablet Pocket: 11\" x 8.5\" / 27.94 x 21.59cm. Capacity: 23.4L. Weight: 2lbs / 0.91kg. WARRANTY . Swiss Gear 5-Year Limited Warranty.",
+   "expected": {
+    "dimsCm": [
+     40.64,
+     27.94,
+     15.24
+    ],
+    "capacityL": 23.4,
+    "weightKg": 0.91,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a35",
+   "source": "canadaluggagedepot",
+   "handle": "american-tourister-airconic-spinner-medium-luggage",
+   "title": "American Tourister Airconic Spinner Medium Luggage",
+   "productType": "Luggage",
+   "text": "American Tourister is demonstrating again its strength for innovative lightweight suitcases paired with a contemporary design language. No matter what style you choose, be assured that you’ll travel lighter than ever.. Features: . Constructed of 100% polypropylene offering extreme durability with a texture that reduces the visibility of scratches.. Water-repellent coated zipper helps to protect your belongings from rain and moisture.. Flush mounted 3-digit TSA-approved lock provides added security for your belongings.. . Interior features a zipped divider with mesh pocket and elastic cross-straps in both the top and bottom compartments. Also has a playful lining with geometic print.. Multi-stage pull handle adjusts for a more comfortable grip.. Retracting carry-handles stay flush to the case to protect against damage.. Dual Spinner wheels make it easy to navigate narrow airplane aisles as well as over a variety of surfaces.. . Specifications: . Volume: 67 L / 4071 in³ . . Overall Dimensions (including wheels and handles): 26.3\" x 17.8\" x 10.3\" / 67 x 45 x 26 cm. . Weight: 2.7 kgs / 5.9 lbs.. . Warranty: . . American Tourister 10 Year Global Warranty . .",
+   "expected": {
+    "dimsCm": [
+     67,
+     45,
+     26
+    ],
+    "capacityL": 67,
+    "weightKg": 2.7,
+    "wheels": 4,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a36",
+   "source": "canadaluggagedepot",
+   "handle": "samsonite-evoa-z-expandable-spinner-medium-luggage",
+   "title": "Samsonite Evoa Z Expandable Spinner Medium Luggage",
+   "productType": "Luggage",
+   "text": "Quietly exquisite. The next generation of Evoa embodies classic style and modern sophistication with the introduction of a new finely-brushed texture and distinctive aluminium logo bar seamlessly integrated with the corner protector.. FEATURES . 100% Makrolon polycarbonate shell known for its outstanding impact strength, stability and toughness.. Interior lining made of of Recyclex.. Aero-Trac suspension wheel system.. Removable compression divider with WetPak & mesh pocket.. Double layer anti-theft zipper with magnetic pullers.. Hanging hook integrated into multi-height dual tube pull handle.. DIMENSIONS & SPECS . Dimensions (including handle and wheels): 27 \" x 19.5\" x 11.9\" / 69 x 50 x 30cm. Capacity: 75L. Weight: 10.4lbs / 4.7kg. WARRANTY . Samsonite 10 Year Limited Global Warranty .",
+   "expected": {
+    "dimsCm": [
+     69,
+     50,
+     30
+    ],
+    "capacityL": 75,
+    "weightKg": 4.7,
+    "wheels": 4,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a37",
+   "source": "canadaluggagedepot",
+   "handle": "the-north-face-base-camp-rolling-thunder-28-luggage",
+   "title": "The North Face Base Camp Rolling Thunder 28\" Luggage",
+   "productType": "Luggage",
+   "text": "With a new hard-shell chassis, 100% recycled Base Camp fabric for durability and internal organization even more comprehensive than your packing list, the Base Camp Rolling Thunder—28 is an ideal travel companion. . FEATURES . . Clamshell design and long zip for easier interior access. Durable, custom-molded wheels for comfortable rolling. Ergonomic U-Pulls make zipping and unzipping simple. External webbing straps provide additional clipping points. Handle extends easily with the push of a button. Has a 28'' (71.1 cm) length from wheel to handle when compressed. Internal compression panel lets you cinch down clothing and has two secure-zip mesh pockets. Large, internal, secure-zip clamshell mesh pocket. Lockable zip. Padded side and top handles allow for multiple carrying positions. Recycled Base Camp fabric is highly durable. Reflective details on front of bag. Sherpa strap lets you carry your backpack or duffel on the face of this bag. The Base Camp Rolling Thunder has a hard-shell chassis designed to handle traveling around the world over and over again. Two external, quick-access, secure-zip pockets. Webbing compression straps let you secure belongings or compress the bag when it's not full. . DIMENSIONS & SPECS . Dimensions: 30.3\" x 18.5\" x 13.4\" / 77 x 47 x 34cm. Capacity: 95L / 5797 in³. Materials: 1000D Recycled Polyester With Phthalate-Free PVC Coating . Weight: 11.19lbs / 5.08kg. WARRANTY . The North Face Limited Lifetime Warranty . .",
+   "expected": {
+    "dimsCm": [
+     77,
+     47,
+     34
+    ],
+    "capacityL": 95,
+    "weightKg": 5.08,
+    "wheels": null,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a38",
+   "source": "canadaluggagedepot",
+   "handle": "renwick-28-inch-spinner-expandable-luggage",
+   "title": "Jetstream 28 Inch Spinner Expandable Luggage",
+   "productType": "Luggage",
+   "text": "Lightweight construction in rugged dobby polyester. 4 multi-directional wheels offer effortless mobility in any direction. Compression straps keep clothing neatly packed. Telescopic handle system locks in multiple levels to adapt to your convenience. Expands by 2 inches allowing added packing capacity. Case Dimensions: 21\" x 13\" x 31\" / 53.34 x 33.02 x 78.74 cm. Weight: 3.5 kgs / 7.7 lbs.. Jetstream 2 Year Warranty.",
+   "expected": {
+    "dimsCm": [
+     53.34,
+     33.02,
+     78.74
+    ],
+    "capacityL": null,
+    "weightKg": 3.5,
+    "wheels": 4,
+    "expandable": true
+   }
+  },
+  {
+   "id": "a39",
+   "source": "canadaluggagedepot",
+   "handle": "american-tourister-airconic-spinner-carry-on-luggage",
+   "title": "American Tourister Airconic Spinner Carry-On Luggage",
+   "productType": "Luggage",
+   "text": "American Tourister is demonstrating again its strength for innovative lightweight suitcases paired with a contemporary design language. No matter what style you choose, be assured that you’ll travel lighter than ever.. Features: . Constructed of 100% polypropylene offering extreme durability with a texture that reduces the visibility of scratches.. Water-repellent coated zipper helps to protect your belongings from rain and moisture.. Flush mounted 3-digit TSA-approved lock provides added security for your belongings.. . Interior features a zipped divider with mesh pocket and elastic cross-straps in both the top and bottom compartments. Also has a playful lining with geometic print.. Multi-stage pull handle adjusts for a more comfortable grip.. Retracting carry-handles stay flush to the case to protect against damage.. Dual Spinner wheels make it easy to navigate narrow airplane aisles as well as over a variety of surfaces.. . Specifications: . Volume: 34 L / 2047 in³ . Overall Dimensions (including wheels and handles): 21.5\" x 15.5\" x 8\" / 55 x 39 x 20 cm. Weight: 2.0 kgs / 4.4 lbs.. Warranty: . . American Tourister 10 Year Global Warranty . .",
+   "expected": {
+    "dimsCm": [
+     55,
+     39,
+     20
+    ],
+    "capacityL": 34,
+    "weightKg": 2,
+    "wheels": 4,
+    "expandable": null
+   }
+  },
+  {
+   "id": "a40",
+   "source": "canadaluggagedepot",
+   "handle": "tumi-alpha-x-large-dual-access-expandable-checked-luggage-1",
+   "title": "Tumi Alpha X-Large Dual Access Expandable Checked Luggage",
+   "productType": "Luggage",
+   "text": "Built for travelers who demand more from every journey—this extra large-capacity, dual-access expandable checked luggage features our signature FXT® Ballistic Nylon and best-in-class functionality. FEATURES . Exterior:. Dual zip entry to main compartment. Front U-zip pocket. Lever lock 2 stage expansion. Retractable top and side grab handles. Bottom grab handle. 3-stage telescoping handle. 4 dual outboard wheels. Molded impact-resistant side panels. Built-in dual TSA combination lock. 4 side feet. TUMI Tracer®. Monogram patch. Luggage tag. . Interior:. AirTag® Pocket. 2 zip pockets. Mesh zip pocket. Open pocket. Zip divider separates front and back compartments. Compression straps. Hanger bracket (Hanger sold separately). *AirTag® is a trademark of Apple Inc., registered in the U.S. and other countries. . DIMENSIONS & SPECS . Dimensions: 30.91\" x 22.05\" x 12.99\"-14.96\" / 78.5 x 56 x 33-38cm . Capacity: 126L . Materials: FXT® Ballistic Nylon . Weight: 17lbs / 7.7kg . WARRANTY . Tumi's Limited 5 Year Warranty .",
+   "expected": {
+    "dimsCm": [
+     78.5,
+     56,
+     33
+    ],
+    "capacityL": 126,
+    "weightKg": 7.7,
+    "wheels": 4,
+    "expandable": true,
+    "dimsAlt": [
+     [
+      78.5,
+      56,
+      38
+     ]
+    ]
+   }
+  }
+ ]
+}
