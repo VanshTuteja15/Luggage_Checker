@@ -1,0 +1,96 @@
+# ------------------------------------------------------------------
+# LuggageTracker on one Oracle Cloud Always Free Arm VM (v4 A8).
+# Scripts only: nothing here creates an account or a cloud resource.
+# Runbook: docs/DEPLOY_ORACLE.md. Variables: deploy/oracle/.env (copy
+# deploy/oracle/env.example; the filled file is git-ignored).
+#
+#   worker  the engine worker: catalogue reads, discovery, the morning
+#           email's fallback tick, the ai.small lane. HTTP on 127.0.0.1.
+#   ollama  the local model server, 127.0.0.1 only, one small model
+#           kept loaded (keep_alive -1). Advice only: every AI flag is
+#           off until the owner turns one on; a model never prices.
+#   db      OPTIONAL (profile "localdb"): a local Postgres, published on
+#           no interface. By default the worker uses the app's Supabase
+#           database (DATABASE_URL), which the app reads.
+#   tunnel  OPTIONAL (profile "tunnel"): a Cloudflare Tunnel, so the app
+#           can reach the worker without opening any inbound port.
+#
+#   docker compose -f deploy/oracle/compose.yml config     # check
+#   docker compose -f deploy/oracle/compose.yml up -d --build
+# ------------------------------------------------------------------
+name: luggagetracker
+
+x-logs: &logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  worker:
+    build:
+      context: ../..
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      PORT: "8787"
+      AI_LANES: ${AI_LANES:-ai.small}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_ALLOWED_HOSTS: ollama
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_KEEP_ALIVE: "-1"
+    ports:
+      - "127.0.0.1:8787:8787"
+    depends_on:
+      - ollama
+    mem_limit: 2g
+    logging: *logs
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    restart: unless-stopped
+    environment:
+      # Listens on the compose network; published to 127.0.0.1 only (below).
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "-1"
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    mem_limit: 6g
+    logging: *logs
+
+  db:
+    profiles: ["localdb"]
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: luggagetracker
+      POSTGRES_USER: luggagetracker
+      # Empty = Postgres refuses to start: set it in deploy/oracle/.env first.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No "ports": only the worker reaches it, on the compose network.
+    mem_limit: 2g
+    logging: *logs
+
+  tunnel:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - worker
+    logging: *logs
+
+volumes:
+  ollama:
+  pgdata:

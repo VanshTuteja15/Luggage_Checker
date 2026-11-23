@@ -483,6 +483,31 @@ async function discoverFromCatalog(
     out.enriched++;
   }
 
+  // A complete catalogue that no longer lists a product page: it's gone from the
+  // store (checked 2026-10-30: such pages answer 404), as a full sitemap crawl
+  // decides. Its variant listings go with it. A read that would retire more than
+  // 30% of the store's pages looks like a glitch, so then nothing changes.
+  if (read.complete && read.products.length > 0 && !opts.signal?.aborted) {
+    const listed = new Set(read.products.map((p) => p.url));
+    const prefix = read.products[0].url.replace(/\/products\/[^/]+$/, "/products/");
+    const known = (await rt.store.listingsBySource(source.id, 100_000)).filter(
+      (l) => l.active && l.url.startsWith(prefix),
+    );
+    const pageOf = (url: string) => canonicalUrl(url.split("?")[0]);
+    const pages = known.filter((l) => !new URL(l.url).search);
+    const gone = new Set(pages.map((l) => pageOf(l.url)).filter((u) => !listed.has(u)));
+    if (gone.size > pages.length * 0.3)
+      out.errors.push(
+        `the catalogue no longer lists ${gone.size} of ${pages.length} known pages; nothing was retired`,
+      );
+    else
+      for (const l of known) {
+        if (!gone.has(pageOf(l.url))) continue;
+        await rt.store.upsertListing({ ...l, active: false });
+        out.deactivated++;
+      }
+  }
+
   // GTIN backfill: luggage pages without a barcode first, within the per-run budget.
   const LUGGAGE = new Set(["carry_on", "medium", "large", "extra_large", "set", "underseat"]);
   const pages = (await rt.store.listingsBySource(source.id, 100_000)).filter(

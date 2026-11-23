@@ -13,7 +13,7 @@
 
 import type { CatalogProduct, EngineStore } from "../store/port";
 import type { CategoryPack, Identifier, ListingRecord } from "../types";
-import { adviseReview, hardVeto, identityKey, lineOverlap, NEAR_MATCH } from "./match";
+import { adviseReview, hardVeto, identityKey, nearMatch, type NearMatch } from "./match";
 
 export { identityKey };
 
@@ -80,6 +80,65 @@ async function attach(
 function colourCodeOf(listing: ListingRecord): string | null {
   const mpn = ids(listing.identifiers, "mpn")[0];
   return mpn?.split("-").pop() ?? null;
+}
+
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
+/** "/fr/products/…" → "fr": a store's pages in another language are the same products. */
+const langOf = (url: string) =>
+  pathOf(url)
+    .match(/^\/([a-z]{2})(?:-[a-z]{2})?\//i)?.[1]
+    ?.toLowerCase() ?? "";
+
+/**
+ * Does the listing's own store already sell the candidate as a page of its own
+ * (another store product id, else another page)? Then the store itself tells
+ * the two apart (A5.3). Variant pages of one product share its id.
+ */
+async function storeListsApart(
+  store: EngineStore,
+  listing: ListingRecord,
+  productId: string,
+): Promise<boolean> {
+  const samePage = (l: ListingRecord) =>
+    l.externalId && listing.externalId
+      ? l.externalId === listing.externalId
+      : pathOf(l.url) === pathOf(listing.url);
+  return (await store.listingsForProduct(productId)).some(
+    (l) =>
+      l.sourceId === listing.sourceId &&
+      l.id !== listing.id &&
+      langOf(l.url) === langOf(listing.url) &&
+      !samePage(l),
+  );
+}
+
+/**
+ * Is this candidate product a real near match for the listing (A5.3)? Hard
+ * vetoes first, then the product-word rule: names at most one word apart, or,
+ * when the store lists the candidate as another of its own pages, only the
+ * colour part may differ. Shared by resolution and the queue re-check.
+ */
+export async function judgeCandidate(
+  store: EngineStore,
+  pack: CategoryPack,
+  listing: ListingRecord,
+  product: CatalogProduct,
+): Promise<NearMatch> {
+  const veto = hardVeto(pack, product.name, listing.title);
+  if (veto) return { near: false, score: 0, why: veto };
+  const brand = listing.brand ?? pack.brandOf(listing.title);
+  const a = { title: product.name, brand: product.brand };
+  const b = { title: listing.title, brand };
+  const loose = nearMatch(pack, a, b, false);
+  if (!loose.near) return loose;
+  return (await storeListsApart(store, listing, product.id)) ? nearMatch(pack, a, b, true) : loose;
 }
 
 export async function resolveListing(
@@ -202,7 +261,7 @@ export async function resolveListing(
       };
     }
     const candidates = await store.candidateProducts(brand!, sizeClass);
-    let best: { p: CatalogProduct; score: number } | null = null;
+    const close: { p: CatalogProduct; score: number }[] = [];
     for (const p of candidates) {
       const pLine = (p.line ?? "").split(" ").filter(Boolean);
       if (!versionsAgree(pLine, line)) continue;
@@ -211,16 +270,35 @@ export async function resolveListing(
       if (inches && pInches && inches !== pInches) continue;
       // v4 A5.2: an edition, a Large/Compact carry-on, International/Lite/… on one side.
       if (hardVeto(pack, p.name, listing.title)) continue;
-      const score = lineOverlap(pLine, line);
-      if (!best || score > best.score) best = { p, score };
+      // v4 A5.3: names more than one product word apart are never near matches.
+      const loose = nearMatch(
+        pack,
+        { title: p.name, brand: p.brand },
+        { title: listing.title, brand },
+        false,
+      );
+      if (loose.near) close.push({ p, score: loose.score });
     }
-    if (best && best.score >= NEAR_MATCH) {
-      // Close but not identical (e.g. "outline pro" vs "outline pro hardside"): a human decides.
+    // Best first; a candidate the store lists as another of its own pages must
+    // differ only in the colour part (owner 2026-10-30: only real near matches).
+    close.sort((x, y) => y.score - x.score);
+    let best: { p: CatalogProduct; score: number; why: string } | null = null;
+    for (const c of close) {
+      const j = await judgeCandidate(store, pack, listing, c.p);
+      if (j.near) {
+        best = { p: c.p, score: j.score, why: j.why };
+        break;
+      }
+    }
+    if (best) {
+      // Close but not provably the same (e.g. "outline pro" vs "outline pro signature",
+      // or a store's colour page): a human decides.
       // The new product keeps its own key so its other colours join it instead of
       // each opening another review; approving a merge moves them all.
       const listingProduct = await createFor(store, listing, brand, line, sizeClass, key);
       await store.enqueueReview(listing.id, best.p.id, best.score, [
         `similar line: "${best.p.line}" vs "${line.join(" ")}"`,
+        best.why,
         ...reasons,
       ]);
       await adviseReview({
@@ -241,30 +319,14 @@ export async function resolveListing(
   /* 4. a new product of its own */
   if (!sizeClass || !brand) {
     // Without a size class or brand we can't match it safely: it gets a product of
-    // its own. Only suitcases need a human look (their size is the identity wall);
-    // a plug adapter or a pouch without a size is just itself.
+    // its own. No review either (owner 2026-10-30: the queue holds only real near
+    // matches); with no candidate there is nothing for a person to join it to.
     const productId = await createFor(store, listing, brand, line, sizeClass, null);
-    const suitcaseLike =
-      /\b(spinner|suitcase|luggage|carry[-\s]?on|checked|check-in|hardside|softside|trolley|upright|valise)\b/i.test(
-        listing.title,
-      );
-    if (suitcaseLike) {
-      await store.enqueueReview(listing.id, null, 0, [
-        !brand ? "brand unknown" : "size class unknown",
-        ...reasons,
-      ]);
-      return {
-        productId,
-        variantId: null,
-        method: "review",
-        reasons: ["created, flagged for review"],
-      };
-    }
     return {
       productId,
       variantId: null,
       method: "new",
-      reasons: [...reasons, "no size class or brand: kept on its own"],
+      reasons: [...reasons, `${!brand ? "brand" : "size class"} unknown: kept on its own`],
     };
   }
   const productId = await createFor(store, listing, brand, line, sizeClass, key);

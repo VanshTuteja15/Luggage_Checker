@@ -19,14 +19,14 @@ export async function adminOverview(
 ) {
   const store = rt.store;
   const [
-    health,
+    allHealth,
     failures,
     rejections,
     sessions,
     flagRows,
     counts,
     reviews,
-    sources,
+    allSources,
     feedSources,
     manualSources,
   ] = await Promise.all([
@@ -41,6 +41,9 @@ export async function adminOverview(
     store.sourcesWithAdapter("feed_import"),
     store.sourcesWithAdapter("manual_entry"),
   ]);
+  // Candidate stores (v4 A6) have their own section (T-601), not Store status rows.
+  const sources = allSources.filter((s) => !s.discovery);
+  const health = allHealth.filter((h) => sources.some((s) => s.id === h.sourceId));
   const flags = resolveFlags(flagRows);
   const routeCtx = { flags, config: rt.config, feedSources, manualSources };
   // Plain rows for the default Stores tab (R5.2); the technical ones follow.

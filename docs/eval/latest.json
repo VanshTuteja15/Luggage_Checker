@@ -1,6 +1,6 @@
 {
-  "runAt": "2026-10-30T10:09:46.697Z",
-  "commit": "fd13f4d",
+  "runAt": "2026-10-30T15:29:10.260Z",
+  "commit": "a869533",
   "ai": false,
   "tasks": {
     "queries": {
@@ -77,7 +77,7 @@
       "allRight": 61.3,
       "extra": {
         "wrongMerges": 0,
-        "sentToReview": 8
+        "sentToReview": 7
       },
       "note": "a near match goes to the review queue (counted as not right, never merged); the AI judge, when measured, only advises on those"
     },

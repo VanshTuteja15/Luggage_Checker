@@ -39,12 +39,14 @@ const num = (v: unknown): number | null => {
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 };
-const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
+const str = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null;
 const cents = (v: unknown): number | null => {
   const n = num(v);
   return n === null ? null : Math.round(n) / 100;
 };
-const absUrl = (u: string | null): string | null => (u ? (u.startsWith("//") ? `https:${u}` : u) : null);
+const absUrl = (u: string | null): string | null =>
+  u ? (u.startsWith("//") ? `https:${u}` : u) : null;
 
 function parse(text: string): unknown {
   try {
@@ -84,7 +86,9 @@ export function parseShopifyJson(text: string): ShopifyProduct | null {
       compareAt: num(v.compare_at_price),
       currency: str(v.price_currency),
       available: availabilityFromJson(v),
-      options: [v.option1, v.option2, v.option3].map(str).filter((x): x is string => !!x && x !== "Default Title"),
+      options: [v.option1, v.option2, v.option3]
+        .map(str)
+        .filter((x): x is string => !!x && x !== "Default Title"),
     })),
   };
 }
@@ -109,7 +113,9 @@ export function parseShopifyJs(text: string): ShopifyProduct | null {
       compareAt: cents(v.compare_at_price),
       currency: null,
       available: typeof v.available === "boolean" ? v.available : null,
-      options: Array.isArray(v.options) ? (v.options as unknown[]).map(str).filter((x): x is string => !!x && x !== "Default Title") : [],
+      options: Array.isArray(v.options)
+        ? (v.options as unknown[]).map(str).filter((x): x is string => !!x && x !== "Default Title")
+        : [],
     })),
   };
 }
@@ -119,7 +125,10 @@ export function parseShopifyJs(text: string): ShopifyProduct | null {
  * availability. If the two disagree on a price, the .json price stands and
  * the disagreement is reported so validation can flag it.
  */
-export function mergeShopify(json: ShopifyProduct, js: ShopifyProduct | null): { product: ShopifyProduct; priceDisagreements: string[] } {
+export function mergeShopify(
+  json: ShopifyProduct,
+  js: ShopifyProduct | null,
+): { product: ShopifyProduct; priceDisagreements: string[] } {
   if (!js) return { product: json, priceDisagreements: [] };
   const byId = new Map(js.variants.map((v) => [v.id, v]));
   const disagreements: string[] = [];
@@ -131,5 +140,8 @@ export function mergeShopify(json: ShopifyProduct, js: ShopifyProduct | null): {
     }
     return { ...v, available: v.available ?? other.available };
   });
-  return { product: { ...json, imageUrl: json.imageUrl ?? js.imageUrl, variants, source: "merged" }, priceDisagreements: disagreements };
+  return {
+    product: { ...json, imageUrl: json.imageUrl ?? js.imageUrl, variants, source: "merged" },
+    priceDisagreements: disagreements,
+  };
 }

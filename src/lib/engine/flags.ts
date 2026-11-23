@@ -49,11 +49,19 @@ export const FLAG_DEFAULTS = {
   "source.bentley.product_json": false,
   /**
    * Whole-catalogue reads (/products.json) for stores whose storefront we may
-   * read: a few requests per run instead of one per product (v4 A3). Off until
-   * the owner switches them on; prices are stored only when they change.
+   * read: a few requests per run instead of one per product (v4 A3); prices are
+   * stored only when they change. Canada Luggage Depot: ON (the owner,
+   * 2026-10-30). Delsey stays OFF: its feed lists products that aren't on
+   * delsey.ca, and the currency canary stops the run.
    */
-  "source.canadaluggagedepot.catalog": false,
+  "source.canadaluggagedepot.catalog": true,
   "source.delsey-ca.catalog": false,
+  /**
+   * v4 A6.2: read one page of a candidate store whose probe passed, once, for
+   * a search ("Read once · not reviewed yet"). OFF: the owner keeps it off
+   * (2026-10-30) until the terms pre-screen output has been read.
+   */
+  "discovery.single_page_reads": false,
   /** Blocked by bot management from our network (P0 probe). */
   "source.samsonite-ca.html_structured": false,
   "source.tumi-ca.html_structured": false,

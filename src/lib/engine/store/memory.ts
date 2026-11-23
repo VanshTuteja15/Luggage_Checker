@@ -27,6 +27,7 @@ import type {
   FailureRow,
   FeedImportInput,
   FlagRow,
+  ObservationWithPrevious,
   PriceRange,
   ProductInput,
   PromotionInput,
@@ -94,6 +95,13 @@ export class MemoryEngineStore implements EngineStore {
       const prev = this.sources.get(s.id);
       this.sources.set(s.id, { ...structuredClone(s), enabled: prev ? prev.enabled : s.enabled });
     }
+  }
+
+  async saveCandidate(rec: SourceRecord): Promise<boolean> {
+    const prev = this.sources.get(rec.id);
+    if (!rec.discovery || (prev && !prev.discovery)) return false;
+    this.sources.set(rec.id, structuredClone(rec));
+    return true;
   }
 
   async setSourceEnabled(id: string, enabled: boolean): Promise<void> {
@@ -396,6 +404,14 @@ export class MemoryEngineStore implements EngineStore {
     return { ...r };
   }
 
+  async supersedeReview(id: string, note: string): Promise<boolean> {
+    const r = this.reviews.get(id);
+    if (!r || r.status !== "pending") return false;
+    r.status = "superseded";
+    r.reasons = [...r.reasons, note];
+    return true;
+  }
+
   async mergeProducts(fromId: string, intoId: string): Promise<void> {
     if (fromId === intoId) throw new Error("cannot merge a product into itself");
     const from = this.products.get(fromId);
@@ -505,6 +521,33 @@ export class MemoryEngineStore implements EngineStore {
       if (o) out.push(o);
     }
     return out;
+  }
+
+  async observationsSince(opts: {
+    sinceIso: string;
+    listingIds?: string[];
+    changesOnly: boolean;
+    limit: number;
+  }): Promise<ObservationWithPrevious[]> {
+    const only = opts.listingIds ? new Set(opts.listingIds) : null;
+    const shown = this.observations
+      .filter((o) => o.validation.outcome !== "rejected" && (!only || only.has(o.listingId)))
+      .sort((a, b) => a.fetchedAt.localeCompare(b.fetchedAt) || Number(a.id) - Number(b.id));
+    const last = new Map<string, Observation>();
+    const out: ObservationWithPrevious[] = [];
+    for (const o of shown) {
+      const prev = last.get(o.listingId) ?? null;
+      last.set(o.listingId, o);
+      if (o.fetchedAt < opts.sinceIso) continue;
+      const changed = !prev || prev.price !== o.price || prev.availability !== o.availability;
+      if (opts.changesOnly && !changed) continue;
+      out.push({
+        ...structuredClone(o),
+        previousPrice: prev?.price ?? null,
+        previousAvailability: prev?.availability ?? null,
+      });
+    }
+    return out.reverse().slice(0, opts.limit);
   }
 
   async priceRangesSince(listingIds: string[], sinceIso: string): Promise<PriceRange[]> {

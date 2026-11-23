@@ -213,15 +213,16 @@ describe("identity resolution", () => {
     expect(await store.listReviews("pending", 10)).toHaveLength(0);
   });
 
-  it("an unknown size is kept apart and flagged; a GTIN conflict is flagged", async () => {
+  it("an unknown size is kept apart (no review since v4 A5.3: nothing to join it to); a GTIN conflict is flagged", async () => {
     const store = new MemoryEngineStore(SOURCE_SEED);
     const noSize = await resolveNew(
       store,
       input("canadaluggagedepot", "Samsonite Omni 3.0 Spinner"),
     );
-    expect(noSize.r.method).toBe("review");
-    const pending = await store.listReviews("pending", 10);
-    expect(pending.some((p) => p.reasons.includes("size class unknown"))).toBe(true);
+    expect(noSize.r.method).toBe("new");
+    expect(noSize.r.reasons).toContain("size class unknown: kept on its own");
+    expect(noSize.listing.productId).not.toBeNull();
+    expect(await store.listReviews("pending", 10)).toHaveLength(0);
 
     const p1 = await resolveNew(
       store,

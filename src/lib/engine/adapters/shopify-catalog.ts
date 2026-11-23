@@ -82,6 +82,8 @@ export type CatalogRead = {
   pages: number;
   requests: number;
   reason: string | null;
+  /** Read to the first empty page (not stopped by the page cap): the store's whole catalogue. */
+  complete: boolean;
 };
 
 const PAGE_LIMIT = 250;
@@ -92,7 +94,14 @@ export async function readCatalog(
   opts: { maxPages?: number; canaryVariants?: number } = {},
 ): Promise<CatalogRead> {
   const host = ctx.source.marketHost;
-  const out: CatalogRead = { status: "ok", products: [], pages: 0, requests: 0, reason: null };
+  const out: CatalogRead = {
+    status: "ok",
+    products: [],
+    pages: 0,
+    requests: 0,
+    reason: null,
+    complete: false,
+  };
   if (!host) return { ...out, status: "not_configured", reason: "no market host on record" };
   const base = `https://${host}${ctx.source.marketPathPrefix ?? ""}`;
   const maxPages = Math.min(opts.maxPages ?? 100, Math.floor(SHOPIFY_CAP / PAGE_LIMIT));
@@ -119,7 +128,10 @@ export async function readCatalog(
     const products = parseShopifyCatalogPage(res.body);
     if (!products)
       return { ...out, status: "garbage", reason: `page ${page} wasn't a Shopify catalogue page` };
-    if (products.length === 0) break;
+    if (products.length === 0) {
+      out.complete = true;
+      break;
+    }
     out.pages = page;
     for (const p of products) {
       if (!p.handle) continue;

@@ -151,17 +151,46 @@ const termsSchema = z.object({
 });
 export type TermsOutput = z.infer<typeof termsSchema>;
 
+const BOT_CLAUSE =
+  /\brobots?\b|\bspiders?\b|\bcrawl\w*|\bscrap\w*|\bdata[- ]min\w*|\bbots?\b|automated (?:tools|means|access)|intelligent agents|LLM-driven bots/i;
+const PERMISSION_CLAUSE = /without (?:the )?(?:express )?(?:prior )?written permission/i;
+const NON_COMMERCIAL_CLAUSE = /personal,? non-commercial use(?: only)?/i;
+
 /** Keyword pre-screen (100% on the 16 recorded excerpts). It quotes; a person decides. */
 export function prescreenTerms(text: string): TermsOutput {
-  const bot = text.match(
-    /\brobots?\b|\bspiders?\b|\bcrawl\w*|\bscrap\w*|\bdata[- ]min\w*|\bbots?\b|automated (?:tools|means|access)|intelligent agents|LLM-driven bots/i,
-  );
+  const bot = text.match(BOT_CLAUSE);
   if (bot) return { category: "prohibits_automated_access", quote: bot[0] };
-  const perm = text.match(/without (?:the )?(?:express )?(?:prior )?written permission/i);
+  const perm = text.match(PERMISSION_CLAUSE);
   if (perm) return { category: "requires_permission", quote: perm[0] };
-  const nc = text.match(/personal,? non-commercial use(?: only)?/i);
+  const nc = text.match(NON_COMMERCIAL_CLAUSE);
   if (nc) return { category: "non_commercial_only", quote: nc[0] };
   return { category: "none", quote: null };
+}
+
+/**
+ * v4 A6 (U-TERMS-1): every sentence of a terms page the pre-screen's
+ * keywords hit, verbatim (each one is a substring of `text`), for a person to
+ * read. It never decides permission; it says what to read.
+ */
+export function termsQuotes(
+  text: string,
+  max = 10,
+): { category: Exclude<TermsOutput["category"], "none">; sentence: string }[] {
+  const out: { category: Exclude<TermsOutput["category"], "none">; sentence: string }[] = [];
+  for (const m of text.matchAll(/[^.!?\n]+(?:[.!?]+|\n|$)/g)) {
+    const sentence = m[0].trim().slice(0, 400);
+    if (sentence.length < 8) continue;
+    const category = BOT_CLAUSE.test(sentence)
+      ? "prohibits_automated_access"
+      : PERMISSION_CLAUSE.test(sentence)
+        ? "requires_permission"
+        : NON_COMMERCIAL_CLAUSE.test(sentence)
+          ? "non_commercial_only"
+          : null;
+    if (category) out.push({ category, sentence });
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 export const termsTask: AiTask<TermsInput, TermsOutput> = {

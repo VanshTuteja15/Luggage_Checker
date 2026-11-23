@@ -140,6 +140,47 @@ export type SourceRecord = {
   evidence: { probedAt: string | null; summary: string };
   /** Seed-level enable switch (admin can also disable at runtime). */
   enabled: boolean;
+  /**
+   * v4 A6: set only on a candidate store (found, not reviewed). Such a row is
+   * inactive, disabled and has no routes, so nothing but its probe (robots.txt
+   * and terms, through the PoliteFetcher) ever contacts it.
+   */
+  discovery?: CandidateInfo | null;
+};
+
+/** v4 A6: where a candidate store is on its way into the registry. */
+export type CandidateState =
+  /** Recorded with its exact host; not probed yet (or a look-alike: never probed). */
+  | "discovered"
+  /** robots.txt allows our token on product paths and the terms pre-screen quoted nothing. */
+  | "single_page_ok"
+  /** The probe found something a person must read first. */
+  | "needs_review"
+  /** The owner read it and approved crawling (an engineer then adds its routes). */
+  | "approved_crawl"
+  | "rejected";
+
+export type CandidateProbe = {
+  at: string;
+  robots: "allows" | "disallows" | "unreachable";
+  termsUrl: string | null;
+  /** Whole sentences, verbatim from the terms page, a person should read. */
+  quotes: { category: string; sentence: string }[];
+  requests: number;
+  /** Plain reasons for the state, in order. */
+  why: string[];
+};
+
+export type CandidateInfo = {
+  state: CandidateState;
+  foundVia: "staff" | "brand_locator" | "link" | "common_crawl";
+  note: string | null;
+  /** A registry host this one looks like (delsey-luggage.ca vs delsey.ca): never probed. */
+  lookalikeOf: string | null;
+  addedAt: string;
+  probe: CandidateProbe | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
 };
 
 export type CircuitState = "closed" | "open" | "half_open";

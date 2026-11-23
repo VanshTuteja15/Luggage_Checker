@@ -106,3 +106,20 @@ BEGIN
     EXECUTE 'REVOKE ALL ON promotions FROM anon';
   END IF;
 END $$;
+
+-- ============================================================
+-- A6  Candidate stores (discovery v2): a registry row with
+--     `discovery` set was found but not reviewed. It is inactive,
+--     disabled and has no routes; only its probe (robots.txt and
+--     the terms page) ever contacts it. NULL on every curated store.
+-- ============================================================
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS discovery JSONB;
+
+-- ============================================================
+-- Owner, 2026-10-30: the Canada Luggage Depot catalogue read is on
+-- by default. A flag row the registry seed wrote (updated_by NULL)
+-- still says off and would win over the code default, so it
+-- follows the new default; a value an admin set is left alone.
+-- ============================================================
+UPDATE feature_flags SET enabled = true, updated_at = now()
+WHERE key = 'source.canadaluggagedepot.catalog' AND updated_by IS NULL AND enabled = false;

@@ -37,6 +37,7 @@ import type {
   FailureRow,
   FeedImportInput,
   FlagRow,
+  ObservationWithPrevious,
   PriceRange,
   ProductInput,
   PromotionInput,
@@ -110,6 +111,7 @@ function toSource(r: Row): SourceRecord {
     domainWarnings: r.domain_warnings ?? [],
     evidence: r.evidence,
     enabled: r.enabled,
+    discovery: r.discovery ?? null,
   };
 }
 
@@ -317,6 +319,43 @@ export class PgEngineStore implements EngineStore {
 
   async upsertSources(sources: SourceRecord[]): Promise<void> {
     await this.pool.query(registrySeedSql(sources));
+  }
+
+  async saveCandidate(s: SourceRecord): Promise<boolean> {
+    if (!s.discovery) return false;
+    // A candidate row is inactive, disabled and routeless; the update can only
+    // ever hit another candidate row (discovery IS NOT NULL), never a curated store.
+    const rows = await this.q(
+      `INSERT INTO sources (id, name, retailer_label, category, status, platform, allowed_domains,
+         fetch_hosts, market_host, market_path_prefix, currency, live_class, permission, terms,
+         robots, crawl_delay_sec, identity_quality, routes, domain_warnings, evidence, enabled, discovery)
+       VALUES ($1, $2, $3, $4, 'inactive', $5, $6, $7, $8, NULL, 'CAD', $9, 'unclear', $10::jsonb,
+         $11::jsonb, $12, $13::jsonb, '[]'::jsonb, $14, $15::jsonb, false, $16::jsonb)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, retailer_label = EXCLUDED.retailer_label,
+         terms = EXCLUDED.terms, robots = EXCLUDED.robots, domain_warnings = EXCLUDED.domain_warnings,
+         evidence = EXCLUDED.evidence, discovery = EXCLUDED.discovery
+       WHERE sources.discovery IS NOT NULL
+       RETURNING id`,
+      [
+        s.id,
+        s.name,
+        s.retailerLabel,
+        s.category,
+        s.platform,
+        s.allowedDomains,
+        s.fetchHosts,
+        s.marketHost,
+        s.liveClass,
+        JSON.stringify(s.terms),
+        JSON.stringify(s.robots),
+        s.crawlDelaySec,
+        JSON.stringify(s.identityQuality),
+        s.domainWarnings,
+        JSON.stringify(s.evidence),
+        JSON.stringify(s.discovery),
+      ],
+    );
+    return rows.length > 0;
   }
 
   async setSourceEnabled(id: string, enabled: boolean): Promise<void> {
@@ -654,6 +693,16 @@ export class PgEngineStore implements EngineStore {
     return r ? toReview(r) : null;
   }
 
+  async supersedeReview(id: string, note: string): Promise<boolean> {
+    const rows = await this.q(
+      `UPDATE identity_review SET status = 'superseded', decided_at = now(),
+         reasons = coalesce(reasons, '[]'::jsonb) || jsonb_build_array($2::text)
+       WHERE id = $1 AND status = 'pending' RETURNING id`,
+      [id, note],
+    );
+    return rows.length > 0;
+  }
+
   async mergeProducts(fromId: string, intoId: string): Promise<void> {
     if (fromId === intoId) throw new Error("cannot merge a product into itself");
     await this.tx(async (q) => {
@@ -777,6 +826,36 @@ export class PgEngineStore implements EngineStore {
       [listingIds],
     );
     return rows.map(toObservation);
+  }
+
+  async observationsSince(opts: {
+    sinceIso: string;
+    listingIds?: string[];
+    changesOnly: boolean;
+    limit: number;
+  }): Promise<ObservationWithPrevious[]> {
+    const rows = await this.q(
+      `WITH scope AS (
+         SELECT DISTINCT listing_id FROM observations
+         WHERE fetched_at >= $1 AND outcome <> 'rejected'
+           AND ($2::uuid[] IS NULL OR listing_id = ANY($2::uuid[]))
+       ), seq AS (
+         SELECT o.*, lag(o.price) OVER w AS prev_price, lag(o.availability) OVER w AS prev_availability
+         FROM observations o JOIN scope s ON s.listing_id = o.listing_id
+         WHERE o.outcome <> 'rejected'
+         WINDOW w AS (PARTITION BY o.listing_id ORDER BY o.fetched_at, o.id)
+       )
+       SELECT * FROM seq WHERE fetched_at >= $1
+         AND (NOT $3 OR prev_price IS NULL OR prev_price <> price
+              OR prev_availability IS DISTINCT FROM availability)
+       ORDER BY fetched_at DESC, id DESC LIMIT $4`,
+      [opts.sinceIso, opts.listingIds ?? null, opts.changesOnly, opts.limit],
+    );
+    return rows.map((r) => ({
+      ...toObservation(r),
+      previousPrice: num(r.prev_price),
+      previousAvailability: r.prev_availability ?? null,
+    }));
   }
 
   async priceRangesSince(listingIds: string[], sinceIso: string): Promise<PriceRange[]> {

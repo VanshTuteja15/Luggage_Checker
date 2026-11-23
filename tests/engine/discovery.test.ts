@@ -3,7 +3,7 @@
 /*  listings). Real recorded sitemaps, stubbed network.                 */
 /* ------------------------------------------------------------------ */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   discoverSource,
   discoverViaTavily,
@@ -62,6 +62,9 @@ describe("sitemap parsing (recorded)", () => {
 });
 
 describe("discoverSource", () => {
+  afterEach(() => {
+    delete process.env.ENGINE_FLAGS;
+  });
   const productSitemap = parseSitemap(INDEX).entries.find((e) =>
     /sitemap_products_1/.test(e.loc),
   )!.loc;
@@ -76,6 +79,8 @@ describe("discoverSource", () => {
     };
     // Product JSON for the first two pages (the recorded Omni body stands in for both).
     for (const u of productUrls.slice(0, 2)) routes[`${u}.json`] = OMNI_JSON;
+    // The sitemap route (the catalogue read is on by default for this store since v4).
+    process.env.ENGINE_FLAGS = "source.canadaluggagedepot.catalog=off";
     const { store, rt, hits } = runtimeWith(routes);
 
     const r = await discoverSource(rt, luggagePack, "canadaluggagedepot", { maxFetches: 2 });

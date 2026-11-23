@@ -103,6 +103,11 @@ export type ReviewItem = {
   createdAt: string;
 };
 
+export type ObservationWithPrevious = Observation & {
+  previousPrice: number | null;
+  previousAvailability: string | null;
+};
+
 export type PriceRange = {
   listingId: string;
   price: number;
@@ -196,6 +201,11 @@ export interface EngineStore {
   /* registry */
   listSources(): Promise<SourceRecord[]>;
   upsertSources(sources: SourceRecord[]): Promise<void>;
+  /**
+   * v4 A6: insert or update a candidate store row (`discovery` set). Never
+   * touches a curated store: false when `rec.id` belongs to one.
+   */
+  saveCandidate(rec: SourceRecord): Promise<boolean>;
   setSourceEnabled(id: string, enabled: boolean): Promise<void>;
   getHealth(sourceId: string): Promise<SourceHealth>;
   saveHealth(h: SourceHealth): Promise<void>;
@@ -263,6 +273,12 @@ export interface EngineStore {
     decision: "approved" | "rejected",
     userId: string | null,
   ): Promise<ReviewItem | null>;
+  /**
+   * v4 A5.3: retire a pending review the current rules no longer send to a
+   * person (status `superseded`, `note` appended to its reasons). Nothing is
+   * merged or deleted; false = it wasn't pending.
+   */
+  supersedeReview(id: string, note: string): Promise<boolean>;
   /** Move everything of `fromId` onto `intoId` and retire `fromId`. */
   mergeProducts(fromId: string, intoId: string): Promise<void>;
   /** Detach a listing from its product into a new product of its own. */
@@ -287,6 +303,19 @@ export interface EngineStore {
   ): Promise<boolean>;
   /** Verified price ranges of these listings last seen at or after `sinceIso`. */
   priceRangesSince(listingIds: string[], sinceIso: string): Promise<PriceRange[]>;
+  /**
+   * v4 A7 (Price Data API history / changes): shown readings stored at or after
+   * `sinceIso` (only these listings, when given), newest first, each with the
+   * price and stock of the same listing's shown reading before it.
+   * `changesOnly`: just the readings whose price or stock differs from that
+   * one (or that are a listing's first).
+   */
+  observationsSince(opts: {
+    sinceIso: string;
+    listingIds?: string[];
+    changesOnly: boolean;
+    limit: number;
+  }): Promise<ObservationWithPrevious[]>;
 
   /* promotions (v4 A4.2) */
   /**

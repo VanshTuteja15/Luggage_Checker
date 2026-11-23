@@ -1,0 +1,267 @@
+openapi: 3.1.0
+info:
+  title: LuggageTracker Price Data API
+  version: "1.0.0"
+  description: |
+    Internal, read-only API over LuggageTracker's price index (v4 A7).
+    Answers come from the index only: no store is contacted by a request.
+    Every price carries its source, method, observed_at, confidence and the
+    label the app shows; a price read from a web search result is typed
+    "estimate" and labelled "confirm on site". Prices are CAD.
+    Keys are issued by the owner (`npm run api:new-key -- <name>`); the server
+    keeps only their SHA-256 hashes (PRICE_API_KEYS). Each key may make
+    PRICE_API_RATE_PER_MIN requests a minute (default 60).
+servers:
+  - url: /
+security:
+  - bearer: []
+paths:
+  /api/v1/search:
+    get:
+      summary: Products in the index matching a search, with their latest prices
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 200 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200":
+          description: Results, each with the matching store pages' latest prices
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [query, results, note]
+                properties:
+                  query: { type: object }
+                  note: { type: string }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [product, title, offers]
+                      properties:
+                        product: { oneOf: [{ $ref: "#/components/schemas/Product" }, { type: "null" }] }
+                        title: { type: string }
+                        offers: { type: array, items: { $ref: "#/components/schemas/Offer" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooMany" }
+        "503": { $ref: "#/components/responses/NotSetUp" }
+  /api/v1/products/{id}:
+    get:
+      summary: A product, its variants and the attributes stores state for them
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      responses:
+        "200":
+          description: The product
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [product]
+                properties: { product: { $ref: "#/components/schemas/Product" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/products/{id}/offers:
+    get:
+      summary: Each store page's latest price for a product, cheapest first
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      responses:
+        "200":
+          description: Offers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [product, offers, note]
+                properties:
+                  product: { $ref: "#/components/schemas/Product" }
+                  offers: { type: array, items: { $ref: "#/components/schemas/Offer" } }
+                  note: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/products/{id}/history:
+    get:
+      summary: Every stored reading of a product's store pages, newest first
+      parameters:
+        - { $ref: "#/components/parameters/ProductId" }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 90 } }
+      responses:
+        "200":
+          description: Readings (one is stored when a price or stock changes, and on each live search)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [product, since, readings]
+                properties:
+                  product: { $ref: "#/components/schemas/Product" }
+                  since: { type: string, format: date-time }
+                  readings:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Price"
+                        - type: object
+                          required: [listing_id, previous_amount]
+                          properties:
+                            listing_id: { type: string }
+                            previous_amount: { type: [number, "null"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/promotions:
+    get:
+      summary: Promotions stores state now (compare-at, structured data, page text), newest first
+      parameters:
+        - { name: store, in: query, schema: { type: string, pattern: "^[a-z0-9-]{2,60}$" } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: Current promotions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [promotions]
+                properties:
+                  promotions:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, source, url, method, observed_at, confidence, label, evidence]
+                      properties:
+                        kind: { type: string, enum: [percent_off, amount_off, sale_price, free_shipping, gift, code] }
+                        sale_price: { type: [number, "null"] }
+                        was_price: { type: [number, "null"] }
+                        percent_off: { type: [number, "null"] }
+                        ends_text: { type: [string, "null"] }
+                        ends_at: { type: [string, "null"] }
+                        evidence: { type: array, items: { type: string } }
+                        source: { $ref: "#/components/schemas/Source" }
+                        url: { type: string }
+                        method: { type: string, enum: [compare_at, jsonld, page_text] }
+                        observed_at: { type: string, format: date-time }
+                        confidence: { type: [number, "null"] }
+                        label: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/stores:
+    get:
+      summary: The stores in the registry and how they are read
+      responses:
+        "200":
+          description: Stores
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stores]
+                properties:
+                  stores:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, category, live_class, permission]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        category: { type: string }
+                        website: { type: [string, "null"] }
+                        live_class: { type: string }
+                        permission: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/changes:
+    get:
+      summary: Price or stock changes since a time, newest first
+      parameters:
+        - { name: since, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: Changes (a store page's first reading counts as one, with previous_amount null)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [since, changes]
+                properties:
+                  since: { type: string }
+                  changes:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Price"
+                        - type: object
+                          required: [listing_id, product_id, previous_amount, previous_availability]
+                          properties:
+                            listing_id: { type: string }
+                            product_id: { type: [string, "null"] }
+                            previous_amount: { type: [number, "null"] }
+                            previous_availability: { type: [string, "null"] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: "Also accepted as an x-api-key header." }
+  parameters:
+    ProductId: { name: id, in: path, required: true, schema: { type: string, pattern: "^[0-9a-f-]{8,64}$" } }
+  schemas:
+    Source:
+      type: object
+      required: [id, name]
+      properties: { id: { type: string }, name: { type: string } }
+    Price:
+      type: object
+      description: A price is never given without where, how and when it was read.
+      required: [amount, currency, list_price, availability, source, url, method, type, observed_at, confidence, label]
+      properties:
+        amount: { type: number }
+        currency: { type: string, const: CAD }
+        list_price: { type: [number, "null"] }
+        availability: { type: string, enum: [in_stock, out_of_stock, preorder, backorder, unknown] }
+        source: { $ref: "#/components/schemas/Source" }
+        url: { type: string }
+        method:
+          type: string
+          description: How it was read (shopify_ucp, shopify_product_json, html_structured, ebay_browse_api, amazon_creators_api, feed_import, manual_entry, web_estimate).
+        type: { type: string, enum: [observed, estimate] }
+        observed_at: { type: string, format: date-time }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        label: { type: string, examples: ["Verified live · 9:02 a.m.", "Last seen · Oct 8", "Web estimate · found 9:01 a.m. · confirm on site"] }
+    Offer:
+      allOf:
+        - $ref: "#/components/schemas/Price"
+        - type: object
+          required: [listing_id, title, colour]
+          properties:
+            listing_id: { type: string }
+            title: { type: string }
+            colour: { type: [string, "null"] }
+    Product:
+      type: object
+      required: [id, brand, line, name, size_class, size_label]
+      properties:
+        id: { type: string }
+        brand: { type: [string, "null"] }
+        line: { type: [string, "null"] }
+        name: { type: string }
+        size_class: { type: [string, "null"] }
+        size_label: { type: [string, "null"] }
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              colour: { type: [string, "null"] }
+              attributes: { type: object, description: "Each value with its method, evidence, confidence, store and date." }
+    Error:
+      type: object
+      required: [error]
+      properties: { error: { type: string, description: "One plain sentence." } }
+  responses:
+    BadRequest: { description: "A parameter isn't valid", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Unauthorized: { description: "No valid API key", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    NotFound: { description: "Not in the index", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    TooMany: { description: "Over the key's rate; see Retry-After", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    NotSetUp: { description: "No API keys are set on this server", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }

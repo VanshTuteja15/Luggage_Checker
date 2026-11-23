@@ -59,6 +59,33 @@ The app sends the email when something calls `POST /api/cron/tick`; Supabase cal
 - **The worker** (if one runs): set `APP_URL=https://<your-app-address>` and the same `CRON_SECRET` in `worker/.env`; it then calls the tick every 15 minutes (Calgary time).
 - **Vercel Cron** (`vercel.json`) calls the old daily-report address once a day at 16:00 UTC (10:00 a.m. in summer, 9:00 a.m. in winter). Vercel Hobby runs it at any point in that hour and is for non-commercial use, so it is a last resort only.
 
+## Own engine (v4) actions
+
+Added by the v4 work on `feat/own-engine` (`planning/v4/MASTER_PROMPT_V4_DRAFT.md`, progress in `docs/PROGRESS_V4.md`).
+
+### V4-1. Re-run migration 007 in Supabase (5 min) → AI cache, promotions, candidate stores, CLD catalogue on
+
+1. Supabase → SQL editor → paste `supabase/migrations/007_own_engine.sql` → Run. It is additive and idempotent, so it is safe to run again after each v4 commit.
+2. **Check:** `SELECT key, enabled FROM feature_flags WHERE key LIKE 'source.%catalog';` shows Canada Luggage Depot `true` (unless you set it yourself in /admin) and Delsey `false`; `SELECT count(*) FROM sources WHERE discovery IS NOT NULL;` answers 0 until a candidate store is added.
+
+### V4-2. (Optional) Re-check the identity review queue (2 min) → only real near matches left
+
+The stricter near-match rule (A5.3) applies to new reviews. Older pending items can be re-checked: `DATABASE_URL=<Supabase connection string> npm run engine:review-recheck` lists what would leave the queue; add `-- --apply` to mark those "superseded" (nothing is merged or deleted; the script's header has the one SQL line that undoes it). On the dev DB this left 42 of 311.
+
+### V4-3. (Only if wanted) Price Data API keys (5 min) → /api/v1/* answers
+
+1. `npm run api:new-key -- <name>` (e.g. `pricing-sheet`). It prints the key once (give it to its user) and an entry `name:<hash>`.
+2. Vercel → Settings → Environment Variables: `PRICE_API_KEYS` = the entries, comma-separated (only hashes; never the keys). Optional `PRICE_API_RATE_PER_MIN` (default 60). Redeploy.
+3. **Check:** `curl -H "Authorization: Bearer <key>" https://<app>/api/v1/stores` → 200 with the store list; without the header → 401. The reference is `docs/openapi-v1.yaml`. Until a key is set, every `/api/v1` route answers 503 "not switched on".
+
+### V4-4. Add 30 real customer queries to the eval (20 min) → the search measures what customers type
+
+Add them to `scripts/bench/sets/queries.json` with `"owner": true` and the expected brand / line / size (the file's other items show the shape), then `npm run eval`.
+
+### V4-5. Oracle Always Free: decide (pending) → an always-on worker and database for $0
+
+The kit is written but nothing is created: `docs/DEPLOY_ORACLE.md` has the steps, the costs to avoid and the checks. Decide between Oracle (needs a card for identity at sign-up) and the GitHub Actions route; no account is created until you do.
+
 ## 1. Publish the UCP agent profile → unlocks 6–10 Shopify stores
 
 Shopify's Catalog MCP requires every call to carry the URL of a public JSON profile describing our agent.

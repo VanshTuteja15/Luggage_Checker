@@ -546,6 +546,113 @@ for (const h of harnesses) {
       expect((await store.decideReview(pending[0].id, "approved", null))?.status).toBe("approved");
       expect(await store.decideReview(pending[0].id, "rejected", null)).toBeNull();
     });
+
+    it("reads shown readings since a time with the one before, changes only on request (v4 A7)", async () => {
+      const l = await store.upsertListing(listing());
+      await store.insertObservation(observation(l.id, 500, "2026-09-01T10:00:00.000Z"));
+      await store.insertObservation(observation(l.id, 480, "2026-10-01T10:00:00.000Z"));
+      await store.insertObservation(observation(l.id, 480, "2026-10-02T10:00:00.000Z"));
+      await store.insertObservation(observation(l.id, 1, "2026-10-02T11:00:00.000Z", "rejected"));
+      await store.insertObservation(observation(l.id, 450, "2026-10-03T10:00:00.000Z"));
+      const all = await store.observationsSince({
+        sinceIso: "2026-09-15T00:00:00.000Z",
+        listingIds: [l.id],
+        changesOnly: false,
+        limit: 10,
+      });
+      expect(all.map((o) => [o.price, o.previousPrice])).toEqual([
+        [450, 480],
+        [480, 480],
+        [480, 500],
+      ]);
+      const changes = await store.observationsSince({
+        sinceIso: "2026-09-15T00:00:00.000Z",
+        listingIds: [l.id],
+        changesOnly: true,
+        limit: 10,
+      });
+      expect(changes.map((o) => o.price)).toEqual([450, 480]);
+      expect(
+        (
+          await store.observationsSince({
+            sinceIso: "2026-09-15T00:00:00.000Z",
+            changesOnly: true,
+            limit: 1000,
+          })
+        ).filter((o) => o.listingId === l.id),
+      ).toHaveLength(2);
+    });
+
+    it("saves candidate stores, never over a curated one (v4 A6)", async () => {
+      const curated = (await store.listSources()).find((s) => !s.discovery)!;
+      const host = `cand-${Math.random().toString(36).slice(2, 8)}.example.ca`;
+      const cand = {
+        ...curated,
+        id: `cand-${host.replace(/\./g, "-")}`,
+        name: host,
+        retailerLabel: host,
+        status: "inactive" as const,
+        enabled: false,
+        routes: [],
+        permission: "unclear" as const,
+        allowedDomains: [host],
+        fetchHosts: [host],
+        marketHost: host,
+        discovery: {
+          state: "discovered" as const,
+          foundVia: "staff" as const,
+          note: null,
+          lookalikeOf: null,
+          addedAt: "2026-10-30T15:00:00.000Z",
+          probe: null,
+          decidedBy: null,
+          decidedAt: null,
+        },
+      };
+      expect(await store.saveCandidate(cand)).toBe(true);
+      const saved = (await store.listSources()).find((s) => s.id === cand.id);
+      expect(saved).toMatchObject({
+        status: "inactive",
+        enabled: false,
+        routes: [],
+        fetchHosts: [host],
+      });
+      expect(saved?.discovery?.state).toBe("discovered");
+      expect(
+        await store.saveCandidate({
+          ...cand,
+          discovery: { ...cand.discovery, state: "needs_review" },
+        }),
+      ).toBe(true);
+      expect((await store.listSources()).find((s) => s.id === cand.id)?.discovery?.state).toBe(
+        "needs_review",
+      );
+      // A curated store's id is never overwritten, and a record without discovery isn't a candidate.
+      expect(await store.saveCandidate({ ...cand, id: curated.id })).toBe(false);
+      expect(await store.saveCandidate({ ...cand, discovery: null })).toBe(false);
+      expect(
+        (await store.listSources()).find((s) => s.id === curated.id)?.discovery ?? null,
+      ).toBeNull();
+    });
+
+    it("supersedes a pending review with its reason, once, and never a decided one (v4 A5.3)", async () => {
+      const l = await store.upsertListing(listing());
+      const p = await store.createProduct({
+        category: "luggage",
+        brand: "Samsonite",
+        line: "r",
+        name: "R",
+        sizeClass: "medium",
+        identityKey: null,
+      });
+      await store.enqueueReview(l.id, p.id, 0.7, ["similar line"]);
+      const [item] = (await store.listReviews("pending", 200)).filter((r) => r.listingId === l.id);
+      expect(await store.supersedeReview(item.id, "not a real near match: test")).toBe(true);
+      expect(await store.supersedeReview(item.id, "again")).toBe(false);
+      const done = (await store.listReviews("superseded", 200)).find((r) => r.id === item.id);
+      expect(done?.reasons).toEqual(["similar line", "not a real near match: test"]);
+      expect(await store.decideReview(item.id, "approved", null)).toBeNull();
+    });
   });
 }
 

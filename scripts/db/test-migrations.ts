@@ -706,6 +706,36 @@ async function main(): Promise<void> {
       JSON.stringify(ret[0].r),
     );
 
+    /* ── 007: candidate stores + the CLD catalogue default (v4 run 2) ─ */
+    console.log(`\n${B}007 own engine: candidate stores, catalogue default${X}`);
+    {
+      const { rows: col } = await c.query(
+        "SELECT data_type FROM information_schema.columns WHERE table_name = 'sources' AND column_name = 'discovery'",
+      );
+      check("sources.discovery exists (jsonb)", col[0]?.data_type === "jsonb");
+      const { rows: cand } = await c.query(
+        "SELECT count(*)::int AS n FROM sources WHERE discovery IS NOT NULL",
+      );
+      check("no curated store is a candidate", cand[0].n === 0, `got ${cand[0].n}`);
+      const key = "source.canadaluggagedepot.catalog";
+      await c.query("UPDATE feature_flags SET enabled = false, updated_by = NULL WHERE key = $1", [
+        key,
+      ]);
+      await c.query(sql("supabase/migrations/007_own_engine.sql"));
+      const { rows: f1 } = await c.query("SELECT enabled FROM feature_flags WHERE key = $1", [key]);
+      check(
+        "007 turns a seed-written CLD catalogue flag on (owner, 2026-10-30)",
+        f1[0]?.enabled === true,
+      );
+      await c.query("UPDATE feature_flags SET enabled = false, updated_by = $2 WHERE key = $1", [
+        key,
+        adminUser,
+      ]);
+      await c.query(sql("supabase/migrations/007_own_engine.sql"));
+      const { rows: f2 } = await c.query("SELECT enabled FROM feature_flags WHERE key = $1", [key]);
+      check("007 leaves an admin's own setting of that flag alone", f2[0]?.enabled === false);
+    }
+
     /* ── 007: AI cache (v4 A1) ─────────────────────────────────────── */
     console.log(`\n${B}007 own engine: AI cache${X}`);
     await c.query(

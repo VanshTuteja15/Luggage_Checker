@@ -24,10 +24,12 @@
     "engine:discover": "node scripts/run-ts.mjs scripts/engine/discover.ts",
     "engine:research": "node scripts/run-ts.mjs scripts/engine/research.ts",
     "engine:reresolve": "node scripts/run-ts.mjs scripts/engine/reresolve.ts",
+    "engine:review-recheck": "node scripts/run-ts.mjs scripts/engine/review-recheck.ts",
     "shadow:run": "node scripts/run-ts.mjs scripts/shadow/run.ts",
     "shadow:report": "node scripts/run-ts.mjs scripts/shadow/report.ts",
     "e2e:auth": "node scripts/run-ts.mjs scripts/e2e/local-auth.ts",
-    "eval": "node scripts/run-ts.mjs scripts/eval/run.ts"
+    "eval": "node scripts/run-ts.mjs scripts/eval/run.ts",
+    "api:new-key": "node scripts/run-ts.mjs scripts/api/new-key.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

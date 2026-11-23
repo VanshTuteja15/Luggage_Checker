@@ -42,6 +42,8 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   "source.luggagecity.ucp": "Luggage City UCP (audit: legal review first)",
   "source.unluggage.product_json": "U.N. Luggage product JSON (turn on after reading the terms)",
   "source.bentley.product_json": "Bentley product JSON (turn on after reading the terms)",
+  "discovery.single_page_reads":
+    "Read one page of a probed candidate store once, labelled 'not reviewed yet' (off)",
   "source.samsonite-ca.html_structured":
     "Samsonite.ca pages (blocked by PerimeterX from our network)",
   "source.tumi-ca.html_structured": "TUMI.ca pages (blocked by PerimeterX from our network)",

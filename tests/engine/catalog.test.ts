@@ -146,7 +146,7 @@ describe("discovery through the catalogue (I-CAT-1)", () => {
   });
 
   it("indexes the store, and a second identical run stores no new observations", async () => {
-    process.env.ENGINE_FLAGS = "source.canadaluggagedepot.catalog=on";
+    // On by default for Canada Luggage Depot since the owner's answer of 2026-10-30.
     const { fetchImpl } = stubNet({
       [pageUrl(1)]: { body: PAGE },
       [pageUrl(2)]: { body: '{"products":[]}' },
@@ -212,11 +212,44 @@ describe("discovery through the catalogue (I-CAT-1)", () => {
       promotions: [],
     });
     expect(facts[3]).toMatchObject({ sourceId: null, promotions: [], attributes: {} });
-    // Off by default: the same store goes through its sitemaps as before.
-    delete process.env.ENGINE_FLAGS;
+    // Switched off (a flag row or ENGINE_FLAGS), the store goes through its sitemaps as before.
+    process.env.ENGINE_FLAGS = "source.canadaluggagedepot.catalog=off";
     rt.invalidate();
     expect(
       (await discoverSource(rt, luggagePack, "canadaluggagedepot", { maxFetches: 0 })).method,
     ).toBe("sitemap");
+  });
+
+  it("a complete read retires pages the store no longer lists; one that would retire > 30% retires nothing", async () => {
+    const store = new MemoryEngineStore(SOURCE_SEED);
+    const run = async (page: string) => {
+      const { fetchImpl } = stubNet({
+        [pageUrl(1)]: { body: page },
+        [pageUrl(2)]: { body: '{"products":[]}' },
+        ...ownPages(),
+      });
+      const rt = createRuntime(store, {
+        fetchImpl,
+        resolve: async () => ["23.227.38.65"],
+        limiter: instantLimiter(),
+      });
+      return discoverSource(rt, luggagePack, "canadaluggagedepot", { maxFetches: 0 });
+    };
+    const all = (JSON.parse(PAGE) as { products: { handle: string }[] }).products;
+    expect((await run(PAGE)).deactivated).toBe(0);
+
+    const dropped = `${BASE}/products/${all[39].handle}`;
+    const fewer = await run(JSON.stringify({ products: all.slice(0, 39) }));
+    expect(fewer.deactivated).toBeGreaterThanOrEqual(1);
+    const listings = await store.listingsBySource("canadaluggagedepot", 500);
+    const isDropped = (url: string) => url.split("?")[0] === dropped;
+    expect(listings.filter((l) => isDropped(l.url)).length).toBeGreaterThan(0);
+    expect(listings.filter((l) => isDropped(l.url)).every((l) => !l.active)).toBe(true);
+    expect(listings.filter((l) => !isDropped(l.url)).every((l) => l.active)).toBe(true);
+
+    // Half the catalogue missing looks like a glitch, not a closing-down sale.
+    const half = await run(JSON.stringify({ products: all.slice(0, 20) }));
+    expect(half.deactivated).toBe(0);
+    expect(half.errors.join(" ")).toMatch(/nothing was retired/);
   });
 });
