@@ -39,6 +39,8 @@ import type {
   FlagRow,
   ObservationWithPrevious,
   PriceRange,
+  PricedProduct,
+  PricedProductFilter,
   ProductInput,
   PromotionInput,
   PromotionRecord,
@@ -48,10 +50,11 @@ import type {
   SessionPatch,
   SessionTiming,
   SourceHealthStat,
+  VocabularyRow,
 } from "./port";
 import { mergeAttributes, type StoredAttribute } from "../extract/attributes";
 import { promotionFingerprint } from "../extract/promotions";
-import { haystackFor, matchScore, preferExactSize, tsQueryFor } from "./terms";
+import { haystackFor, matchScore, preferExactSize, sizeFilterOf, tsQueryFor } from "./terms";
 
 /* ── connection ───────────────────────────────────────────────────── */
 
@@ -481,7 +484,7 @@ export class PgEngineStore implements EngineStore {
          AND ($3::text IS NULL OR l.size_class IS NULL OR l.size_class = $3)
        ORDER BY ts_rank(l.search_tsv, to_tsquery('simple', $1)) DESC, l.title
        LIMIT $4`,
-      [tsq, opts.sourceIds ?? null, q.sizeClass, Math.min(500, opts.limit * 3)],
+      [tsq, opts.sourceIds ?? null, sizeFilterOf(q), Math.min(500, opts.limit * 3)],
     );
     // Final ordering uses the same scorer as the memory store.
     const scored = rows
@@ -516,6 +519,106 @@ export class PgEngineStore implements EngineStore {
       "SELECT source_id, count(*)::int AS n FROM listings WHERE active GROUP BY source_id",
     );
     return Object.fromEntries(rows.map((r) => [r.source_id, r.n]));
+  }
+
+  async vocabularyRows(): Promise<VocabularyRow[]> {
+    const rows = await this.q(
+      `SELECT coalesce(p.brand, l.brand) AS brand, p.line, count(*)::int AS listings
+         FROM listings l
+         LEFT JOIN catalog_products p ON p.id = l.product_id AND p.status = 'active'
+        WHERE l.active
+        GROUP BY 1, 2`,
+    );
+    return rows.map((r) => ({ brand: r.brand, line: r.line, listings: r.listings }));
+  }
+
+  private trigram: boolean | null = null;
+
+  async popularQueries(
+    prefix: string,
+    opts: { sinceIso: string; limit: number },
+  ): Promise<{ query: string; count: number }[]> {
+    const p = prefix.trim().toLowerCase();
+    // pg_trgm (Supabase: Database → Extensions) adds typo-tolerant matches; without it, prefixes only.
+    if (this.trigram === null)
+      this.trigram =
+        (await this.q("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'").catch(() => []))
+          .length > 0;
+    const like = p.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const match = this.trigram
+      ? "(lower(btrim(query)) LIKE $2 || '%' OR similarity(lower(btrim(query)), $4) > 0.45)"
+      : "lower(btrim(query)) LIKE $2 || '%'";
+    const rows = await this.q(
+      `SELECT lower(btrim(query)) AS q, count(*)::int AS n
+         FROM research_sessions
+        WHERE created_at >= $1 AND ${match}
+        GROUP BY 1
+       HAVING count(*) >= 2
+        ORDER BY n DESC, q ASC
+        LIMIT $3`,
+      this.trigram ? [opts.sinceIso, like, opts.limit, p] : [opts.sinceIso, like, opts.limit],
+    );
+    return rows.map((r) => ({ query: r.q, count: r.n }));
+  }
+
+  async pricedProducts(f: PricedProductFilter): Promise<PricedProduct[]> {
+    const rows = await this.q(
+      `WITH latest AS (
+         SELECT DISTINCT ON (o.listing_id)
+                o.listing_id, o.price, o.adapter, o.as_of, o.availability, o.fetched_at
+           FROM observations o
+           JOIN listings l ON l.id = o.listing_id AND l.active
+           JOIN catalog_products p ON p.id = l.product_id AND p.status = 'active'
+          WHERE o.outcome <> 'rejected'
+            AND ($1::text IS NULL OR lower(p.brand) = lower($1))
+            AND ($2::text IS NULL OR p.line = $2)
+            AND ($3::text IS NULL OR p.size_class = $3)
+            AND NOT (p.id = ANY($6::uuid[]))
+          ORDER BY o.listing_id, o.fetched_at DESC, o.id DESC
+       ), priced AS (
+         SELECT DISTINCT ON (p.id)
+                p.id, p.name, p.brand, p.line, p.size_class, l.title, l.url, l.source_id,
+                x.price, x.adapter, x.as_of, x.availability,
+                greatest(x.fetched_at, coalesce(
+                  (SELECT max(r.last_seen_at) FROM price_ranges r WHERE r.listing_id = x.listing_id),
+                  x.fetched_at)) AS seen_at
+           FROM latest x
+           JOIN listings l ON l.id = x.listing_id
+           JOIN catalog_products p ON p.id = l.product_id
+          WHERE x.price > 0
+            AND x.adapter NOT IN ('web_estimate', 'tracked_record')
+            AND ($5::numeric IS NULL OR x.price < $5)
+          ORDER BY p.id, x.price ASC
+       )
+       SELECT * FROM priced
+        WHERE seen_at >= $4 OR adapter IN ('feed_import', 'manual_entry')
+        ORDER BY price ASC, name ASC
+        LIMIT $7`,
+      [
+        f.brand ?? null,
+        f.line ?? null,
+        f.sizeClass ?? null,
+        f.sinceIso,
+        f.below ?? null,
+        f.excludeProductIds ?? [],
+        f.limit,
+      ],
+    );
+    return rows.map((r) => ({
+      productId: r.id,
+      name: r.name,
+      brand: r.brand,
+      line: r.line,
+      sizeClass: r.size_class,
+      title: r.title,
+      url: r.url,
+      sourceId: r.source_id,
+      price: Number(r.price),
+      adapter: r.adapter,
+      seenAt: new Date(r.seen_at).toISOString(),
+      asOf: r.as_of ? new Date(r.as_of).toISOString() : null,
+      availability: r.availability,
+    }));
   }
 
   async linkListing(

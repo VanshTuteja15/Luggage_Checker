@@ -52,7 +52,13 @@ import { expectedFromQuery } from "../estimates/validate";
 import { resolveListing } from "../identity/resolve";
 import { observeOffer } from "../observe";
 import type { ExpectedIdentity } from "../validate";
-import { groupOffers, rankProducts } from "./answer";
+import { groupOffers } from "./answer";
+import { rankForQuery } from "./rank";
+import { buildSuggestions } from "./suggest";
+import { summariseAnswer } from "./summary";
+
+/** Suggestions come from the index; if they take longer than this, the answer goes without. */
+const SUGGESTIONS_MS = 400;
 
 export type SessionRunDeps = {
   rt: EngineRuntime;
@@ -788,15 +794,32 @@ export async function runResearchSession(
         writer.emit("store_done", r.sourceId, { row: r });
     finished = true;
 
-    const products = rankProducts(groupOffers(collected, pack), (p) =>
+    // v5 F2.3: full matches first, then in stock, lowest price, freshest; relevance breaks ties.
+    const products = rankForQuery(groupOffers(collected, pack), parsed, pack, (p) =>
       matchScore(
         parsed,
         haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }),
         p.sizeClass,
       ),
     );
+    // v5 F2.4–F2.5: the answer in sentences (from these offers only) and suggestions from
+    // the index (never fetched; at most SUGGESTIONS_MS, then left out).
+    const summary = summariseAnswer(products, {
+      now: new Date(now()),
+      wantsAccessory: parsed.sizeClass === "accessory",
+    });
+    const retailers = new Map((await rt.sources()).map((s) => [s.id, s.retailerLabel]));
+    const suggestions = await Promise.race([
+      buildSuggestions(store, pack, products, parsed, {
+        now: new Date(now()),
+        retailerOf: (id) => retailers.get(id) ?? id,
+      }).catch(() => undefined),
+      new Promise<undefined>((r) => setTimeout(() => r(undefined), SUGGESTIONS_MS)),
+    ]);
     const finishedAt = now();
     const answer: ResearchAnswer = {
+      summary,
+      ...(suggestions ? { suggestions } : {}),
       query: session.query,
       parsed,
       products,
@@ -858,9 +881,14 @@ async function planListings(
     if (listings.length) return listings;
   }
   // A query that states inches ("Nexis Large 28") skips listings that state another size.
+  // When the size came only from the inches ("Delsey 23 inch"), a listing stating
+  // no inches must at least be that size class (or of unknown size).
   const fits = (l: ListingRecord) => {
     const n = parsed.inches ? deps.pack.inchesOf(l.title) : null;
-    return !n || n === parsed.inches;
+    if (n) return n === parsed.inches;
+    if (parsed.sizeByMeasure && parsed.sizeClass)
+      return !l.sizeClass || l.sizeClass === parsed.sizeClass;
+    return true;
   };
   const found = (
     await store.searchListings(parsed, {

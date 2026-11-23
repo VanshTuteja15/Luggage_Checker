@@ -22,6 +22,7 @@ import { extractAttributes } from "../extract/attributes";
 import { decodeHtmlText } from "../extract/structured";
 import { flagOn } from "../flags";
 import { observeOffer } from "../observe";
+import { markVocabularyStale } from "../query/vocabulary";
 import type { EngineRuntime } from "../recorder";
 import { checkRoutes, sourceForUrl } from "../registry";
 import type { CategoryPack, ListingRecord, ParsedQuery, SourceRecord } from "../types";
@@ -151,6 +152,18 @@ export async function discoverSource(
   pack: CategoryPack,
   sourceId: string,
   opts: { maxFetches?: number; maxUrls?: number; signal?: AbortSignal } = {},
+): Promise<DiscoveryResult> {
+  const r = await discoverSourceRun(rt, pack, sourceId, opts);
+  // New or retired pages change the brands and lines search knows (v5 F2.2).
+  if (r.newListings > 0 || r.deactivated > 0) markVocabularyStale();
+  return r;
+}
+
+async function discoverSourceRun(
+  rt: EngineRuntime,
+  pack: CategoryPack,
+  sourceId: string,
+  opts: { maxFetches?: number; maxUrls?: number; signal?: AbortSignal },
 ): Promise<DiscoveryResult> {
   const out: DiscoveryResult = {
     sourceId,

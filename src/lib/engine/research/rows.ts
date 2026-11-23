@@ -11,6 +11,7 @@
 import { canonicalUrl } from "../adapters/base";
 import type { AnswerOffer, AnswerProduct, Availability } from "../types";
 import { compareOffers, isCurrent } from "./answer";
+import { freshnessRank } from "./rank";
 
 export type StockState = "in_stock" | "out_of_stock" | "unknown";
 
@@ -173,12 +174,18 @@ export function productViews(
       const rows = storeRows(product.offers);
       return { product, rows, headline: headlineFor(rows) };
     });
+  // v5 F2.3: full matches first (a product missing part of the search never
+  // leads), then in stock, then the lowest price, then the freshest price.
+  const fails = (v: ProductView) => (v.product.fails?.length ? 1 : 0);
   const tier = (v: ProductView) => (!v.headline ? 2 : v.headline.allOutOfStock ? 1 : 0);
   return views.sort((a, b) => {
+    const f = fails(a) - fails(b);
+    if (f !== 0) return f;
     const t = tier(a) - tier(b);
     if (t !== 0) return t;
     const pa = a.headline?.row.price ?? a.rows[0]?.price ?? Infinity;
     const pb = b.headline?.row.price ?? b.rows[0]?.price ?? Infinity;
-    return pa - pb;
+    if (pa !== pb) return pa - pb;
+    return freshnessRank(a.product) - freshnessRank(b.product);
   });
 }

@@ -29,6 +29,10 @@
     "shadow:report": "node scripts/run-ts.mjs scripts/shadow/report.ts",
     "e2e:auth": "node scripts/run-ts.mjs scripts/e2e/local-auth.ts",
     "eval": "node scripts/run-ts.mjs scripts/eval/run.ts",
+    "coverage": "node scripts/run-ts.mjs scripts/bench/coverage.ts",
+    "bench:suggest": "node scripts/run-ts.mjs scripts/bench/suggest-latency.ts",
+    "engine:vocab": "node scripts/run-ts.mjs scripts/engine/vocabulary.ts",
+    "engine:resize": "node scripts/run-ts.mjs scripts/engine/resize.ts",
     "api:new-key": "node scripts/run-ts.mjs scripts/api/new-key.ts"
   },
   "dependencies": {

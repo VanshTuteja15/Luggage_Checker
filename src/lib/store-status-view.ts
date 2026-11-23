@@ -18,20 +18,27 @@ export type StoreStatusRow = {
 };
 
 export type UsageSummary = {
-  estimates: { configured: boolean; left: number; cap: number };
+  /**
+   * `configured`: the web search service has its key; `on`: the owner's
+   * switch (flag `estimates.web`, on by default). Estimates run only with both.
+   */
+  estimates: { configured: boolean; on: boolean; left: number; cap: number };
   /** null when the price database (which keeps the email log) isn't connected. */
   emails: { last24h: number; dailyLimit: number; thisMonth: number; monthlyLimit: number } | null;
 };
 
 const num = (x: number) => x.toLocaleString("en-CA");
 
+/** The web-estimates line of the Usage tab, exactly as shown. */
+export function estimatesLine(e: UsageSummary["estimates"]): string {
+  if (!e.configured) return "Web estimates aren't set up, so none are used.";
+  if (!e.on) return "Web estimates are switched off, so none are used.";
+  return `Web estimates left this month: ${num(Math.max(0, e.left))}`;
+}
+
 /** The Usage tab's lines, exactly as shown. */
 export function usageLines(u: UsageSummary): string[] {
-  const lines = [
-    u.estimates.configured
-      ? `Web estimates left this month: ${num(Math.max(0, u.estimates.left))}`
-      : "Web estimates are off, so none are used.",
-  ];
+  const lines = [estimatesLine(u.estimates)];
   if (u.emails)
     lines.push(
       `Emails sent in the last 24 hours: ${num(u.emails.last24h)} of ${num(u.emails.dailyLimit)}`,

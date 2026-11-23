@@ -12,7 +12,7 @@ import { emailDailyLimit, emailMonthlyLimit, monthStartUtc } from "@/lib/mailer"
 export const dynamic = "force-dynamic";
 
 /** Web estimates and emails used against their free limits (Store status → Usage). */
-async function usage(now: Date): Promise<UsageSummary> {
+async function usage(now: Date, estimatesOn: boolean): Promise<UsageSummary> {
   const { rt } = getEngine();
   const credits = await tavilyUsage().catch(() => null);
   const pool = pgPoolOf(rt.store);
@@ -33,8 +33,13 @@ async function usage(now: Date): Promise<UsageSummary> {
   }
   return {
     estimates: credits
-      ? { configured: true, left: Math.max(0, credits.cap - credits.used), cap: credits.cap }
-      : { configured: false, left: 0, cap: 0 },
+      ? {
+          configured: true,
+          on: estimatesOn,
+          left: Math.max(0, credits.cap - credits.used),
+          cap: credits.cap,
+        }
+      : { configured: false, on: estimatesOn, left: 0, cap: 0 },
     emails,
   };
 }
@@ -48,13 +53,14 @@ export async function GET(req: NextRequest) {
   try {
     await requireAdmin(req);
     const { rt } = getEngine();
-    const [overview, used, estimateRejections] = await Promise.all([
+    const [overview, estimateRejections] = await Promise.all([
       adminOverview(rt),
-      usage(new Date()),
       estimateStoreFor(rt)
         .recentRejections(60)
         .catch(() => []),
     ]);
+    const estimatesOn = overview.flags.some((f) => f.key === "estimates.web" && f.enabled);
+    const used = await usage(new Date(), estimatesOn);
     return NextResponse.json({ ...overview, usage: used, estimateRejections });
   } catch (err) {
     return errorResponse(err, "GET /api/admin/overview");

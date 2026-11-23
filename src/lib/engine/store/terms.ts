@@ -29,12 +29,28 @@ export function haystackFor(
   ]);
 }
 
-/** Words a listing must contain to count as a match for the query. */
+/**
+ * Words a listing must contain to count as a match for the query. Optional
+ * line words (International, Expandable) only rank: a store may leave them out.
+ */
 export function requiredTerms(q: ParsedQuery): string[] {
   if (q.gtin) return [q.gtin];
   if (q.model) return [q.model];
-  const terms = [...tokenize(q.brand ?? ""), ...q.line.flatMap(tokenize)];
+  const optional = new Set(q.optionalLine ?? []);
+  const terms = [
+    ...tokenize(q.brand ?? ""),
+    ...q.line.filter((w) => !optional.has(w)).flatMap(tokenize),
+  ];
   return [...new Set(terms.length ? terms : q.tokens.flatMap(tokenize))];
+}
+
+/**
+ * Size filter for a query: the class, unless the size came only from inches
+ * ("Delsey 23 inch"), in which case listings are matched on the inches
+ * instead (a store may call its 23" a carry-on).
+ */
+export function sizeFilterOf(q: ParsedQuery): string | null {
+  return q.sizeByMeasure && q.inches ? null : q.sizeClass;
 }
 
 /** 0 = not a match. Size classes never cross: a carry-on query never returns a large. */
@@ -46,7 +62,8 @@ export function matchScore(
   const required = requiredTerms(q);
   if (required.length === 0) return 0;
   if (!required.every((t) => haystack.has(t))) return 0;
-  if (q.sizeClass && listingSize && listingSize !== q.sizeClass) return 0;
+  const size = sizeFilterOf(q);
+  if (size && listingSize && listingSize !== size) return 0;
   let score = required.length * 2;
   for (const t of q.tokens) if (haystack.has(t)) score += 0.5;
   if (q.sizeClass && listingSize === q.sizeClass) score += 2;
@@ -64,7 +81,7 @@ export function preferExactSize<T extends { l: Pick<ListingRecord, "sourceId" | 
   q: ParsedQuery,
   scored: T[],
 ): T[] {
-  if (!q.sizeClass) return scored;
+  if (!sizeFilterOf(q)) return scored;
   const exact = new Set(
     scored.filter((x) => x.l.sizeClass === q.sizeClass).map((x) => x.l.sourceId),
   );

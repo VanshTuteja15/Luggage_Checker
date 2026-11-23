@@ -10,6 +10,7 @@
 import { engineConfig } from "@/lib/engine/config";
 import { createEstimateFinder } from "@/lib/engine/estimates/deps";
 import { luggagePack } from "@/lib/engine/packs/luggage";
+import { ensureVocabulary } from "@/lib/engine/query/load";
 import { createRuntime } from "@/lib/engine/recorder";
 import { ResearchManager } from "@/lib/engine/research/manager";
 import { SOURCE_SEED } from "@/lib/engine/registry";
@@ -46,6 +47,8 @@ async function main(): Promise<void> {
 
   const rt = createRuntime(store, {}, (err) => log("error", "could not record fetch attempts", { err }));
   rt.recorder.start();
+  // Search vocabulary from our catalogue (v5 F2.2), refreshed before each research session.
+  await ensureVocabulary(store);
   await queue.start();
   await registerJobs(queue, rt);
 
@@ -64,6 +67,7 @@ async function main(): Promise<void> {
     storeKind: store.kind,
     runResearch: (sessionId) => {
       log("info", "research session accepted", { sessionId });
+      void ensureVocabulary(store);
       void research.start(sessionId).then((answer) =>
         log("info", "research session finished", { sessionId, firstPriceMs: answer?.firstPriceMs ?? null, totalMs: answer?.totalMs ?? null, deadlineHit: answer?.deadlineHit ?? null }),
       );

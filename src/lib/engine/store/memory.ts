@@ -29,6 +29,8 @@ import type {
   FlagRow,
   ObservationWithPrevious,
   PriceRange,
+  PricedProduct,
+  PricedProductFilter,
   ProductInput,
   PromotionInput,
   PromotionRecord,
@@ -38,6 +40,7 @@ import type {
   SessionPatch,
   SessionTiming,
   SourceHealthStat,
+  VocabularyRow,
 } from "./port";
 import { mergeAttributes, type StoredAttribute } from "../extract/attributes";
 import { promotionFingerprint } from "../extract/promotions";
@@ -231,6 +234,83 @@ export class MemoryEngineStore implements EngineStore {
     for (const l of this.listings.values())
       if (l.active) out[l.sourceId] = (out[l.sourceId] ?? 0) + 1;
     return out;
+  }
+
+  async vocabularyRows(): Promise<VocabularyRow[]> {
+    const counts = new Map<string, VocabularyRow>();
+    for (const l of this.listings.values()) {
+      if (!l.active) continue;
+      const p = l.productId ? this.products.get(l.productId) : undefined;
+      const product = p && p.status === "active" ? p : undefined;
+      const brand = product?.brand ?? l.brand;
+      const line = product?.line ?? null;
+      const key = `${brand ?? ""}|${line ?? ""}`;
+      const row = counts.get(key) ?? { brand, line, listings: 0 };
+      row.listings += 1;
+      counts.set(key, row);
+    }
+    return [...counts.values()];
+  }
+
+  async popularQueries(
+    prefix: string,
+    opts: { sinceIso: string; limit: number },
+  ): Promise<{ query: string; count: number }[]> {
+    const p = prefix.trim().toLowerCase();
+    const counts = new Map<string, number>();
+    for (const s of this.sessions.values()) {
+      const q = s.query.trim().toLowerCase();
+      if (s.createdAt < opts.sinceIso || !q.startsWith(p)) continue;
+      counts.set(q, (counts.get(q) ?? 0) + 1);
+    }
+    return [...counts]
+      .filter(([, n]) => n >= 2)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, opts.limit)
+      .map(([query, count]) => ({ query, count }));
+  }
+
+  async pricedProducts(f: PricedProductFilter): Promise<PricedProduct[]> {
+    const best = new Map<string, PricedProduct>();
+    const exclude = new Set(f.excludeProductIds ?? []);
+    for (const l of this.listings.values()) {
+      if (!l.active || !l.productId || exclude.has(l.productId)) continue;
+      const p = this.products.get(l.productId);
+      if (!p || p.status !== "active") continue;
+      if (f.brand && (p.brand ?? "").toLowerCase() !== f.brand.toLowerCase()) continue;
+      if (f.line && p.line !== f.line) continue;
+      if (f.sizeClass && p.sizeClass !== f.sizeClass) continue;
+      const o = await this.latestObservation(l.id, { shownOnly: true });
+      if (!o || o.price <= 0 || o.adapter === "web_estimate" || o.adapter === "tracked_record")
+        continue;
+      const range = this.ranges
+        .filter((r) => r.listingId === l.id)
+        .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt))[0];
+      const seenAt = range && range.lastSeenAt > o.fetchedAt ? range.lastSeenAt : o.fetchedAt;
+      const stored = o.adapter === "feed_import" || o.adapter === "manual_entry";
+      if (!stored && seenAt < f.sinceIso) continue;
+      if (f.below != null && o.price >= f.below) continue;
+      const prev = best.get(p.id);
+      if (prev && prev.price <= o.price) continue;
+      best.set(p.id, {
+        productId: p.id,
+        name: p.name,
+        brand: p.brand,
+        line: p.line,
+        sizeClass: p.sizeClass,
+        title: l.title,
+        url: l.url,
+        sourceId: l.sourceId,
+        price: o.price,
+        adapter: o.adapter,
+        seenAt,
+        asOf: o.asOf,
+        availability: o.availability,
+      });
+    }
+    return [...best.values()]
+      .sort((a, b) => a.price - b.price || a.name.localeCompare(b.name))
+      .slice(0, f.limit);
   }
 
   async linkListing(

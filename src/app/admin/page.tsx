@@ -201,7 +201,9 @@ export default function StoreStatusPage() {
             {tab === "Data entry" && (
               <DataEntry data={data} onAct={onAct} pending={act.isPending} />
             )}
-            {tab === "Usage" && <Usage usage={data.usage} />}
+            {tab === "Usage" && (
+              <Usage usage={data.usage} onAct={onAct} pending={act.isPending} />
+            )}
           </div>
           <Technical data={data} onAct={onAct} />
         </div>
@@ -314,19 +316,59 @@ function Reviews({ data, onAct }: { data: Overview; onAct: ActFn }) {
   );
 }
 
-function Usage({ usage }: { usage: UsageSummary }) {
+function Usage({
+  usage,
+  onAct,
+  pending,
+}: {
+  usage: UsageSummary;
+  onAct: ActFn;
+  pending: boolean;
+}) {
+  const { configured, on } = usage.estimates;
   return (
-    <ul className="space-y-2 rounded-xl border border-border bg-card p-4 text-sm">
-      {usageLines(usage).map((line) => (
-        <li key={line} className="tabular-nums">
-          {line}
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-medium" id="est-switch-h">
+            Web estimates for stores we can&rsquo;t check live
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Prices found in web search results for stores such as Amazon.ca, Walmart.ca and
+            Samsonite.ca, always labelled &ldquo;confirm on site&rdquo;.
+            {!configured && " The web search service isn't set up yet, so none are found."}
+          </p>
+        </div>
+        <label className="inline-flex shrink-0 items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-labelledby="est-switch-h"
+            checked={on}
+            disabled={pending}
+            onChange={(e) =>
+              onAct(
+                "/api/admin/flags",
+                { key: "estimates.web", enabled: e.target.checked },
+                e.target.checked ? "Web estimates switched on." : "Web estimates switched off.",
+              )
+            }
+            className={FOCUS}
+          />
+          {on ? "On" : "Off"}
+        </label>
+      </div>
+      <ul className="space-y-2 rounded-xl border border-border bg-card p-4 text-sm">
+        {usageLines(usage).map((line) => (
+          <li key={line} className="tabular-nums">
+            {line}
+          </li>
+        ))}
+        <li className="pt-1 text-xs text-muted-foreground">
+          Both are free allowances. When one runs out, the app keeps working with verified,
+          staff-checked and dealer prices, and the morning email waits for the next day.
         </li>
-      ))}
-      <li className="pt-1 text-xs text-muted-foreground">
-        Both are free allowances. When one runs out, the app keeps working with verified,
-        staff-checked and dealer prices, and the morning email waits for the next day.
-      </li>
-    </ul>
+      </ul>
+    </div>
   );
 }
 

@@ -21,6 +21,7 @@ import {
   type ResearchSort,
 } from "@/components/research/ResearchResults";
 import { toSearchProduct } from "@/components/research/track";
+import { apiFetch } from "@/lib/api-client";
 import type { AnswerProduct } from "@/lib/engine/types";
 import {
   useAddToEmail,
@@ -116,6 +117,15 @@ export default function SearchPage() {
     );
   };
 
+  // Autocomplete from our own index (v5 F2.5): keystrokes never leave the app.
+  const complete = useCallback(
+    (typed: string) =>
+      apiFetch<{ suggestions: { text: string }[] }>(
+        `/api/search/suggest?q=${encodeURIComponent(typed)}`,
+      ).then((r) => r.suggestions.map((s) => s.text)),
+    [],
+  );
+
   const runSearch = useCallback(
     (raw?: string) => {
       const term = (raw ?? query).trim();
@@ -148,6 +158,7 @@ export default function SearchPage() {
           onRemoveHistory={removeSearch}
           onClearHistory={clearSearches}
           suggestions={SUGGESTIONS}
+          complete={authed ? complete : undefined}
           pending={running}
           placeholder="Brand, collection and size, e.g. Samsonite Paralux Medium"
         />
@@ -224,6 +235,7 @@ export default function SearchPage() {
           trackedKeys={trackedKeys}
           trackPending={track.isPending}
           renderActions={renderActions}
+          onSearch={(t) => runSearch(t)}
         />
       )}
     </AppLayout>

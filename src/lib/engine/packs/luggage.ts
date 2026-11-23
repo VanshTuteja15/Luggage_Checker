@@ -12,6 +12,7 @@
 /* ------------------------------------------------------------------ */
 
 import { COLOUR_MODIFIERS, COLOUR_WORDS, extractColour } from "@/lib/search/colours";
+import { parseQueryWith, type QueryPrimitives } from "../query/parse";
 import type { CategoryPack, ParsedQuery } from "../types";
 
 export const SIZE_CLASSES = [
@@ -154,13 +155,18 @@ function isAccessory(title: string): boolean {
   );
 }
 
-/** Inches → size class. Luggage sizes are quoted in whole inches 18–32. */
-function classFromInches(n: number): SizeClass | null {
+/**
+ * Inches → size class (v5 F2.1, the owner's table): carry-on ≤ 22", medium
+ * 23–26", large 27–30", extra large ≥ 31"; under 18" is an underseat bag.
+ * A store's own size word always wins over this (Delsey's 23" "Carry-On");
+ * brand-specific readings of a query's bare inches are in query/parse.ts.
+ */
+export function classFromInches(n: number): SizeClass | null {
   if (n < 14 || n > 34) return null;
   if (n <= 17) return "underseat";
   if (n <= 22) return "carry_on";
   if (n <= 26) return "medium";
-  if (n <= 29) return "large";
+  if (n <= 30) return "large";
   return "extra_large";
 }
 
@@ -451,37 +457,30 @@ function normaliseGtin(digits: string): string | null {
   return d.padStart(14, "0");
 }
 
+/** The pack's own brand spellings, for the query parser's typo correction. */
+const BRAND_ALIAS_MAP: ReadonlyMap<string, string> = new Map(
+  BRAND_ALIASES.map(({ alias, brand }) => [alias, brand]),
+);
+
+/** The pack's word rules, handed to the query parser (src/lib/engine/query/). */
+const QUERY_PRIMITIVES: QueryPrimitives = {
+  brandOf,
+  sizeClassOf,
+  inchesOf,
+  colourOf,
+  lineOf,
+  modelOf,
+  normaliseGtin,
+  classFromInches,
+  optionalLineWords: OPTIONAL_LINE_WORDS,
+  filler: FILLER,
+  queryFiller: QUERY_FILLER,
+  brandAliases: BRAND_ALIAS_MAP,
+};
+
+/** v5 F2.2: the full query parser (brand, line, sizes, type, price limits, store, typos…). */
 function parseQuery(raw: string): ParsedQuery {
-  const text = raw.trim().slice(0, 200);
-  const priceMatch = text.match(/\b(?:under|below|less than|max|<)\s*\$?\s*(\d{2,5})\b/i);
-  const maxPrice = priceMatch ? Number(priceMatch[1]) : null;
-  const withoutPrice = priceMatch ? text.replace(priceMatch[0], " ") : text;
-
-  const gtinMatch = withoutPrice.match(/\b(\d{12,14})\b/);
-  const gtin = gtinMatch ? normaliseGtin(gtinMatch[1]) : null;
-
-  const brand = brandOf(withoutPrice);
-  const modelHit = gtin ? null : modelOf(withoutPrice, brand);
-  const model = modelHit ? modelHit.model : null;
-  const sizeClass = sizeClassOf(withoutPrice);
-  const inches = inchesOf(withoutPrice);
-  const colour = colourOf(withoutPrice);
-  const line = lineOf(withoutPrice, brand).filter(
-    (w) => !QUERY_FILLER.has(w) && !OPTIONAL_LINE_WORDS.has(w) && !/^\d{12,14}$/.test(w),
-  );
-
-  const tokens = [
-    ...new Set(
-      withoutPrice
-        .toLowerCase()
-        .replace(/[^a-z0-9.\s-]/g, " ")
-        .split(/\s+/)
-        .map((w) => w.replace(/^[-.]+|[-.]+$/g, ""))
-        .filter((w) => w && !QUERY_FILLER.has(w) && !FILLER.has(w)),
-    ),
-  ];
-
-  return { raw: text, tokens, brand, line, sizeClass, inches, colour, gtin, model, maxPrice };
+  return parseQueryWith(raw, QUERY_PRIMITIVES);
 }
 
 export const luggagePack: CategoryPack = {

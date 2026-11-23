@@ -68,7 +68,16 @@ export type EstimateDeps = {
   emailDoneToday: () => Promise<boolean>;
   now: () => number;
   timeZone?: string;
+  /** How long the combined search may take before the brand-store search starts alongside it. */
+  brandHeadStartMs?: number;
 };
+
+/**
+ * Tavily usually answers a snippet search in 1–2 s, but sometimes takes 3–4 s;
+ * the brand-store search used to start only after it and then didn't fit in
+ * the session's time (v5 F1: "error" on every Samsonite and TUMI search).
+ */
+export const BRAND_HEAD_START_MS = 1_200;
 
 export type EstimateRequest = {
   purpose: EstimatePurpose;
@@ -175,30 +184,41 @@ export async function findEstimates(
 
   /* ── spending: the planner before every paid search ──────────────── */
   let credits = 0;
+  // Searches this call has been allowed (a basic search is 1 credit). Counted
+  // when allowed, so two searches started together can't both take the last one.
+  let approved = 0;
   let usage: { cap: number; used: number } | null | undefined;
   const maySpend = async (): Promise<EstimateSkip | null> => {
     if (usage === undefined) usage = await deps.usage().catch(() => null);
     if (!usage) return "not_configured";
-    // This call's own searches count at once: the month's usage was read before them.
-    const used = usage.used + credits;
-    const overCall = req.maxCredits !== undefined && credits + 1 > req.maxCredits;
-    if (req.preBudgeted) return used >= usage.cap ? "cap" : overCall ? "budget" : null;
-    const [emailSpentToday, emailDailyNeed, emailDoneToday] = await Promise.all([
-      deps.estimates.spentOn(today, "email").catch(() => 0),
-      deps.emailDailyNeed().catch(() => 0),
-      deps.emailDoneToday().catch(() => false),
-    ]);
-    const state = {
-      cap: usage.cap,
-      usedThisMonth: used,
-      emailSpentToday,
-      emailDailyNeed,
-      daysLeftInMonth: daysLeftInMonth(today),
-      emailDoneToday,
-    };
-    if (remainingThisMonth(state) < 1) return "cap";
-    if (allowance(req.purpose, state, estimateDailyBudget()) < 1 || overCall) return "budget";
-    return null;
+    const [emailSpentToday, emailDailyNeed, emailDoneToday] = req.preBudgeted
+      ? [0, 0, false]
+      : await Promise.all([
+          deps.estimates.spentOn(today, "email").catch(() => 0),
+          deps.emailDailyNeed().catch(() => 0),
+          deps.emailDoneToday().catch(() => false),
+        ]);
+    // Decided in one step after the awaits. This call's own searches count at
+    // once: the month's usage was read before them.
+    const used = usage.used + Math.max(credits, approved);
+    const overCall = req.maxCredits !== undefined && approved + 1 > req.maxCredits;
+    let skip: EstimateSkip | null = null;
+    if (req.preBudgeted) skip = used >= usage.cap ? "cap" : overCall ? "budget" : null;
+    else {
+      const state = {
+        cap: usage.cap,
+        usedThisMonth: used,
+        emailSpentToday,
+        emailDailyNeed,
+        daysLeftInMonth: daysLeftInMonth(today),
+        emailDoneToday,
+      };
+      if (remainingThisMonth(state) < 1) skip = "cap";
+      else if (allowance(req.purpose, state, estimateDailyBudget()) < 1 || overCall)
+        skip = "budget";
+    }
+    if (!skip) approved += 1;
+    return skip;
   };
 
   /* ── results: cached, or one budgeted search ─────────────────────── */
@@ -249,13 +269,6 @@ export async function findEstimates(
     return { results, foundAt: nowIso, fresh: true };
   };
 
-  const combined = await fetchResults(
-    key,
-    [...new Set(stores.flatMap((s) => s.allowedDomains))],
-    15,
-  );
-  if (typeof combined === "string") return empty(combined);
-
   /* ── candidates for the asked stores only ───────────────────────── */
   const wanted = new Map(stores.map((s) => [s.id, s]));
   const candidates: EstimateCandidate[] = [];
@@ -281,7 +294,6 @@ export async function findEstimates(
       if (f.fresh) fresh.add(c);
     }
   };
-  collect(combined);
 
   /* ── the brand's own store: always checked ───────────────────────── */
   const brandStore = houseBrandStore(req.expected.brand, stores);
@@ -296,15 +308,42 @@ export async function findEstimates(
     brandSearch = got.fresh ? "searched" : "cached";
     collect(got, store.id);
   };
+  // (assigned inside startBrandSearch, possibly by the timer: the wide type again)
+  let brandRun = null as Promise<void> | null;
+  const startBrandSearch = (): Promise<void> | null => {
+    if (!brandStore) return null;
+    brandRun ??= searchBrandStore(brandStore);
+    return brandRun;
+  };
+
+  /* ── the combined search; the brand search joins it if it's slow ─── */
+  const headStart = brandStore
+    ? setTimeout(() => void startBrandSearch(), deps.brandHeadStartMs ?? BRAND_HEAD_START_MS)
+    : null;
+  const combined = await fetchResults(
+    key,
+    [...new Set(stores.flatMap((s) => s.allowedDomains))],
+    15,
+  );
+  if (headStart) clearTimeout(headStart);
+  if (typeof combined === "string") {
+    // A brand search already on its way still counts (and has been paid for).
+    if (brandRun) await brandRun;
+    if (candidates.length === 0)
+      return { ...empty(combined), credits, brandSearch: brandRun ? brandSearch : null };
+  } else collect(combined);
+  const combinedFresh = typeof combined !== "string" && combined.fresh;
+
   // Nothing from it passes the rules that don't need verified prices: search
   // its domain now, while those prices are still coming in.
   const early =
-    brandStore &&
+    brandRun ??
+    (brandStore &&
     !candidates.some(
       (c) => c.sourceId === brandStore.id && passesScreen(c, brandStore, req.expected, deps.pack),
     )
-      ? searchBrandStore(brandStore)
-      : null;
+      ? startBrandSearch()
+      : null);
   const hadCandidates = candidates.length > 0;
   let [references] = await Promise.all([
     hadCandidates ? req.references().catch(() => []) : Promise.resolve([] as ReferencePrice[]),
@@ -314,7 +353,7 @@ export async function findEstimates(
     return {
       ...empty(null),
       credits,
-      fromCache: !combined.fresh && brandSearch !== "searched",
+      fromCache: !combinedFresh && brandSearch !== "searched",
       brandSearch,
     };
   }
@@ -331,7 +370,7 @@ export async function findEstimates(
     await searchBrandStore(brandStore);
     verdicts = validateEstimates(candidates, wanted, req.expected, references, deps.pack);
   }
-  const fromCache = !combined.fresh && brandSearch !== "searched";
+  const fromCache = !combinedFresh && brandSearch !== "searched";
 
   /* ── store and shape ──────────────────────────────────────────────── */
   const canonical = (u: string) => {
@@ -426,7 +465,7 @@ export async function findEstimates(
             price: v.price,
             listPrice: null,
             currency: "CAD",
-            availability: "unknown",
+            availability: v.availability,
             seller: null,
             condition: null,
             validation: {
@@ -466,7 +505,7 @@ export async function findEstimates(
       price: v.price,
       listPrice: null,
       currency: "CAD",
-      availability: "unknown",
+      availability: v.availability,
       colour: deps.pack.colourOf(title),
       freshness: { kind: "estimate", foundAt: c.foundAt },
       confidence: v.singleSource ? 0.5 : 0.7,

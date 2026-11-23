@@ -1,0 +1,556 @@
+{
+  "summary": {
+    "date": "2026-11-23T15:10:29.771Z",
+    "queries": 15,
+    "skipped": [],
+    "medianStoresWithNumber": 1,
+    "medianStoresBefore": 1,
+    "queriesWithThreeOrMore": 0,
+    "estimatesShown": 1,
+    "wrongIdentityOffers": 0,
+    "credits": 4,
+    "requests": 38,
+    "tavilyUsedBefore": 0,
+    "tavilyUsedAfter": 4,
+    "totalMsMax": 4198,
+    "firstPriceMsMedian": 203
+  },
+  "rows": [
+    {
+      "id": "q01",
+      "query": "Samsonite Omni 3.0 Large",
+      "sessionId": "c7924e58-ce2a-404b-ad8b-f89e9d3717d9",
+      "firstPriceMs": 1524,
+      "totalMs": 2871,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 5,
+        "fromCache": false,
+        "skipped": null,
+        "brandSearch": "searched"
+      },
+      "credits": 1,
+      "requests": 2,
+      "products": 1,
+      "top": {
+        "name": "Samsonite Omni 3.0 Large Spinner Expandable Luggage",
+        "sizeClass": "large",
+        "lowest": 279.99
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 279.99,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/samsonite-omni-3-0-large-spinner-expandable-luggage?variant=32336061399106",
+          "title": "Samsonite Omni 3.0 Large Spinner Expandable Luggage - Brushed Silver"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q04",
+      "query": "samsonite paralux medium",
+      "sessionId": "7e218edf-f461-4a35-a54d-0c8155cbeb84",
+      "firstPriceMs": 205,
+      "totalMs": 264,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": "cached"
+      },
+      "credits": 0,
+      "requests": 1,
+      "products": 1,
+      "top": {
+        "name": "Samsonite Paralux Hardside Expandable Spinner Medium Luggage",
+        "sizeClass": "medium",
+        "lowest": 434.95
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 434.95,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/samsonite-paralux-hardside-expandable-spinner-medium-luggage?variant=44684512231600",
+          "title": "Samsonite Paralux Hardside Expandable Spinner Medium Luggage - Black"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q14",
+      "query": "Nexis Large 28",
+      "sessionId": "4a266fb6-8b9e-453d-bea6-679ac04b04f6",
+      "firstPriceMs": 203,
+      "totalMs": 1158,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": null
+      },
+      "credits": 0,
+      "requests": 2,
+      "products": 2,
+      "top": {
+        "name": "Samsonite Nexis Spinner Large Luggage (28)",
+        "sizeClass": "large",
+        "lowest": 839.95
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 839.95,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/samsonite-nexis-spinner-large-luggage-28?variant=45455119384752",
+          "title": "Samsonite Nexis Spinner Large Luggage (28) - Onyx Black"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q03",
+      "query": "Samsonite carry-on black",
+      "sessionId": "b889eec0-1712-446a-b157-25eb6629c9f8",
+      "firstPriceMs": 196,
+      "totalMs": 3302,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 5,
+        "fromCache": false,
+        "skipped": null,
+        "brandSearch": "searched"
+      },
+      "credits": 1,
+      "requests": 4,
+      "products": 4,
+      "top": {
+        "name": "Samsonite Infuse NXT Carry-On Luggage",
+        "sizeClass": "carry_on",
+        "lowest": 129.95
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 129.95,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/samsonite-infuse-nxt-carry-on-luggage?variant=44036501176496",
+          "title": "Samsonite Infuse NXT Carry-On Luggage - Navy"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q07",
+      "query": "TUMI 19 Degree International Expandable carry-on",
+      "sessionId": "781d2604-8806-4616-9479-c5821a362b26",
+      "firstPriceMs": 133,
+      "totalMs": 3245,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": "cached"
+      },
+      "credits": 0,
+      "requests": 4,
+      "products": 4,
+      "top": {
+        "name": "Tumi 19 Degree International Expandable 4 Wheeled Carry-On Luggage",
+        "sizeClass": "carry_on",
+        "lowest": 1030
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 1030,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/tumi-19-degree-international-expandable-4-wheeled-carry-on-luggage?variant=43174883885232",
+          "title": "Tumi 19 Degree International Expandable 4 Wheeled Carry-On Luggage - Black"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q47",
+      "query": "tumi 19 degree lite medium",
+      "sessionId": "9e44f9f5-c289-4b80-b4f4-695bd9038460",
+      "firstPriceMs": null,
+      "totalMs": 2523,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 7,
+        "fromCache": false,
+        "skipped": null,
+        "brandSearch": "searched"
+      },
+      "credits": 1,
+      "requests": 0,
+      "products": 0,
+      "top": null,
+      "topStores": [],
+      "anyProductStores": 0,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q09",
+      "query": "Travelpro Platinum Elite 21",
+      "sessionId": "08387e1f-337f-490d-a179-799f66486174",
+      "firstPriceMs": 305,
+      "totalMs": 3284,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 1,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": "found"
+      },
+      "credits": 0,
+      "requests": 4,
+      "products": 4,
+      "top": {
+        "name": "Platinum Elite 21” Expandable Carry-On Spinner",
+        "sizeClass": "carry_on",
+        "lowest": 467.95
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 467.95,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/travelpro-platinum-elite-21-inch-expandable-carry-on-spinner-luggage?variant=12113761140843",
+          "title": "Travelpro Platinum Elite 21 Inch Expandable Carry-On Spinner Luggage - Grey"
+        },
+        {
+          "store": "Travelpro.ca",
+          "sourceId": "travelpro-ca",
+          "price": 584.99,
+          "kind": "estimate",
+          "label": "Web estimate · found 7:58 a.m. · confirm on site",
+          "url": "https://travelpro.ca/products/platinum-elite-21-expandable-carry-on-spinner",
+          "title": "Platinum Elite 21” Expandable Carry-On Spinner"
+        }
+      ],
+      "anyProductStores": 2,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q39",
+      "query": "travelpro maxlite 5 22 inch",
+      "sessionId": "b7d666a1-8685-4241-a30e-8db6cb737c59",
+      "firstPriceMs": 189,
+      "totalMs": 3252,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": false,
+        "skipped": null,
+        "brandSearch": "searched"
+      },
+      "credits": 1,
+      "requests": 3,
+      "products": 3,
+      "top": {
+        "name": "Travelpro Maxlite 5 International Carry-On Rollaboard Luggage",
+        "sizeClass": "carry_on",
+        "lowest": 175.95
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 175.95,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/travelpro-maxlite-5-international-carry-on-roallaboard-luggage?variant=8676305305707",
+          "title": "Travelpro Maxlite 5 International Carry-On Rollaboard Luggage - Black"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q05",
+      "query": "Delsey Chatelet Air 2.0 26 inch",
+      "sessionId": "d728222f-6572-413a-82f8-74e527f94e4e",
+      "firstPriceMs": 2189,
+      "totalMs": 4198,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": null
+      },
+      "credits": 0,
+      "requests": 5,
+      "products": 1,
+      "top": {
+        "name": "CHATELET AIR 2.0 | 26-Inch Check-In Suitcase",
+        "sizeClass": "medium",
+        "lowest": 333
+      },
+      "topStores": [
+        {
+          "store": "Delsey.ca",
+          "sourceId": "delsey-ca",
+          "price": 333,
+          "kind": "verified",
+          "label": "Verified live · 8:11 a.m.",
+          "url": "https://delsey.ca/products/40167681015-chatelet-air-2-0-26-inch-check-in-suitcase-angora",
+          "title": "CHATELET AIR 2.0 | 26-Inch Check-In Suitcase, Angora"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q36",
+      "query": "Delsey ALU'R 28",
+      "sessionId": "63f8ef6c-c9a6-41db-b671-1c6505de9996",
+      "firstPriceMs": null,
+      "totalMs": 27,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": null
+      },
+      "credits": 0,
+      "requests": 0,
+      "products": 0,
+      "top": null,
+      "topStores": [],
+      "anyProductStores": 0,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q10",
+      "query": "briggs and riley baseline global carry on",
+      "sessionId": "4afc66ae-c25d-4b8c-918e-09be19269ddd",
+      "firstPriceMs": 213,
+      "totalMs": 3165,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": "budget"
+      },
+      "credits": 0,
+      "requests": 4,
+      "products": 4,
+      "top": {
+        "name": "Briggs & Riley Baseline Global 2-Wheel Carry-On Luggage",
+        "sizeClass": "carry_on",
+        "lowest": 799
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 799,
+          "kind": "verified",
+          "label": "Verified live · 8:11 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/briggs-riley-new-baseline-global-2-wheel-carry-on-luggage?variant=41553483858096",
+          "title": "Briggs & Riley Baseline Global 2-Wheel Carry-On Luggage - Black"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q46",
+      "query": "briggs riley baseline medium",
+      "sessionId": "c94d4d3f-a201-48f8-a39f-7c62d3e1b8fe",
+      "firstPriceMs": 160,
+      "totalMs": 1353,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 3,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": "found"
+      },
+      "credits": 0,
+      "requests": 2,
+      "products": 2,
+      "top": {
+        "name": "Briggs & Riley Baseline Compact Checked Medium Expandable Spinner Luggage",
+        "sizeClass": "medium",
+        "lowest": 949
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 949,
+          "kind": "verified",
+          "label": "Verified live · 8:11 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/briggs-riley-baseline-compact-checked-medium-expandable-spinner-luggage?variant=45062882492592",
+          "title": "Briggs & Riley Baseline Compact Checked Medium Expandable Spinner Luggage - Plum"
+        }
+      ],
+      "anyProductStores": 3,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q43",
+      "query": "american tourister airconic large spinner navy",
+      "sessionId": "805f538d-ce8a-4228-8153-1ec8f90e3507",
+      "firstPriceMs": 170,
+      "totalMs": 170,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": null
+      },
+      "credits": 0,
+      "requests": 1,
+      "products": 1,
+      "top": {
+        "name": "American Tourister Airconic Spinner Large Luggage",
+        "sizeClass": "large",
+        "lowest": 205.95
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 205.95,
+          "kind": "verified",
+          "label": "Verified live · 8:11 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/american-tourister-airconic-spinner-large-luggage?variant=45031581253808",
+          "title": "American Tourister Airconic Spinner Large Luggage - Neptune Blue"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q37",
+      "query": "aluminum carry-on",
+      "sessionId": "debbeb22-7df1-462c-bb00-45754eb3458d",
+      "firstPriceMs": 134,
+      "totalMs": 1151,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": null
+      },
+      "credits": 0,
+      "requests": 2,
+      "products": 3,
+      "top": {
+        "name": "Tumi 19 Degree Aluminum International Carry-On Luggage",
+        "sizeClass": "carry_on",
+        "lowest": 1680
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 1680,
+          "kind": "verified",
+          "label": "Verified live · 8:10 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/tumi-19-degree-aluminum-international-carry-on-luggage?variant=43175451721904",
+          "title": "Tumi 19 Degree Aluminum International Carry-On Luggage - Matte Black"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    },
+    {
+      "id": "q02",
+      "query": "cheapest 24 inch hard spinner under $300",
+      "sessionId": "5e3d1d2a-c153-48fe-a141-553c9ddb0397",
+      "firstPriceMs": 222,
+      "totalMs": 3176,
+      "deadlineHit": false,
+      "estimatesRun": true,
+      "estimates": {
+        "accepted": 0,
+        "rejected": 0,
+        "fromCache": true,
+        "skipped": null,
+        "brandSearch": null
+      },
+      "credits": 0,
+      "requests": 4,
+      "products": 4,
+      "top": {
+        "name": "Air Canada Belmont Expandable 24\" Spinner Luggage",
+        "sizeClass": "medium",
+        "lowest": 99.99
+      },
+      "topStores": [
+        {
+          "store": "Canada Luggage Depot",
+          "sourceId": "canadaluggagedepot",
+          "price": 99.99,
+          "kind": "verified",
+          "label": "Verified live · 8:11 a.m.",
+          "url": "https://www.canadaluggagedepot.ca/products/air-canada-belmont-expandable-24-spinner-luggage",
+          "title": "Air Canada Belmont Expandable 24\" Spinner Luggage - Charcoal"
+        }
+      ],
+      "anyProductStores": 1,
+      "wrongIdentity": []
+    }
+  ]
+}

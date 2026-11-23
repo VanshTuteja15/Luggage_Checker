@@ -24,6 +24,8 @@ import { extractPromotion } from "@/lib/engine/extract/promotions";
 import { resolveFlags } from "@/lib/engine/flags";
 import { matchVerdict, type MatchVerdict } from "@/lib/engine/identity/match";
 import { luggagePack as pack } from "@/lib/engine/packs/luggage";
+import { setVocabulary } from "@/lib/engine/query";
+import { BASE_VOCABULARY } from "@/lib/engine/query/vocabulary-base";
 import { SOURCE_SEED } from "@/lib/engine/registry/seed";
 import {
   baseColour,
@@ -60,6 +62,8 @@ const task = (rows: FieldScores[], extra: Json = {}, note?: string): Task => ({
 });
 
 function queries(): Task {
+  // The parser reads our catalogue's brands and lines, as the server does (v5 F2.2).
+  setVocabulary(BASE_VOCABULARY);
   const rows = items("queries").map((it) => {
     const e = it.expected as Json;
     const p = pack.parseQuery(String(it.query));
@@ -68,6 +72,7 @@ function queries(): Task {
       line: e.line === null ? null : sameSet(normLine(p.line), normLine(e.line)),
       sizeClass: (p.sizeClass ?? null) === (e.sizeClass ?? null),
       inches: (p.inches ?? null) === (e.inches ?? null),
+      type: (p.type ?? null) === (e.type ?? null),
       colour: baseColour(p.colour) === baseColour(e.colour),
       maxPrice: numEq(p.maxPrice, e.maxPrice ?? null, 0.5),
       model: String(p.model ?? "") === String(e.model ?? ""),
@@ -76,7 +81,7 @@ function queries(): Task {
   return task(
     rows,
     {},
-    "type (spinner/duffel/…) isn't produced by the parser yet, so it isn't scored",
+    `vocabulary snapshot of ${BASE_VOCABULARY.builtAt?.slice(0, 10) ?? "none"} (${BASE_VOCABULARY.brands.length} brands, ${BASE_VOCABULARY.lines.length} lines); type scored from v5`,
   );
 }
 

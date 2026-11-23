@@ -24,7 +24,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { usd } from "@/lib/format";
 import { SIZE_LABELS, luggagePack, type SizeClass } from "@/lib/engine/packs/luggage";
-import { freshnessLabel, groupOffers, rankProducts } from "@/lib/engine/research/answer";
+import { freshnessLabel, groupOffers } from "@/lib/engine/research/answer";
+import { rankForQuery } from "@/lib/engine/research/rank";
+import { summariseAnswer } from "@/lib/engine/research/summary";
 import {
   productViews,
   STOCK_TEXT,
@@ -33,7 +35,14 @@ import {
   type StoreRow,
 } from "@/lib/engine/research/rows";
 import { haystackFor, matchScore } from "@/lib/engine/store/terms";
-import type { AnswerOffer, AnswerProduct, StoreStatusRow } from "@/lib/engine/types";
+import type {
+  AnswerOffer,
+  AnswerProduct,
+  AnswerSuggestions,
+  ParsedQuery,
+  StoreStatusRow,
+  SuggestedProduct,
+} from "@/lib/engine/types";
 import type { ResearchView } from "@/lib/research-client";
 import { retailerColor } from "@/lib/retailers";
 import { cn } from "@/lib/utils";
@@ -304,6 +313,11 @@ function ProductCard({
               .filter(Boolean)
               .join(" · ")}
           </p>
+          {!!product.fails?.length && (
+            <p className="mt-1 text-xs text-warning">
+              Doesn&rsquo;t match all of your search: {product.fails.join(", ")}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
               variant={tracked ? "outline" : "default"}
@@ -342,6 +356,119 @@ function ProductCard({
         </ul>
       </div>
     </article>
+  );
+}
+
+/* ── the answer on top and what to look at next (v5 F2.4–F2.5) ─────── */
+
+/** Minimal wiring: the polished card, chips and sections are Cursor tasks T-702/T-703. */
+function AnswerCard({
+  sentences,
+  parsed,
+  onSearch,
+}: {
+  sentences: string[];
+  parsed: ParsedQuery;
+  onSearch?: (q: string) => void;
+}) {
+  if (sentences.length === 0 && !parsed.correctedFrom) return null;
+  return (
+    <section
+      aria-label="Answer"
+      className="mb-4 rounded-xl border border-border bg-card px-4 py-3 text-sm"
+    >
+      {parsed.correctedFrom && parsed.didYouMean && (
+        <p className="mb-1 text-xs text-muted-foreground">
+          Showing results for &ldquo;{parsed.didYouMean}&rdquo;.{" "}
+          {onSearch && (
+            <button
+              type="button"
+              onClick={() => onSearch(parsed.correctedFrom!)}
+              className={cn("text-primary hover:underline", FOCUS)}
+            >
+              Search for &ldquo;{parsed.correctedFrom}&rdquo; instead
+            </button>
+          )}
+        </p>
+      )}
+      {sentences.map((s) => (
+        <p key={s} className="leading-relaxed">
+          {s}
+        </p>
+      ))}
+    </section>
+  );
+}
+
+function SuggestionList({
+  title,
+  items,
+  onSearch,
+}: {
+  title: string;
+  items: SuggestedProduct[];
+  onSearch?: (q: string) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section aria-label={title} className="rounded-xl border border-border bg-card px-4 py-3">
+      <h2 className="mb-2 text-xs font-medium text-muted-foreground">{title}</h2>
+      <ul className="space-y-2">
+        {items.map((s) => (
+          <li key={s.productId} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+            {onSearch ? (
+              <button
+                type="button"
+                onClick={() => onSearch(s.name)}
+                className={cn("text-left hover:underline", FOCUS)}
+              >
+                {s.name}
+              </button>
+            ) : (
+              <span>{s.name}</span>
+            )}
+            <span className="text-xs text-muted-foreground">
+              <strong className="tabular-nums text-foreground">{usd(s.price)}</strong> at{" "}
+              <a
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn("hover:underline", FOCUS)}
+              >
+                {s.retailer}
+              </a>
+              {s.saving ? ` · ${usd(s.saving)} less` : ""} · {s.label}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Suggestions({
+  suggestions,
+  onSearch,
+}: {
+  suggestions: AnswerSuggestions;
+  onSearch?: (q: string) => void;
+}) {
+  const { otherSizes, cheaper, colours } = suggestions;
+  if (otherSizes.length + cheaper.length + colours.length === 0) return null;
+  return (
+    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <SuggestionList title="Other sizes in this line" items={otherSizes} onSearch={onSearch} />
+      <SuggestionList title="Cheaper alternatives" items={cheaper} onSearch={onSearch} />
+      {colours.length > 0 && (
+        <section
+          aria-label="Colours"
+          className="rounded-xl border border-border bg-card px-4 py-3 sm:col-span-2"
+        >
+          <h2 className="mb-1 text-xs font-medium text-muted-foreground">Also comes in</h2>
+          <p className="text-sm">{colours.join(" · ")}</p>
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -440,6 +567,7 @@ export function ResearchResults({
   trackedKeys,
   trackPending,
   renderActions,
+  onSearch,
 }: {
   view: ResearchView;
   sort: ResearchSort;
@@ -451,31 +579,44 @@ export function ResearchResults({
   trackPending: boolean;
   /** Extra per-product buttons (e.g. "Add to morning email"). */
   renderActions?: (p: AnswerProduct) => ReactNode;
+  /** Run another search (suggestions, "search for what I typed instead"). */
+  onSearch?: (q: string) => void;
 }) {
   const rows = useMemo(
     () => Object.values(view.rows).sort((a, b) => a.retailer.localeCompare(b.retailer)),
     [view.rows],
   );
 
-  const views = useMemo(() => {
-    const parsed = luggagePack.parseQuery(view.query);
-    const base =
+  // The answer's parse when it's back (it used the server's full vocabulary).
+  const parsed = useMemo(
+    () => view.answer?.parsed ?? luggagePack.parseQuery(view.query),
+    [view.answer, view.query],
+  );
+  const ranked = useMemo(
+    () =>
       view.answer?.products ??
-      rankProducts(groupOffers(view.offers, luggagePack), (p) =>
+      rankForQuery(groupOffers(view.offers, luggagePack), parsed, luggagePack, (p) =>
         matchScore(
           parsed,
           haystackFor({ brand: p.brand, title: p.name, identifiers: p.identifiers }),
           p.sizeClass,
         ),
-      );
-    const list = productViews(base, { wantsAccessory: parsed.sizeClass === "accessory" });
+      ),
+    [view.answer, view.offers, parsed],
+  );
+  const sentences = useMemo(
+    () => summariseAnswer(ranked, { wantsAccessory: parsed.sizeClass === "accessory" }),
+    [ranked, parsed],
+  );
+  const views = useMemo(() => {
+    const list = productViews(ranked, { wantsAccessory: parsed.sizeClass === "accessory" });
     if (sort === "price-asc") return list;
     return [...list].sort((a, b) =>
       sort === "price-desc"
         ? (b.headline?.row.price ?? -1) - (a.headline?.row.price ?? -1)
         : b.rows.length - a.rows.length,
     );
-  }, [view.answer, view.offers, view.query, sort]);
+  }, [ranked, parsed, sort]);
 
   // Stores with a price in the results don't need a link row as well.
   const shownSources = new Set(views.flatMap((v) => v.rows.map((r) => r.sourceId)));
@@ -537,6 +678,8 @@ export function ResearchResults({
         </p>
       )}
 
+      <AnswerCard sentences={sentences} parsed={parsed} onSearch={onSearch} />
+
       <div aria-live="polite">
         {views.length === 0 && !running ? (
           <p className="rounded-xl border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
@@ -558,6 +701,10 @@ export function ResearchResults({
           </div>
         )}
       </div>
+
+      {!running && answer?.suggestions && (
+        <Suggestions suggestions={answer.suggestions} onSearch={onSearch} />
+      )}
 
       {!running && <OtherStores rows={others} />}
 

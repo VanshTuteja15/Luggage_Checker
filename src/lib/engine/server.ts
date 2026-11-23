@@ -15,6 +15,7 @@
 import { engineConfig } from "./config";
 import { createEstimateFinder } from "./estimates/deps";
 import { luggagePack } from "./packs/luggage";
+import { ensureVocabulary } from "./query/load";
 import { createRuntime, type EngineRuntime } from "./recorder";
 import { SOURCE_SEED } from "./registry";
 import { ResearchManager } from "./research/manager";
@@ -27,7 +28,11 @@ type Engine = { rt: EngineRuntime; manager: ResearchManager };
 const g = globalThis as unknown as { __luggageEngine?: Engine };
 
 export function getEngine(): Engine {
-  if (g.__luggageEngine) return g.__luggageEngine;
+  if (g.__luggageEngine) {
+    // Search vocabulary from our catalogue (v5 F2.2): refreshed in the background when old.
+    void ensureVocabulary(g.__luggageEngine.rt.store);
+    return g.__luggageEngine;
+  }
   const cfg = engineConfig();
   const store = cfg.databaseUrl
     ? new PgEngineStore(cfg.databaseUrl, 3)
@@ -44,6 +49,7 @@ export function getEngine(): Engine {
     estimates: createEstimateFinder(rt, luggagePack),
   });
   g.__luggageEngine = { rt, manager };
+  void ensureVocabulary(store);
   return g.__luggageEngine;
 }
 

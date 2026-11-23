@@ -653,6 +653,74 @@ for (const h of harnesses) {
       expect(done?.reasons).toEqual(["similar line", "not a real near match: test"]);
       expect(await store.decideReview(item.id, "approved", null)).toBeNull();
     });
+
+    it("vocabulary rows, priced products and popular searches (v5 F2.2, F2.5)", async () => {
+      const brand = `Brand${tag()}`;
+      const now = new Date();
+      const today = now.toISOString();
+      const old = new Date(now.getTime() - 60 * 86_400_000).toISOString();
+      const make = async (size: string, price: number, at: string, adapter?: "web_estimate") => {
+        const p = await store.createProduct({
+          category: "luggage",
+          brand,
+          line: "voyager",
+          name: `${brand} Voyager ${size}`,
+          sizeClass: size,
+          identityKey: `${brand}|voyager|${size}`,
+        });
+        const l = await store.upsertListing(
+          listing({ title: `${brand} Voyager ${size}`, brand, sizeClass: size }),
+        );
+        await store.linkListing(l.id, p.id, null);
+        await store.insertObservation({
+          ...observation(l.id, price, at),
+          ...(adapter ? { adapter } : {}),
+        });
+        return p;
+      };
+      const medium = await make("medium", 300, today);
+      await make("large", 350, today);
+      await make("carry_on", 250, old); // too old for a live price
+      await make("extra_large", 99, today, "web_estimate"); // never an estimate
+
+      const vocab = (await store.vocabularyRows()).filter((r) => r.brand === brand);
+      expect(vocab).toEqual([{ brand, line: "voyager", listings: 4 }]);
+
+      const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+      const all = await store.pricedProducts({ brand, sinceIso: since, limit: 10 });
+      expect(all.map((p) => [p.sizeClass, p.price])).toEqual([
+        ["medium", 300],
+        ["large", 350],
+      ]);
+      expect(all[0]).toMatchObject({
+        adapter: "shopify_product_json",
+        sourceId: "canadaluggagedepot",
+      });
+      const below = await store.pricedProducts({
+        brand,
+        below: 320,
+        excludeProductIds: [medium.id],
+        sinceIso: since,
+        limit: 10,
+      });
+      expect(below).toEqual([]);
+
+      const user = await newUser();
+      const q = `${brand.toLowerCase()} voyager medium`;
+      for (let i = 0; i < 2; i++)
+        await store.createSession({ userId: user, query: q, deadlineMs: 8_000, mode: "inline" });
+      await store.createSession({
+        userId: user,
+        query: `${brand} once`,
+        deadlineMs: 8_000,
+        mode: "inline",
+      });
+      const popular = await store.popularQueries(brand.toLowerCase(), {
+        sinceIso: since,
+        limit: 5,
+      });
+      expect(popular).toEqual([{ query: q, count: 2 }]);
+    });
   });
 }
 

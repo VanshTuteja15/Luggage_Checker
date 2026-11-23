@@ -5,7 +5,7 @@
  "labelRules": {
   "brand": "only when the query names it (no inference from the line)",
   "line": "as titles.json; null = not scored",
-  "sizeClass": "titles.json classes; a bare number 18-34 right after a line reads as inches (Platinum Elite 21)",
+  "sizeClass": "titles.json classes; a bare number 18-34 right after a line reads as inches (Platinum Elite 21); inches alone map by the owner's table (carry-on <= 22, medium 23-26, large 27-30, XL >= 31) unless the brand's own titles name that size otherwise (v5: Samsonite Nexis 31\" is 'Spinner Large Luggage (31)' at CLD, so q15 is large)",
   "type": "spinner | upright | duffel | backpack | garment | set | null",
   "colour": "base colour word (grey for stone grey); null when a colour word is part of a name (Black Label)",
   "maxPrice": "upper bound in CAD (between 200 and 300 -> 300)",
@@ -252,7 +252,7 @@
     "line": [
      "nexis"
     ],
-    "sizeClass": "extra_large",
+    "sizeClass": "large",
     "inches": 31,
     "type": "spinner",
     "colour": null,
@@ -954,6 +954,148 @@
     "maxPrice": null,
     "model": null
    }
+  },
+  {
+   "id": "q61",
+   "query": "samsonte paralux medium",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [
+     "paralux"
+    ],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
+  },
+  {
+   "id": "q62",
+   "query": "tumi alpah bravo backpack",
+   "expected": {
+    "brand": "TUMI",
+    "line": [
+     "alpha",
+     "bravo"
+    ],
+    "sizeClass": "backpack",
+    "inches": null,
+    "type": "backpack",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
+  },
+  {
+   "id": "q63",
+   "query": "travlepro platinum elite carry-on",
+   "expected": {
+    "brand": "Travelpro",
+    "line": [
+     "platinum",
+     "elite"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
+  },
+  {
+   "id": "q64",
+   "query": "delsy chatelet air 2.0 medium",
+   "expected": {
+    "brand": "Delsey",
+    "line": [
+     "chatelet",
+     "air",
+     "2.0"
+    ],
+    "sizeClass": "medium",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
+  },
+  {
+   "id": "q65",
+   "query": "briggs riley basline carry-on",
+   "expected": {
+    "brand": "Briggs & Riley",
+    "line": [
+     "baseline"
+    ],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
+  },
+  {
+   "id": "q66",
+   "query": "grande valise rigide samsonite",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [],
+    "sizeClass": "large",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
+  },
+  {
+   "id": "q67",
+   "query": "sac à dos herschel",
+   "expected": {
+    "brand": "Herschel",
+    "line": [],
+    "sizeClass": "backpack",
+    "inches": null,
+    "type": "backpack",
+    "colour": null,
+    "maxPrice": null,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
+  },
+  {
+   "id": "q68",
+   "query": "samsonite carry-on between 200 and 300",
+   "expected": {
+    "brand": "Samsonite",
+    "line": [],
+    "sizeClass": "carry_on",
+    "inches": null,
+    "type": null,
+    "colour": null,
+    "maxPrice": 300,
+    "model": null
+   },
+   "added": "v5",
+   "note": "typo / French / price-range case (V3 S1.5)"
   }
  ]
 }

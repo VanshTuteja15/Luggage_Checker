@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { luggagePack as P } from "@/lib/engine/packs/luggage";
+import { requiredTerms } from "@/lib/engine/store/terms";
 
 describe("size classes (identity boundary)", () => {
   const cases: [string, string | null][] = [
@@ -120,11 +121,12 @@ describe("brands and product lines", () => {
       "international",
       "expandable",
     ]);
-    // ...but a query need not say them.
-    expect(P.parseQuery("TUMI Alpha 3 International Expandable Carry-On").line).toEqual([
-      "alpha",
-      "3",
-    ]);
+    // ...a query that says them keeps them (they rank those listings first, v5 F2.2),
+    // but they are optional: a listing never has to contain them to match.
+    const q = P.parseQuery("TUMI Alpha 3 International Expandable Carry-On");
+    expect(q.line).toEqual(["alpha", "3", "international", "expandable"]);
+    expect(q.optionalLine).toEqual(["international", "expandable"]);
+    expect(requiredTerms(q)).toEqual(["tumi", "alpha", "3"]);
     expect(P.lineOf("Outline Pro Spinner Medium, Stone Grey", "Samsonite")).toEqual([
       "outline",
       "pro",

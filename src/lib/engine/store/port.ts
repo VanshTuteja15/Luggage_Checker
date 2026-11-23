@@ -10,7 +10,9 @@
 /*  same contract against each.                                        */
 /* ------------------------------------------------------------------ */
 
+import type { VocabularyRow } from "../query/vocabulary";
 import type {
+  Availability,
   CircuitState,
   FetchAttempt,
   IdentifierKind,
@@ -19,12 +21,15 @@ import type {
   Observation,
   ObservationInput,
   ParsedQuery,
+  PriceMethod,
   ResearchSessionRecord,
   SessionEvent,
   SessionStatus,
   SourceHealth,
   SourceRecord,
 } from "../types";
+
+export type { VocabularyRow };
 
 export type CatalogProduct = {
   id: string;
@@ -38,6 +43,38 @@ export type CatalogProduct = {
   mergedInto: string | null;
   attributes: Record<string, unknown>;
   createdAt: string;
+};
+
+export type PricedProductFilter = {
+  brand?: string | null;
+  /** The catalogue product's line, exactly as stored. */
+  line?: string | null;
+  sizeClass?: string | null;
+  /** Only prices strictly below this. */
+  below?: number | null;
+  excludeProductIds?: string[];
+  /** Live readings older than this don't count (staff/dealer prices always do). */
+  sinceIso: string;
+  limit: number;
+};
+
+/** One product's lowest current price from the index (v5 F2.5 suggestions). */
+export type PricedProduct = {
+  productId: string;
+  name: string;
+  brand: string | null;
+  line: string | null;
+  sizeClass: string | null;
+  /** The listing that holds the price. */
+  title: string;
+  url: string;
+  sourceId: string;
+  price: number;
+  adapter: PriceMethod;
+  /** When the price was last confirmed (reading or its event-storage range). */
+  seenAt: string;
+  asOf: string | null;
+  availability: Availability;
 };
 
 export type CatalogVariant = {
@@ -228,6 +265,23 @@ export interface EngineStore {
   listingsForProduct(productId: string): Promise<ListingRecord[]>;
   listingsBySource(sourceId: string, limit: number): Promise<ListingRecord[]>;
   countListingsBySource(): Promise<Record<string, number>>;
+  /** v5 F2.2: brand + line families with active listing counts (the search vocabulary). */
+  vocabularyRows(): Promise<VocabularyRow[]>;
+  /**
+   * v5 F2.5: each matching catalogue product's lowest current price we stand
+   * behind (latest shown reading per active listing; live readings since
+   * `sinceIso`, staff-checked and dealer prices any time; never estimates),
+   * cheapest first. Index only: no store is contacted.
+   */
+  pricedProducts(filter: PricedProductFilter): Promise<PricedProduct[]>;
+  /**
+   * v5 F2.5 autocomplete: searches people ran at least twice since `sinceIso`
+   * that start with (or, with pg_trgm installed, closely resemble) `prefix`.
+   */
+  popularQueries(
+    prefix: string,
+    opts: { sinceIso: string; limit: number },
+  ): Promise<{ query: string; count: number }[]>;
   linkListing(listingId: string, productId: string | null, variantId: string | null): Promise<void>;
 
   /* identity */

@@ -310,7 +310,7 @@ async function overviewFixture() {
       },
     ],
     usage: {
-      estimates: { configured: true, left: 412, cap: 950 },
+      estimates: { configured: true, on: true, left: 412, cap: 950 },
       emails: { last24h: 2, dailyLimit: 90, thisMonth: 41, monthlyLimit: 2700 },
     },
     estimateRejections: [

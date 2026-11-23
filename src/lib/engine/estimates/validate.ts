@@ -41,9 +41,9 @@ import {
 } from "@/lib/search/extract";
 import { normaliseGtin } from "../adapters/base";
 import { normaliseHost } from "../registry";
-import type { CategoryPack, ParsedQuery, SourceRecord } from "../types";
+import type { Availability, CategoryPack, ParsedQuery, SourceRecord } from "../types";
 
-export const ESTIMATE_VALIDATOR_VERSION = "estimate-validate/1";
+export const ESTIMATE_VALIDATOR_VERSION = "estimate-validate/2";
 
 /** Ratio band around a reference price (R3.2 d). */
 export const RATIO_MIN = 0.6;
@@ -81,6 +81,8 @@ export type EstimateVerdict = {
   excerpt: string;
   /** The tile's name when the price was read from a brand store's listing page. */
   tile: string | null;
+  /** "out_of_stock" when the result itself says so; otherwise unknown (a snippet can't prove stock). */
+  availability: Availability;
 };
 
 const SIZE_ORDER: Record<string, number> = {
@@ -179,6 +181,29 @@ function words(text: string): Set<string> {
 
 const GTIN_IN_TEXT = /\b(\d{12,14})\b/g;
 
+/** A title the search engine shortened ("… Spinner ..." / "… Spinner …"). */
+const TRUNCATED = /(?:\.{3}|…)\s*$/;
+
+/** Size words a text names, each mapped to its class ("21-Inch" → carry-on). */
+const SIZE_WORDS: [RegExp, string][] = [
+  [/\bcarry[-\s]?on\b|\bcarryon\b|\bcabin\b/i, "carry_on"],
+  [/\bextra[-\s]?large\b|\bx-?large\b/i, "extra_large"],
+  [/\b(?<!extra[-\s]?)(?<!x-?)large\b/i, "large"],
+  [/\bmedium\b/i, "medium"],
+];
+
+/** The one size class a text names, or null when it names none or several. */
+function onlySize(text: string, pack: CategoryPack): string | null {
+  const found = new Set<string>();
+  for (const [re, cls] of SIZE_WORDS) if (re.test(text)) found.add(cls);
+  const inches = pack.inchesOf(text);
+  if (inches) {
+    const byInches = pack.sizeClassOf(`${inches}-inch`);
+    if (byInches) found.add(byInches);
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
+
 export function identityReasons(
   cand: EstimateCandidate,
   source: SourceRecord,
@@ -195,7 +220,10 @@ export function identityReasons(
   if (looksLikeListingTitle(title)) reasons.push("a list of products, not one product");
 
   // Brand: named in the title, or the store's own brand (brand-direct stores).
-  const brand = pack.brandOf(title) ?? source.identityQuality.houseBrand ?? null;
+  // Cleaning a title like "TUMI - 19 Degree Lite …" can take the brand for a site
+  // name, so the result's full title counts too.
+  const brand =
+    pack.brandOf(title) ?? pack.brandOf(cand.title) ?? source.identityQuality.houseBrand ?? null;
   if (expected.brand) {
     if (!brand) reasons.push("brand not named");
     else if (brand.toLowerCase() !== expected.brand.toLowerCase())
@@ -220,7 +248,9 @@ export function identityReasons(
     reasons.push("a different version");
 
   // Size class: stated and the same. The snippet must not describe another size only.
-  const size = pack.sizeClassOf(title);
+  // A search engine cuts long titles ("Travelpro Platinum Elite … Spinner ..."): then
+  // the size may come from the snippet, but only when it names exactly one size.
+  const size = pack.sizeClassOf(title) ?? (TRUNCATED.test(cand.title) ? onlySize(cand.snippet, pack) : null);
   if (expected.sizeClass) {
     if (!size) reasons.push("size not stated");
     else if (size !== expected.sizeClass) reasons.push("a different size");
@@ -234,8 +264,9 @@ export function identityReasons(
     }
   }
 
-  // Stated inches: 28" and 31" are different bags.
-  const inches = pack.inchesOf(title);
+  // Stated inches: 28" and 31" are different bags (a shortened title's snippet counts).
+  const inches =
+    pack.inchesOf(title) ?? (TRUNCATED.test(cand.title) ? pack.inchesOf(cand.snippet) : null);
   if (expected.inches && inches && inches !== expected.inches)
     reasons.push("a different stated size");
 
@@ -248,6 +279,36 @@ export function identityReasons(
     if (codes.length && !codes.includes(ours)) reasons.push("a different barcode");
   }
   return reasons;
+}
+
+/* ── condition and stock, as the result states them ───────────────── */
+
+/** A used, renewed or open-box item is not the new bag a customer compares (Amazon Renewed, eBay Pre-Owned). */
+const NOT_NEW =
+  /\b(?:pre[- ]?owned|refurbished|renewed|reconditioned|open[- ]box|second[- ]hand|used\s*[-–:]\s*(?:like new|very good|good|acceptable)|condition\s*:\s*used)\b|\(used\)/i;
+/** A title that starts with "Used" ("Used Samsonite …"); in a snippet that's just a word. */
+const USED_TITLE = /^\s*used\b/i;
+
+/** The store no longer sells it: its old price is not a price anyone can pay. */
+const DISCONTINUED = /\b(?:discontinued|no longer (?:available|sold|carried|offered))\b/i;
+
+/** The result says it can't be bought right now (kept, shown as out of stock). */
+const OUT_OF_STOCK =
+  /\b(?:out of stock|sold out|currently unavailable|temporarily unavailable|not available online|épuisé|en rupture de stock)\b/i;
+
+/** Reasons the item itself isn't the new, on-sale product, from its title and snippet. */
+export function conditionReasons(title: string, snippet: string): string[] {
+  const reasons: string[] = [];
+  if (NOT_NEW.test(title) || USED_TITLE.test(title) || NOT_NEW.test(snippet))
+    reasons.push("a used or refurbished item");
+  if (DISCONTINUED.test(title) || DISCONTINUED.test(snippet))
+    reasons.push("the store no longer sells it");
+  return reasons;
+}
+
+/** Stock as the result states it: only "out of stock" can be read from a snippet. */
+export function availabilityFromResult(title: string, snippet: string): Availability {
+  return OUT_OF_STOCK.test(`${title} ${snippet}`) ? "out_of_stock" : "unknown";
 }
 
 /* ── a brand store's listing page ─────────────────────────────────── */
@@ -315,22 +376,45 @@ export function readListingTile(
 
 export type PriceRead = { price: number; excerpt: string } | { reason: string };
 
+/** An instalment written after its amount ("$166.50 every month for 6"). */
+// (no \b after the period: snippets run words together, "every monthfor 6")
+const INSTALMENT_AFTER = /^\s*(?:every\s+(?:month|week|two weeks|2 weeks|other week)|bi-?weekly)/i;
+/** Another currency before the amount ("US $518.75", "EUR 32.36", "£40"). */
+const FOREIGN_BEFORE = /(?:\b(?:US|USD|EUR|GBP|AUD|AU|HK|NZ)\s*|[€£¥]\s*)$/i;
+/** A converted amount ("Approx. C $743.21"): the seller's price is in another currency. */
+const CONVERTED_BEFORE = /\bapprox(?:\.|imately)?\s*(?:C\s*|CA\s*)?$/i;
+/** "Regular price" on its own: the price, when the result shows no sale at all (Shopify). */
+const REGULAR_BEFORE = /\bregular price\s*[:\-–]?\s*$/i;
+const SALE_WORDS = /\b(?:sale|now|special|clearance|save|was|compare at)\b/i;
+
 /**
  * The selling price written in the result, or why there isn't one we can
- * trust. Needs "$", "C$" or "CAD"; skips "from", "save", "was", ranges and
- * monthly payments; refuses a result that shows more than one price.
+ * trust. Needs "$", "C$" or "CAD"; skips "from", "save", "was", ranges,
+ * monthly payments and instalments, other currencies and converted amounts;
+ * refuses a result that shows more than one price. A lone "Regular price $X"
+ * is the price when nothing in the result speaks of a sale.
  */
 export function readEstimatePrice(title: string, snippet: string): PriceRead {
-  const text = `${title}\n${snippet}`.replace(/\s+/g, " ");
+  // "C $895.44" (eBay) is "C$895.44": joined, so the word before it ("Was") is seen.
+  const text = `${title}\n${snippet}`
+    .replace(/\s+/g, " ")
+    .replace(/\b(CA?)\s+\$/g, (_m, c: string) => `${c}$`);
   const kept: { value: number; index: number; end: number }[] = [];
+  const regular: { value: number; index: number; end: number }[] = [];
   for (const c of findPriceCandidates(text)) {
     if (c.usd) continue;
     const before = text.slice(Math.max(0, c.index - 40), c.index);
     const after = text.slice(c.end, c.end + 30);
-    if (NEGATIVE_BEFORE.test(before) || WEAK_BEFORE.test(before) || NEGATIVE_AFTER.test(after))
+    if (FOREIGN_BEFORE.test(before) || CONVERTED_BEFORE.test(before)) continue;
+    if (NEGATIVE_AFTER.test(after) || INSTALMENT_AFTER.test(after)) continue;
+    if (REGULAR_BEFORE.test(before)) {
+      regular.push(c);
       continue;
+    }
+    if (NEGATIVE_BEFORE.test(before) || WEAK_BEFORE.test(before)) continue;
     kept.push(c);
   }
+  if (kept.length === 0 && regular.length > 0 && !SALE_WORDS.test(text)) kept.push(...regular);
   const values = [...new Set(kept.map((c) => Math.round(c.value * 100) / 100))];
   if (values.length === 0) return { reason: "no clear price in the search result" };
   if (values.length > 1) return { reason: "more than one price in the search result" };
@@ -431,10 +515,17 @@ export function screenEstimate(
         reasons: [page, tile.reason],
         tile: null,
       };
-    return { price: tile.price, excerpt: tile.excerpt, reasons: [], tile: tile.name };
+    // Only the tile's own name speaks for it: the snippet also describes other tiles.
+    return {
+      price: tile.price,
+      excerpt: tile.excerpt,
+      reasons: conditionReasons(tile.name, ""),
+      tile: tile.name,
+    };
   }
   if (page) reasons.push(page);
   reasons.push(...identityReasons(cand, source, expected, pack));
+  reasons.push(...conditionReasons(productTitle(cand.title), cand.snippet));
   const read = readEstimatePrice(productTitle(cand.title), cand.snippet);
   if ("reason" in read) {
     reasons.push(read.reason);
@@ -476,6 +567,10 @@ export function validateEstimates(
   const survivors = screened.filter((s) => s.reasons.length === 0 && s.price !== null);
 
   return screened.map((s) => {
+    // A tile's stock can't be told from a snippet that lists several products.
+    const availability = s.tile
+      ? ("unknown" as const)
+      : availabilityFromResult(s.candidate.title, s.candidate.snippet);
     if (s.reasons.length || s.price === null) {
       return {
         candidate: s.candidate,
@@ -486,6 +581,7 @@ export function validateEstimates(
           singleSource: false,
           excerpt: s.excerpt,
           tile: s.tile,
+          availability,
         },
       };
     }
@@ -505,6 +601,7 @@ export function validateEstimates(
             singleSource: false,
             excerpt: s.excerpt,
             tile: s.tile,
+            availability,
           }
         : {
             outcome: "accepted" as const,
@@ -516,6 +613,7 @@ export function validateEstimates(
             singleSource: p.singleSource,
             excerpt: s.excerpt,
             tile: s.tile,
+            availability,
           },
     };
   });

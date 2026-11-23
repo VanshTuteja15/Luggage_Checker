@@ -394,7 +394,44 @@ export type ParsedQuery = {
   gtin: string | null;
   model: string | null;
   maxPrice: number | null;
+  /*
+   * v5 F2 (query parser, src/lib/engine/query/). Optional so answers stored
+   * before v5 still read; the parser always sets them.
+   */
+  /** Lower price bound ("over $200", "between 200 and 300"). */
+  minPrice?: number | null;
+  /** Height in cm ("55 cm") and capacity in litres ("85L") when stated. */
+  cm?: number | null;
+  litres?: number | null;
+  /** Bag type: spinner, upright, duffel, backpack, garment, set. */
+  type?: BagType | null;
+  shell?: "hard" | "soft" | "hybrid" | null;
+  material?: string | null;
+  /** Registry store ids the query names ("at Amazon"). */
+  storeIds?: string[];
+  /** "in stock": hide out-of-stock prices. */
+  inStock?: boolean;
+  /** "cheapest", "lowest price": the person wants the price order. */
+  sort?: "price" | null;
+  /**
+   * Line words the person said that tell products apart but that a store's
+   * title may leave out (International, Expandable, Global). They rank a
+   * listing higher; they are never required for it to match.
+   */
+  optionalLine?: string[];
+  /**
+   * The size class came only from a measurement ("Delsey 23 inch"), not a
+   * size word: search then matches the stated inches, whatever size word a
+   * store's title uses (Delsey calls its 23" a carry-on).
+   */
+  sizeByMeasure?: boolean;
+  /** The query as typed, when a typo was corrected ("Did you mean …"). */
+  correctedFrom?: string | null;
+  /** The corrected query that was searched instead ("samsonite paralux medium"). */
+  didYouMean?: string | null;
 };
+
+export type BagType = "spinner" | "upright" | "duffel" | "backpack" | "garment" | "set";
 
 export type SessionStatus = "queued" | "running" | "done" | "cancelled" | "failed";
 
@@ -448,6 +485,12 @@ export type AnswerProduct = {
   imageUrl: string | null;
   offers: AnswerOffer[];
   lowestPrice: number | null;
+  /**
+   * v5 F2.3: the parts of the search this product doesn't meet, in plain
+   * words ("over $300", "not a spinner"). Such a product never ranks above
+   * one that meets every part. Absent or empty: a full match.
+   */
+  fails?: string[];
 };
 
 export type StoreStatusRow = {
@@ -472,6 +515,33 @@ export type ResearchAnswer = {
   totalMs: number;
   deadlineHit: boolean;
   notes: string[];
+  /** v5 F2.4: the answer in sentences, built only from the offers above (research/summary.ts). */
+  summary?: string[];
+  /** v5 F2.5: other sizes, cheaper alternatives and colours, from our own index. */
+  suggestions?: AnswerSuggestions;
+};
+
+/** A product from the index offered next to the answer (never read live for it). */
+export type SuggestedProduct = {
+  productId: string;
+  name: string;
+  sizeClass: string | null;
+  price: number;
+  retailer: string;
+  url: string;
+  /** The label the price is shown with ("Verified live · 9:02 a.m.", "Last seen · Nov 20"). */
+  label: string;
+  /** How much less than the answer's lowest price (cheaper alternatives only). */
+  saving: number | null;
+};
+
+export type AnswerSuggestions = {
+  otherSizes: SuggestedProduct[];
+  cheaper: SuggestedProduct[];
+  /** Colours the top product comes in at the stores we know. */
+  colours: string[];
+  /** The corrected search, when the query had a typo ("Did you mean …"). */
+  didYouMean: string | null;
 };
 
 export type SessionEventType =

@@ -1,31 +1,33 @@
 {
-  "runAt": "2026-10-30T15:29:10.260Z",
-  "commit": "a869533",
+  "runAt": "2026-11-23T15:35:27.435Z",
+  "commit": "73a1689",
   "ai": false,
   "tasks": {
     "queries": {
-      "n": 60,
+      "n": 68,
       "metrics": {
-        "brand": 96.7,
-        "line": 69,
-        "sizeClass": 93.3,
-        "inches": 90,
-        "colour": 98.3,
-        "maxPrice": 98.3,
+        "brand": 100,
+        "line": 100,
+        "sizeClass": 100,
+        "inches": 100,
+        "type": 100,
+        "colour": 100,
+        "maxPrice": 100,
         "model": 100
       },
       "counts": {
-        "brand": "58/60",
-        "line": "40/58",
-        "sizeClass": "56/60",
-        "inches": "54/60",
-        "colour": "59/60",
-        "maxPrice": "59/60",
-        "model": "60/60"
+        "brand": "68/68",
+        "line": "66/66",
+        "sizeClass": "68/68",
+        "inches": "68/68",
+        "type": "68/68",
+        "colour": "68/68",
+        "maxPrice": "68/68",
+        "model": "68/68"
       },
-      "allRight": 60,
+      "allRight": 100,
       "extra": {},
-      "note": "type (spinner/duffel/…) isn't produced by the parser yet, so it isn't scored"
+      "note": "vocabulary snapshot of 2026-11-23 (50 brands, 1558 lines); type scored from v5"
     },
     "titles": {
       "n": 100,

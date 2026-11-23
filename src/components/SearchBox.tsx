@@ -24,6 +24,8 @@ type Props = {
   suggestions?: string[];
   pending?: boolean;
   placeholder?: string;
+  /** Autocomplete from our own index (v5 F2.5); shown after matching history. */
+  complete?: (typed: string) => Promise<string[]>;
 };
 
 type Row = { term: string; kind: "history" | "suggestion" };
@@ -38,22 +40,51 @@ export function SearchBox({
   suggestions = [],
   pending = false,
   placeholder,
+  complete,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const [completions, setCompletions] = useState<{ typed: string; terms: string[] }>({
+    typed: "",
+    terms: [],
+  });
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
+  // Autocomplete: ask once typing pauses (150 ms); a late answer for older text is ignored.
+  useEffect(() => {
+    const typed = value.trim();
+    if (!complete || typed.length < 2) return;
+    let stale = false;
+    const t = setTimeout(() => {
+      complete(typed)
+        .then((terms) => {
+          if (!stale) setCompletions({ typed, terms });
+        })
+        .catch(() => undefined); // autocomplete is a help: a failure just shows none
+    }, 150);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
+  }, [value, complete]);
+
   const rows = useMemo<Row[]>(() => {
     const q = value.trim().toLowerCase();
     const matches = history.filter((h) => !q || (h.toLowerCase().includes(q) && h.toLowerCase() !== q));
-    const list: Row[] = matches.slice(0, 8).map((term) => ({ term, kind: "history" }));
+    const list: Row[] = matches.slice(0, 5).map((term) => ({ term, kind: "history" }));
+    if (q && completions.typed.toLowerCase() === q) {
+      const shown = new Set(list.map((r) => r.term.toLowerCase()));
+      for (const term of completions.terms)
+        if (list.length < 8 && !shown.has(term.toLowerCase()) && term.toLowerCase() !== q)
+          list.push({ term, kind: "suggestion" });
+    }
     if (!q && list.length === 0) {
       for (const term of suggestions.slice(0, 6)) list.push({ term, kind: "suggestion" });
     }
     return list;
-  }, [value, history, suggestions]);
+  }, [value, history, suggestions, completions]);
 
   // Reset the highlight whenever the list changes.
   useEffect(() => setActive(-1), [rows.length, value]);
